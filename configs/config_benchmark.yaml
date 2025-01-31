@@ -1,0 +1,27 @@
+# Hyperparameters
+n_iterations : 10
+
+# Logging
+do_wandb : True
+wandb_config:
+  project : wandb_project_example
+do_tb : False
+do_cli : False
+do_tqdm : False
+
+
+
+# Defaults sub-configs and other Hydra config.
+defaults:
+  - _self_
+  - task : brownian
+  - solver : constant
+  - override hydra/hydra_logging: disabled  
+  - override hydra/job_logging: disabled 
+
+
+# Hydra config, do not change.
+hydra:
+  output_subdir: null
+  run:
+    dir: .

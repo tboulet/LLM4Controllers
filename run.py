@@ -20,6 +20,7 @@ import random
 import numpy as np
 
 # Project imports
+from core.utils import get_error_info
 from src.time_measure import RuntimeMeter
 from src.utils import try_get_seed
 from env import env_name_to_MetaEnvClass
@@ -49,6 +50,11 @@ def main(config: DictConfig):
     np.random.seed(seed)
     print(f"Using seed: {seed}")
 
+    # Set the run name
+    run_name = f"{agent_name}_{env_name}_{datetime.datetime.now().strftime('%dth%mmo_%Hh%Mmin%Ss')}_seed{seed}"
+    config["agent"]["config"]["run_name"] = run_name
+    config["env"]["config"]["run_name"] = run_name
+
     # Create the env
     print("Creating the dataset...")
     EnvClass = env_name_to_MetaEnvClass[env_name]
@@ -59,13 +65,12 @@ def main(config: DictConfig):
     print("Creating the agent...")
     AgentClass = agent_name_to_AgentClass[agent_name]
     agent = AgentClass(config=config["agent"]["config"])
-    if (
-        True
-    ):  # Should only apply to agents that are supposed to receive the textual description of the environment
-        agent.give_textual_description(textual_description_env)
+    agent.give_textual_description(textual_description_env)
 
     # Initialize loggers
-    run_name = f"[{agent_name}]_[{env_name}]_{datetime.datetime.now().strftime('%dth%mmo_%Hh%Mmin%Ss')}_seed{np.random.randint(seed)}"
+    run_name = config.get(
+        "run_name", run_name
+    )  # do "python run.py +run_name=<your_run_name>" to change the run name
     os.makedirs("logs", exist_ok=True)
     print(f"\nStarting run {run_name}")
     if do_wandb:
@@ -76,11 +81,13 @@ def main(config: DictConfig):
         )
     if do_tb:
         tb_writer = SummaryWriter(log_dir=f"tensorboard/{run_name}")
-    tqdm_bar = tqdm(
-        total=n_episodes,
-        disable=not do_tqdm and n_episodes != sys.maxsize,
-    )
-    
+    if do_tqdm:
+        tqdm_bar = tqdm(
+            total=n_episodes,
+            disable=not do_tqdm and n_episodes != sys.maxsize,
+        )
+        tqdm_bar.set_description(f"Episode 0/{n_episodes}")
+
     # Training loop
     ep = 0
     ep_training = 0
@@ -90,7 +97,6 @@ def main(config: DictConfig):
             is_eval = True
         else:
             is_eval = False
-            ep_training += 1
         # Reset the environment
         obs, task, info = env.reset(seed=seed, is_eval=is_eval)
         if len(info) > 0:
@@ -102,32 +108,56 @@ def main(config: DictConfig):
         # Loop over the episode
         done = False
         truncated = False
-        ep_reward = 0
         while not done and not truncated:
             # Act in the environment
-            action = controller.act(obs)
+            try:
+                action = controller.act(obs)
+            except Exception as e:
+                full_error_info = get_error_info(e)
+                info = {
+                    "error": f"An error occured during the act method of the controller.\n{full_error_info}"
+                }
+                obs, reward, done, truncated = (
+                    None,
+                    0,
+                    True,
+                    False,
+                )
+                print(f"WARNING : Error in the controller .act() : {info['error']}")
+                break
             # Step in the environment
             obs, reward, done, truncated, info = env.step(action)
+            if "error" in info:
+                print(f"WARNING : Error in the environment .step() : {info['error']}")
+                break
             # Render and log
             env.render()
-            ep_reward += reward
 
         # Close the environment
         env.close()
 
-        # Log the episode
-        if do_tb:
-            tb_writer.add_scalar("reward", ep_reward, ep)
-        if do_cli:
-            print(f"Episode {ep} - Reward: {ep_reward}")
-        pass  # pass other logger for now
+        # Manage feedback
+        feedback = {
+            "success": reward > 0,
+            "reward": reward,
+        }
+        if "error" in info:
+            feedback["error"] = info["error"]
+        agent.update(task, controller, feedback)
 
+        # Log the episode
+        print(f"Feedback for episode {ep} : {feedback}")
+
+        # Update the progress bar
+        if do_tqdm:
+            tqdm_bar.update(1)
+            tqdm_bar.set_description(f"Episode {ep}/{n_episodes}")
         if is_eval:
-            pass
+            ep += 1
         else:
             ep_training += 1
-        ep += 1
-        
+            ep += 1
+
     # Finish the WandB run.
     if do_wandb:
         run.finish()

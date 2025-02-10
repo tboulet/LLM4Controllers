@@ -1,2 +1,13 @@
 name: LLMBasedHierarchicalControllerGenerator
-config: {}
+config:
+  model: gpt-4o-mini
+  num_attempts_sc: 5
+
+  config_logs:
+    dir_logs: logs
+    do_log_on_new: True
+    do_log_on_last: True
+
+  config_debug:
+    breakpoint_on_new_t: True
+    input_on_agent_mistake: True

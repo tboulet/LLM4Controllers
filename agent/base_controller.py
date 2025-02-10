@@ -5,19 +5,19 @@ from env.base_meta_env import Observation, Action
 
 class Controller(ABC):
     """A controller is an object that can act in an environment.
-
     Each controller should be expected to solve a specific task.
 
+    A sub-class of controller is expected to implement :
+    - the __init__() method to initialize the controller with the task information (e.g. the coordinates of the goal for a navigation task).
+    - the act(Observation) -> Action method, in which it should return an action but can also update its internal state.
+    - the has_finished() -> bool method to indicate whether the controller has finished its task. If the controller has no notion of task completion or if it unclear, you can return False by default. 
+    
     The internal attributes of a controller can serve two purposes:
     - the caracteristics of the task that the controller must solve. Example : the coordinates of the goal for a navigation task.
     - the internal memory of the controller, to allow for time-dependant actions. Example : for a task consisting of doing a loop around a wall, the controller necessarily needs to remember where he is in the process.
-
-    Also, the controller should be able to tell when it has finished its task at any time, which will necessarily requires access to the task and the internal state of the controller (its memory/view of the world).
-
-    A sub-class of controller is expected to implement the act() method, in which it should return an action but also update its internal state,
-    and the has_finished() method, in which it should return whether the controller has finished its task.
     """
 
+    @abstractmethod
     def __init__(self, **task_information: Dict[str, Any]):
         pass
 

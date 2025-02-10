@@ -10,7 +10,7 @@ import minigrid
 from minigrid.envs import EmptyEnv, GoToObjectEnv
 from minigrid.core.mission import MissionSpace
 from minigrid.core.actions import Actions
-
+from minigrid.wrappers import ObservationWrapper, ImgObsWrapper, FullyObsWrapper
 from env.base_meta_env import BaseMetaEnv, Observation, InfoDict
 from core.task import TaskRepresentation
 from core.spaces import FiniteSpace
@@ -38,6 +38,7 @@ class MinigridMetaEnv(BaseMetaEnv):
     def __init__(self, config: Dict) -> None:
         # Extract parameters from the configuration
         self.viewsize = config.get("viewsize", 7)
+        self.size = config.get("size", 10)
         self.render_mode = config.get("render_mode", None)
         self.render_mode_eval = config.get("render_mode_eval", None)
         # Define the default observation and action spaces
@@ -46,7 +47,8 @@ class MinigridMetaEnv(BaseMetaEnv):
             image=spaces.Box(
                 low=0,
                 high=255,
-                shape=(self.viewsize, self.viewsize, 3),
+                # shape=(self.viewsize, self.viewsize, 3),
+                shape=(self.size, self.size, 3),
                 dtype="uint8",
             ),
         )
@@ -63,24 +65,20 @@ class MinigridMetaEnv(BaseMetaEnv):
                 for action, idx_and_desc in dict_actions.items()
             ]
         )
-        return f"""The environment is a 2D gridworld-like environment where the agent can move forward, turn left or right and interact with objects.
-These environments have in common a triangle-like agent with a discrete action space that has to navigate a 2D map with different obstacles (Walls, Lava, Dynamic obstacles) depending on the environment. 
-The task to be accomplished is described by a mission string returned by the observation of the agent. 
+        return f"""The environment is a collection of 2D gridworld-like tasks where the agent can move forward, turn left or right and interact with objects (pick up, drop, toggle) in the environment.
+These tasks have in common an agent with a discrete action space that has to navigate a 2D map with different obstacles (Walls, Lava, Dynamic obstacles) depending on the task. 
+The task to be accomplished is described by a mission string (such as "go to the green ball", "open the door with the red key", etc.).
 These mission tasks include different goal-oriented and hierarchical missions such as picking up boxes, opening doors with keys or navigating a maze to reach a goal location.
 Each episode, the agent will be faced with a certain taks among a variety of tasks.
 These can include navigation tasks (move to a certain location), logical tasks (find the nearest point among a list), manipulative tasks (build a wall), etc.
 
 Actions: The action space consist of the following actions:\n{action_desc_listing}
-Only those (strings) actions are allowed and should be taken by the controller.
+Only those (str objects) actions are allowed and should be taken by the controller.
 
 Observations: The observation is a dictionary with the following keys:
 - direction: the direction the agent is facing (0: up, 1: right, 2: down, 3: left)
-- image: the agent's view of the environment as a 3D numpy array of shape (viewsize, viewsize, 3) representing the RGB image of the agent's view.
+- image: the agent's view of the environment as a 3D numpy array of shape (viewsize, viewsize, 3). The channels represent the encoding of the object at position (i,j) in the environment (object type, color, state).
 """
-
-    # TODO : add the following map to the description
-    # - "map" : a 3D numpy array representing the map of the environment of shape (height, width, n_channels).
-    # The channels corresponds to the position of whether there is the agent (channel 0), and the wall obstacles (channel 1).
 
     def reset(
         self,
@@ -88,13 +86,18 @@ Observations: The observation is a dictionary with the following keys:
         is_eval: bool = False,
     ) -> Tuple[Observation, str, Dict[str, Any]]:
         # Select a task
-        self.env = GoToObjectEnv(
-            size=10,
+        EnvClass = EmptyEnv
+        # EnvClass = GoToObjectEnv
+        self.env = EnvClass(
+            size=self.size,
             render_mode=self.render_mode_eval if is_eval else self.render_mode,
         )  # TODO : change this to task selection process
+        self.env = FullyObsWrapper(self.env)
         obs, info = self.env.reset()
-        self.task = self.env.mission
-        assert isinstance(self.env.action_space, spaces.Discrete) and self.env.action_space.n == len(
+        self.task: str = self.env.env.mission
+        assert isinstance(
+            self.env.action_space, spaces.Discrete
+        ) and self.env.action_space.n == len(
             self.action_space.elems
         ), f"Action space mismatch : {self.env.action_space} incompatible with {self.action_space}"
         assert all(
@@ -121,13 +124,24 @@ Observations: The observation is a dictionary with the following keys:
             # Return step feedback
             return obs, reward, terminated, truncated, info
         except Exception as e:
-            raise # TODO : handle the exception
+            if not action in dict_actions:
+                info = {
+                    "error": f"Action '{action}' of type {type(action)} given to the .step() method of the environment is not an admissible action. Admissible actions are: {list(dict_actions.keys())}"
+                }
+                return None, 0, True, False, info
+            else:
+                assert (
+                    "mission" in obs
+                ), f"Observation should contain the mission string"
+                raise f"An error occured during the step method of the environment: {e}"
 
     def render(self):
         if self.render_mode == "human":
             self.env.render()
         elif self.render_mode == "rgb_array":
-            return self.env.render("rgb_array") # TODO : implement logging of the rgb_array
+            return self.env.render(
+                "rgb_array"
+            )  # TODO : implement logging of the rgb_array
         elif self.render_mode == None:
             pass
         else:

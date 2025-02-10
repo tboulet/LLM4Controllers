@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 from agent.base_controller import Controller
 from env.base_meta_env import Observation, Action
 
@@ -28,6 +28,20 @@ class BaseAgent(ABC):
         
         Returns:
             Controller: the controller for the task.
+        """
+        raise NotImplementedError
+    
+    @abstractmethod
+    def update(self, task : Task, controller : Controller, feedback : Dict[str, Union[float, str]]):
+        """Update the agent's internal state (library, knowledges, etc.) based on the feedback received from the environment.
+
+        Args:
+            task (Task): the task description of the task the controller was performing.
+            controller (Controller): the controller that was performing the task. It may be useful to keep the code version of the controller as an internal variable of the agent.
+            feedback (Dict[str, Union[float, str]]): a dictionnary containing the feedback from the environment. It should contain at least the following:
+                - "success" (bool): whether the controller has successfully completed the task.
+                - "reward" (float): the reward received by the controller.
+                - (optinal) "error" (str): the error message if an error occured during the controller execution 
         """
         raise NotImplementedError
     

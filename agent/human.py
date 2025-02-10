@@ -28,3 +28,6 @@ class HumanAgent(BaseAgent):
     def get_controller(self, task: Task) -> Controller:
         print(f"You are going to solve the following task: {task}")
         return HumanController()
+    
+    def update(self, task, controller, feedback):
+        print(f"Feedback received: {feedback}")

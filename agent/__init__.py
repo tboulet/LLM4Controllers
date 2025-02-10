@@ -5,6 +5,6 @@ from agent.llm_hcg import LLMBasedHierarchicalControllerGenerator
 
 
 agent_name_to_AgentClass: Dict[str, Type[BaseAgent]] = {
-    "LLMBasedHierarchicalControllerGenerator": LLMBasedHierarchicalControllerGenerator,
-    "HumanAgent": HumanAgent,
+    "LLM-HCG": LLMBasedHierarchicalControllerGenerator,
+    "Human": HumanAgent,
 }

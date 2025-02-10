@@ -1,0 +1,37 @@
+from abc import ABC, abstractmethod
+from typing import Dict, List, Tuple, Type, Union
+
+from core.utils import one_time_warning
+
+
+class BaseLogger(ABC):
+    """Base class for all loggers"""
+
+    @abstractmethod
+    def log_scalars(
+        self,
+        metrics: Dict[str, Union[float, int]],
+        step: int,
+    ):
+        """Log dictionary of scalars"""
+        raise NotImplementedError
+
+    def log_histograms(
+        self,
+        histograms: Dict[str, List[float]],
+        step: int,
+    ):
+        """Log dictionary of histograms"""
+        one_time_warning(f"WARNING : {self.__class__.__name__} does not support logging of histograms")
+    
+    def log_images(
+        self,
+        images: Dict[str, List[List[float]]],
+        step: int,
+    ):
+        """Log dictionary of maps"""
+        one_time_warning(f"WARNING : {self.__class__.__name__} does not support logging of images")
+
+    def close(self):
+        """Close the logger"""
+        pass

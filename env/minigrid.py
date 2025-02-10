@@ -126,7 +126,10 @@ Observations: The observation is a dictionary with the following keys:
         except Exception as e:
             if not action in dict_actions:
                 info = {
-                    "error": f"Action '{action}' of type {type(action)} given to the .step() method of the environment is not an admissible action. Admissible actions are: {list(dict_actions.keys())}"
+                    "error": {
+                        "type": "action_error",
+                        "message": f"Action '{action}' of type {type(action)} given to the .step() method of the environment is not an admissible action. Admissible actions are: {list(dict_actions.keys())}",
+                    }
                 }
                 return None, 0, True, False, info
             else:

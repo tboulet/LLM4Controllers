@@ -1,10 +1,10 @@
-name: LLMBasedHierarchicalControllerGenerator
+name: LLM-HCG
 config:
   model: gpt-4o-mini
   num_attempts_sc: 5
 
   config_logs:
-    dir_logs: logs
+    log_dir: logs
     do_log_on_new: True
     do_log_on_last: True
 

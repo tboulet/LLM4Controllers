@@ -7,7 +7,7 @@ import numpy as np
 from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller, Task
 from core.utils import get_error_info
-from env.base_meta_env import BaseMetaEnv, Observation, Action, InfoDict
+from env.base_meta_env import BaseMetaEnv, Observation, ActionType, InfoDict
 from abc import ABC, abstractmethod
 import enum
 import random
@@ -95,7 +95,7 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
             sc_code = self.extract_SC_code(answer_assistant)
             if sc_code is None:
                 print(
-                    f"WARNING : Could not extract the code from the answer. Asking the assistant to try again."
+                    f"WARNING : Could not extract the code from the answer. Asking the assistant to try again. (Attempt {no_attempt+1}/{self.num_attempts_sc})"
                 )
                 messages.append(
                     {
@@ -116,7 +116,7 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
             except Exception as e:
                 full_error_info = get_error_info(e)
                 print(
-                    f"WARNING : Could not execute the code from the answer. Asking the assistant to try again. Full error info : {full_error_info}"
+                    f"WARNING : Could not execute the code from the answer. Asking the assistant to try again (Attempt {no_attempt+1}/{self.num_attempts_sc}). Full error info : {full_error_info}"
                 )
                 messages.append(
                     {
@@ -134,16 +134,16 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
 
         if is_controller_instance_generated:
             config_logs = self.config["config_logs"]
-            dir_logs = config_logs["dir_logs"]
+            log_dir = config_logs["log_dir"]
             list_run_names = []
             if config_logs["do_log_on_new"]:
                 list_run_names.append(self.config["run_name"])
             if config_logs["do_log_on_last"]:
-                list_run_names.append("last")
+                list_run_names.append("_last")
             for run_name in list_run_names:
-                path_task_t = os.path.join(dir_logs, run_name, f"task_{self.t}")
+                path_task_t = os.path.join(log_dir, run_name, f"task_{self.t}")
                 self.log_texts(
-                    dir_logs=path_task_t,
+                    log_dir=path_task_t,
                     name_to_text={
                         "prompt.txt": messages[0]["content"],
                         "assistant_answer.txt": messages[-1]["content"],
@@ -181,18 +181,18 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
 
     def log_texts(
         self,
-        dir_logs: str,
+        log_dir: str,
         name_to_text: Dict[str, str],
     ):
         """Log texts in a directory. For each (key, value) in the directory, the file "dir_log/key" will contain the value.
         Remove the directory if it already exists.
 
         Args:
-            dir_logs (str): _description_
+            log_dir (str): _description_
             name_to_text (Dict[str, str]): a dictionnary containing the name of the file to create and the text to write in it.
         """
-        shutil.rmtree(dir_logs, ignore_errors=True)
-        os.makedirs(dir_logs, exist_ok=True)
+        shutil.rmtree(log_dir, ignore_errors=True)
+        os.makedirs(log_dir, exist_ok=True)
         for name, text in name_to_text.items():
-            with open(os.path.join(dir_logs, name), "w") as f:
+            with open(os.path.join(log_dir, name), "w") as f:
                 f.write(text)

@@ -2,12 +2,12 @@ from abc import ABC, abstractmethod
 from enum import Enum
 import random
 from typing import Dict, Iterable, List, Optional, Tuple, Union
-import warnings
 import gym
+
+from core.utils import one_time_warning
 
 
 class FiniteSpace(gym.Space[object]):
-    warned_elems_inequal_but_set_equal = False
     
     def __init__(self, elems: List[object]):
         assert isinstance(elems, list) and len(elems) > 0, "elems must be a non-empty list"
@@ -25,9 +25,10 @@ class FiniteSpace(gym.Space[object]):
     def __eq__(self, other) -> bool:
         if not isinstance(other, FiniteSpace):
             return False
-        if self.elems != other.elems and set(self.elems) != set(other.elems) and not FiniteSpace.warned_elems_inequal_but_set_equal:
-            warnings.warn("Warning: elements are not equal but their sets are equal, you may want to fix the order of elements")
-            FiniteSpace.warned_elems_inequal_but_set_equal = True
+        elif self.elems != other.elems:
+            if set(self.elems) == set(other.elems):
+                one_time_warning("Warning: elements are not equal but their sets are equal, you may want to fix the order of elements")
             return False
-        return True
+        else:
+            return True
 

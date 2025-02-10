@@ -3,9 +3,8 @@ from typing import Tuple, Union, Dict, Any, List, Optional
 from gym import Space
 import numpy as np
 
-from core.types import Observation, Action, InfoDict
+from core.types import Observation, ActionType, InfoDict
 from core.spaces import FiniteSpace
-
 
 
 class BaseMetaEnv(ABC):
@@ -22,7 +21,7 @@ class BaseMetaEnv(ABC):
         Returns:
             str: the textual description of the environment
         """
-        
+
     @abstractmethod
     def reset(seed: Union[int, None] = None) -> Tuple[Observation, str, Dict[str, Any]]:
         """Reset the environment to its initial state and starts a new episode.

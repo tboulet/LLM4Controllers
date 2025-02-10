@@ -20,6 +20,10 @@ import random
 import numpy as np
 
 # Project imports
+from core.loggers.cli import LoggerCLI
+from core.loggers.multi_logger import MultiLogger
+from core.loggers.tensorboard import LoggerTensorboard
+from core.loggers.tqdm_logger import LoggerTQDM
 from core.utils import get_error_info
 from src.time_measure import RuntimeMeter
 from src.utils import try_get_seed
@@ -71,22 +75,15 @@ def main(config: DictConfig):
     run_name = config.get(
         "run_name", run_name
     )  # do "python run.py +run_name=<your_run_name>" to change the run name
-    os.makedirs("logs", exist_ok=True)
     print(f"\nStarting run {run_name}")
-    if do_wandb:
-        run = wandb.init(
-            name=run_name,
-            config=config,
-            **config["wandb_config"],
-        )
+    loggers = []
+    if do_cli:
+        loggers.append(LoggerCLI())
     if do_tb:
-        tb_writer = SummaryWriter(log_dir=f"tensorboard/{run_name}")
-    if do_tqdm:
-        tqdm_bar = tqdm(
-            total=n_episodes,
-            disable=not do_tqdm and n_episodes != sys.maxsize,
-        )
-        tqdm_bar.set_description(f"Episode 0/{n_episodes}")
+        loggers.append(LoggerTensorboard(log_dir=f"logs/{run_name}"))
+    if do_tqdm and n_episodes != sys.maxsize:
+        loggers.append(LoggerTQDM(n_total=n_episodes))
+    logger = MultiLogger(*loggers)
 
     # Training loop
     ep = 0
@@ -99,8 +96,6 @@ def main(config: DictConfig):
             is_eval = False
         # Reset the environment
         obs, task, info = env.reset(seed=seed, is_eval=is_eval)
-        if len(info) > 0:
-            print(f"Episode {ep} - Info: {info}")
 
         # Ask the agent to generate a controller for the task
         controller = agent.get_controller(task)
@@ -115,7 +110,10 @@ def main(config: DictConfig):
             except Exception as e:
                 full_error_info = get_error_info(e)
                 info = {
-                    "error": f"An error occured during the act method of the controller.\n{full_error_info}"
+                    "error": {
+                        "type": "controller_error",
+                        "message": f"An error occured during the act method of the controller.\n{full_error_info}",
+                    }
                 }
                 obs, reward, done, truncated = (
                     None,
@@ -123,12 +121,12 @@ def main(config: DictConfig):
                     True,
                     False,
                 )
-                print(f"WARNING : Error in the controller .act() : {info['error']}")
+                print(f"ERROR WARNING : {info['error']}")
                 break
             # Step in the environment
             obs, reward, done, truncated, info = env.step(action)
             if "error" in info:
-                print(f"WARNING : Error in the environment .step() : {info['error']}")
+                print(f"ERROR WARNING : {info['error']}")
                 break
             # Render and log
             env.render()
@@ -146,21 +144,21 @@ def main(config: DictConfig):
         agent.update(task, controller, feedback)
 
         # Log the episode
-        print(f"Feedback for episode {ep} : {feedback}")
+        metrics = {
+            "success": int(feedback["success"]),
+            "reward": feedback["reward"],
+        }
+        if "error" in feedback:
+            error_type = feedback["error"]["type"]
+            metrics[f"error_{error_type}"] = 1.0
+        logger.log_scalars(metrics, step=ep)
 
         # Update the progress bar
-        if do_tqdm:
-            tqdm_bar.update(1)
-            tqdm_bar.set_description(f"Episode {ep}/{n_episodes}")
         if is_eval:
             ep += 1
         else:
             ep_training += 1
             ep += 1
-
-    # Finish the WandB run.
-    if do_wandb:
-        run.finish()
 
 
 if __name__ == "__main__":

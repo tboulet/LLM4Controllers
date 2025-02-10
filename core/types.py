@@ -7,7 +7,7 @@ class Observation:
     pass
 
 
-class Action:
+class ActionType:
     pass
 
 

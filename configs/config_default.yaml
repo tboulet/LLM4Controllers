@@ -1,5 +1,7 @@
 # Hyperparameters
-n_iterations : 10
+n_episodes : 100
+n_training_episodes: 10
+n_eval_episodes: 1
 
 # Logging
 do_wandb : False
@@ -15,8 +17,8 @@ do_tqdm : True
 # Defaults sub-configs and other Hydra config.
 defaults:
   - _self_
-  - env : brownian
-  - agent : constant
+  - env : minigrid
+  - agent : llm
   - override hydra/hydra_logging: disabled  
   - override hydra/job_logging: disabled 
 

@@ -1,5 +1,6 @@
 # Logging
 import os
+import sys
 import wandb
 from tensorboardX import SummaryWriter
 
@@ -34,7 +35,9 @@ def main(config: DictConfig):
     # Get the config values from the config object.
     agent_name: str = config["agent"]["name"]
     env_name: str = config["env"]["name"]
-    n_episodes: int = config["n_iterations"]
+    n_episodes: int = config["n_episodes"]
+    n_training_episodes: int = config["n_training_episodes"]
+    n_eval_episodes: int = config["n_eval_episodes"]
     do_cli: bool = config["do_cli"]
     do_wandb: bool = config["do_wandb"]
     do_tb: bool = config["do_tb"]
@@ -51,13 +54,14 @@ def main(config: DictConfig):
     EnvClass = env_name_to_MetaEnvClass[env_name]
     env = EnvClass(config["env"]["config"])
     textual_description_env = env.get_textual_description()
-    print(textual_description_env)
-    
+
     # Get the agent
     print("Creating the agent...")
     AgentClass = agent_name_to_AgentClass[agent_name]
     agent = AgentClass(config=config["agent"]["config"])
-    if True: # Should only apply to agents that are supposed to receive the textual description of the environment
+    if (
+        True
+    ):  # Should only apply to agents that are supposed to receive the textual description of the environment
         agent.give_textual_description(textual_description_env)
 
     # Initialize loggers
@@ -72,40 +76,57 @@ def main(config: DictConfig):
         )
     if do_tb:
         tb_writer = SummaryWriter(log_dir=f"tensorboard/{run_name}")
-
+    tqdm_bar = tqdm(
+        total=n_episodes,
+        disable=not do_tqdm and n_episodes != sys.maxsize,
+    )
+    
     # Training loop
-    for ep in tqdm(range(n_episodes), disable=not do_tqdm):
-        
+    ep = 0
+    ep_training = 0
+    while ep_training < n_episodes:
+        # Define training/evaluation mode
+        if ep % (n_training_episodes + n_eval_episodes) < n_eval_episodes:
+            is_eval = True
+        else:
+            is_eval = False
+            ep_training += 1
         # Reset the environment
-        obs, task, info = env.reset(seed=seed)
+        obs, task, info = env.reset(seed=seed, is_eval=is_eval)
         if len(info) > 0:
             print(f"Episode {ep} - Info: {info}")
-            
+
         # Ask the agent to generate a controller for the task
         controller = agent.get_controller(task)
-        
+
         # Loop over the episode
         done = False
+        truncated = False
         ep_reward = 0
-        while not done:
+        while not done and not truncated:
             # Act in the environment
             action = controller.act(obs)
             # Step in the environment
-            obs, reward, done, info = env.step(action)
+            obs, reward, done, truncated, info = env.step(action)
             # Render and log
             env.render()
             ep_reward += reward
 
         # Close the environment
         env.close()
-        
+
         # Log the episode
         if do_tb:
             tb_writer.add_scalar("reward", ep_reward, ep)
         if do_cli:
             print(f"Episode {ep} - Reward: {ep_reward}")
-        pass # pass other logger for now
-    
+        pass  # pass other logger for now
+
+        if is_eval:
+            pass
+        else:
+            ep_training += 1
+        ep += 1
         
     # Finish the WandB run.
     if do_wandb:

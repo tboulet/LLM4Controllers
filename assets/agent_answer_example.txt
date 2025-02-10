@@ -1,0 +1,28 @@
+Reasoning :
+I think I should take into account ... (reasoning)
+
+New controller (this block is optional):
+```python
+from abc import ABC, abstractmethod
+from typing import Any, Dict, List
+from env.base_meta_env import Observation, Action
+from agent.base_controller import Controller
+
+class ControllerForMovingToGoal(Controller):
+    def __init__(self, goal_coords):
+        self.goal_coords = goal_coords
+
+    def act(self, observation):
+        # Implement your logic here
+        return action
+
+    def has_finished(self):
+        # Implement your logic here
+        return True
+```
+
+Controller instanciation:
+```python
+controller = ControllerForMovingToGoal(goal_coords=(5, 3))
+```
+

@@ -1,0 +1,5 @@
+name: Minigrid
+config:
+  viewsize: 7
+  render_mode: null
+  render_mode_eval: human

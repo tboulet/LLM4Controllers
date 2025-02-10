@@ -1,0 +1,1 @@
+controller = ControllerForMovingToGoal(goal_coords = (3, 5))

@@ -1,2 +1,3 @@
 name: Human
-config: {}
+config:
+  do_print_observation: False

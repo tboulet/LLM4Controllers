@@ -111,7 +111,7 @@ def main(config: DictConfig):
                 full_error_info = get_error_info(e)
                 info = {
                     "error": {
-                        "type": "controller_error",
+                        "type": "controller_act_error",
                         "message": f"An error occured during the act method of the controller.\n{full_error_info}",
                     }
                 }
@@ -134,7 +134,7 @@ def main(config: DictConfig):
         # Close the environment
         env.close()
 
-        # Manage feedback
+        # Update the agent
         feedback = {
             "success": reward > 0,
             "reward": reward,
@@ -143,6 +143,9 @@ def main(config: DictConfig):
             feedback["error"] = info["error"]
         agent.update(task, controller, feedback)
 
+        # Update the MetaEnv
+        env.update(task, feedback)
+        
         # Log the episode
         metrics = {
             "success": int(feedback["success"]),

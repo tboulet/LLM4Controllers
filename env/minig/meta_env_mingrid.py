@@ -4,17 +4,22 @@ import re
 from gymnasium import spaces
 from matplotlib import pyplot as plt
 import numpy as np
-from typing import Tuple, Union, Dict, Any, List, Optional
+from typing import Tuple, Type, Union, Dict, Any, List, Optional
 
 import minigrid
+from minigrid.minigrid_env import MiniGridEnv
 from minigrid.envs import EmptyEnv, GoToObjectEnv
 from minigrid.core.mission import MissionSpace
 from minigrid.core.actions import Actions
 from minigrid.wrappers import ObservationWrapper, ImgObsWrapper, FullyObsWrapper
+
 from env.base_meta_env import BaseMetaEnv, Observation, InfoDict
 from core.task import TaskRepresentation
 from core.spaces import FiniteSpace
+from core.curriculums import CurriculumByLevels
+from core.types import ActionType
 
+from .env_minigrid_autosuccess import AutoSuccessMGEnv
 
 dict_actions = {
     "left": (0, "Turn the direction of the agent to the left"),
@@ -55,10 +60,20 @@ class MinigridMetaEnv(BaseMetaEnv):
         self.action_space = FiniteSpace(
             elems=sorted(list(dict_actions.keys()), key=lambda x: dict_actions[x][0])
         )
+        # Define the curriculum
+        self.family_tasks_to_env_class = {
+            "go to the <color> <obj_type>": GoToObjectEnv,
+            "do nothing particular": AutoSuccessMGEnv,
+        }
+        self.curriculum = CurriculumByLevels(
+            levels=[{"do nothing particular"}, {"go to the <color> <obj_type>"}]
+        )
         # Call the parent class constructor
         super().__init__(config)
 
-    def get_textual_description(self):
+    # ======= Mandatory interface methods =======
+
+    def get_textual_description(self) -> str:
         action_desc_listing = "\n".join(
             [
                 f"- {action}: {idx_and_desc[1]}"
@@ -84,17 +99,21 @@ Observations: The observation is a dictionary with the following keys:
         self,
         seed: Union[int, None] = None,
         is_eval: bool = False,
-    ) -> Tuple[Observation, str, Dict[str, Any]]:
-        # Select a task
-        EnvClass = EmptyEnv
-        # EnvClass = GoToObjectEnv
+    ) -> Tuple[Observation, TaskRepresentation, Dict[str, Any]]:
+        # Select a family task
+        family_task: str = self.curriculum.sample()
+        EnvClass: Type[MiniGridEnv] = self.family_tasks_to_env_class[family_task]
         self.env = EnvClass(
             size=self.size,
             render_mode=self.render_mode_eval if is_eval else self.render_mode,
-        )  # TODO : change this to task selection process
+        )
         self.env = FullyObsWrapper(self.env)
         obs, info = self.env.reset()
-        self.task: str = self.env.env.mission
+        self.task = self.extract_task(self.env)
+        assert (
+            self.task.family_task == family_task
+        ), f"Family task mismatch: {self.task.family_task} != {family_task}"
+        # self.task: str = self.env.env.mission
         assert isinstance(
             self.env.action_space, spaces.Discrete
         ) and self.env.action_space.n == len(
@@ -113,7 +132,7 @@ Observations: The observation is a dictionary with the following keys:
         info = {"task": self.task, **info}
         return obs, self.task, info
 
-    def step(self, action: str) -> Tuple[Observation, float, bool, InfoDict]:
+    def step(self, action: ActionType) -> Tuple[Observation, float, bool, InfoDict]:
         try:
             # Convert the action (e.g. "forward") to the action index (e.g. 2 (int))
             action_idx = dict_actions[action][0]
@@ -138,6 +157,11 @@ Observations: The observation is a dictionary with the following keys:
                 ), f"Observation should contain the mission string"
                 raise f"An error occured during the step method of the environment: {e}"
 
+    def update(self, task: TaskRepresentation, feedback: Dict[str, Any]) -> None:
+        self.curriculum.update(task=task.family_task, feedback=feedback)
+
+    # ======= Optional interface methods =======
+
     def render(self):
         if self.render_mode == "human":
             self.env.render()
@@ -153,24 +177,38 @@ Observations: The observation is a dictionary with the following keys:
     def close(self):
         self.env.close()
 
-    def extract_task(self):
-        mission_space: MissionSpace = self.env.observation_space["mission"]
+    # ======= Helper methods =======
+
+    def extract_task(self, env: MiniGridEnv) -> TaskRepresentation:
+        mission_space: MissionSpace = env.observation_space["mission"]
         mission_func = (
             mission_space.mission_func
         )  # f : color, obj_type -> go to the {color} {obj_type}
-        names_variables = mission_func.__code__.co_varnames  # ['color', 'obj_type']
-        name = mission_func(  # "go to the {color} {obj_type}"
-            *[f"<{names_variables[i]}>" for i in range(len(names_variables))]
+        keys_kwargs = mission_func.__code__.co_varnames  # ['color', 'obj_type']
+        family_task = mission_func(  # "go to the <color> <obj_type>"
+            *[f"<{keys_kwargs[i]}>" for i in range(len(keys_kwargs))]
         )
+        mission = env.env.mission
+        kwargs = self.extract_values(family_task, mission, keys_kwargs)
         task = TaskRepresentation(
-            name=name,
-            description=self.env.mission,
-            variables=names_variables,
-            observation_space=self.observation_space,
-            action_space=self.action_space,
+            family_task=family_task,  # go to the <color> <obj_type>
+            name=mission,  # go to the green ball
+            description=mission,  # go to the green ball
+            kwargs=kwargs,  # {"color": "green", "obj_type": "ball"}
+            observation_space=self.observation_space,  # gym.space object
+            action_space=self.action_space,  # gym.space object
         )
-        raise NotImplementedError
         return task
+
+    def extract_values(self, family, name, keys_kwargs):
+        # Create a regex pattern based on the family string
+        pattern = family.replace("<", "(?P<").replace(">", ">[^ ]+)")
+        # Use the regex pattern to match the name string
+        match = re.match(pattern, name)
+        if not match:
+            raise ValueError("The name does not match the family pattern.")
+        # Extract the values and create the dictionary
+        return {key: match.group(key) for key in keys_kwargs}
 
     def get_observation_space(self) -> spaces.Space:
         return self.observation_space

@@ -5,7 +5,8 @@ from typing import Dict, List, Optional
 
 import numpy as np
 from openai import OpenAI
-from agent.base_agent import BaseAgent, Controller, Task
+from agent.base_agent import BaseAgent, Controller
+from core.task import TaskRepresentation
 from core.utils import get_error_info
 from env.base_meta_env import BaseMetaEnv, Observation, ActionType, InfoDict
 from abc import ABC, abstractmethod
@@ -35,7 +36,7 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
         self.text_controller_base_class = open("agent/base_controller.py").read()
         self.text_agent_answer_example = open("assets/agent_answer_example.txt").read()
 
-    def get_controller(self, task: Task) -> Controller:
+    def get_controller(self, task: TaskRepresentation) -> Controller:
 
         # For now, the LLM-based hierarchical controller only supports string tasks
         assert isinstance(
@@ -158,7 +159,7 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
             )
 
     def update(
-        self, task: Task, controller: Controller, feedback: Dict[str, Union[float, str]]
+        self, task: TaskRepresentation, controller: Controller, feedback: Dict[str, Union[float, str]]
     ):
         pass  # TODO : implement the update method
         self.t += 1

@@ -1,24 +1,24 @@
 import os
 import re
 from typing import Dict, List
-
-import numpy as np
-from openai import OpenAI
-from agent.base_agent import BaseAgent, Controller, Task
-from env.base_meta_env import BaseMetaEnv, Observation, ActionType, InfoDict
 from abc import ABC, abstractmethod
 import enum
 import random
-from typing import Any, Dict, Tuple, Union
 
+import numpy as np
+from openai import OpenAI
+from agent.base_agent import BaseAgent, Controller
+from env.base_meta_env import BaseMetaEnv, Observation, ActionType, InfoDict
+from core.task import TaskRepresentation
 
 class HumanController(Controller):
 
-    def __init__(self, **task_informations):
-        pass
+    def __init__(self, config: Dict):
+        self.config = config
 
     def act(self, observation: Observation) -> ActionType:
-        print(f"Current observation: {observation}")
+        if self.config["do_print_observation"]:
+            print(f"Current observation: {observation}")
         action = input("What action do you want to take ?")
         return action
 
@@ -29,9 +29,13 @@ class HumanController(Controller):
 
 class HumanAgent(BaseAgent):
 
-    def get_controller(self, task: Task) -> Controller:
+    def __init__(self, config):
+        super().__init__(config)
+        
+    def get_controller(self, task: TaskRepresentation) -> Controller:
+        breakpoint()
         print(f"You are going to solve the following task: {task}")
-        return HumanController()
+        return HumanController(config = self.config)
 
     def update(self, task, controller, feedback):
         print(f"Feedback received: {feedback}")

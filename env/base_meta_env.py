@@ -3,6 +3,7 @@ from typing import Tuple, Union, Dict, Any, List, Optional
 from gym import Space
 import numpy as np
 
+from core.task import TaskRepresentation
 from core.types import Observation, ActionType, InfoDict
 from core.spaces import FiniteSpace
 
@@ -23,7 +24,7 @@ class BaseMetaEnv(ABC):
         """
 
     @abstractmethod
-    def reset(seed: Union[int, None] = None) -> Tuple[Observation, str, Dict[str, Any]]:
+    def reset(self, seed: Union[int, None] = None, **kwargs) -> Tuple[Observation, TaskRepresentation, Dict[str, Any]]:
         """Reset the environment to its initial state and starts a new episode.
         Returns the first observation of the episode as well as the textual description of the task in particular.
         Also returns a dictionary containing additional information about the environment.
@@ -35,13 +36,13 @@ class BaseMetaEnv(ABC):
 
         Returns:
             Observation: the first observation of the episode
-            str: the textual description of the task in particular. This should involve a textual description of the task but also its caracteristics (e.g. coordinate of the goal, etc.)
+            TaskRepresentation: the description of the task in particular. This should involve a textual description of the task but also its caracteristics (e.g. coordinate of the goal, etc.)
             InfoDict: a dictionary containing additional information about the environment
         """
         raise NotImplementedError
 
     @abstractmethod
-    def step(action: Any) -> Tuple[Observation, float, bool, InfoDict]:
+    def step(self, action: ActionType) -> Tuple[Observation, float, bool, InfoDict]:
         """Take a step in the environment using the given action and returns the new observation, the reward, whether the episode is over and additional information.
 
         Args:
@@ -55,6 +56,19 @@ class BaseMetaEnv(ABC):
         """
         raise NotImplementedError
 
+    @abstractmethod
+    def update(self, task : TaskRepresentation, feedback : Dict[str, Any]) -> None:
+        """Update the environment based on the feedback received from the agent.
+
+        Args:
+            task (TaskRepresentation): the description of the task the agent was performing
+            feedback (Dict[str, Any]): a dictionary containing the feedback from the agent. It should contain at least the following:
+                - "success" (bool): whether the agent has successfully completed the task
+                - "reward" (float): the reward received by the agent
+                - (optional) "error" (str): the error message if an error occured during the agent execution
+        """
+        raise NotImplementedError
+    
     def render(self):
         """Render the environment"""
         pass

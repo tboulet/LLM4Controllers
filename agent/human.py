@@ -1,6 +1,6 @@
 import os
 import re
-from typing import Dict, List
+from typing import Dict, List, Union
 from abc import ABC, abstractmethod
 import enum
 import random
@@ -33,9 +33,8 @@ class HumanAgent(BaseAgent):
         super().__init__(config)
         
     def get_controller(self, task: TaskRepresentation) -> Controller:
-        breakpoint()
         print(f"You are going to solve the following task: {task}")
         return HumanController(config = self.config)
 
-    def update(self, task, controller, feedback):
+    def update(self, task : TaskRepresentation, controller : Controller, feedback : Dict[str, Union[float, str]]):
         print(f"Feedback received: {feedback}")

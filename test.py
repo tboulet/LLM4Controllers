@@ -20,6 +20,22 @@ from minigrid.core.world_object import Point, WorldObj
 
 T = TypeVar("T")
 
+dict_actions = {
+    "left": (0, "Turn the direction of the agent to the left"),
+    "right": (1, "Turn the direction of the agent to the right"),
+    "forward": (2, "Move one tile forward"),
+    "pickup": (
+        3,
+        "Pick up the object the agent is facing (if any) and add it to the agent's inventory",
+    ),
+    "drop": (
+        4,
+        "Drop the object from the agent's inventory (if any) in front of the agent",
+    ),
+    "toggle": (5, "Toggle/activate an object in front of the agent"),
+    "done": (6, "Done completing the task"),
+}
+
 
 class MiniGridEnv(gym.Env):
     """
@@ -46,7 +62,7 @@ class MiniGridEnv(gym.Env):
         tile_size: int = TILE_PIXELS,
         agent_pov: bool = False,
     ):
-        # Initialize mission
+        # Initialize mission (DEFINE mission_space IN SUBCLASS THAT WILL CALL __init__ OF THIS CLASS)
         self.mission = mission_space.sample()
 
         # Can't set both grid_size and width/height
@@ -56,12 +72,6 @@ class MiniGridEnv(gym.Env):
             height = grid_size
         assert width is not None and height is not None
 
-        # Action enumeration for this environment
-        self.actions = Actions
-
-        # Actions are discrete integer values
-        self.action_space = spaces.Discrete(len(self.actions))
-
         # Number of cells (width and height) in the agent view
         assert agent_view_size % 2 == 1
         assert agent_view_size >= 3
@@ -69,20 +79,35 @@ class MiniGridEnv(gym.Env):
 
         # Observations are dictionaries containing an
         # encoding of the grid and a textual 'mission' string
-        image_observation_space = spaces.Box(
-            low=0,
-            high=255,
-            shape=(self.agent_view_size, self.agent_view_size, 3),
-            dtype="uint8",
-        )
-        self.observation_space = spaces.Dict(
-            {
-                "image": image_observation_space,
-                "direction": spaces.Discrete(4),
-                "mission": mission_space,
-            }
-        )
-
+        # IF observation_space IS NOT SPECIFIED, DEFAULT OBSERVATION SPACE IS USED
+        if not hasattr(self, "observation_space"):
+            image_observation_space = spaces.Box(
+                low=0,
+                high=255,
+                shape=(self.agent_view_size, self.agent_view_size, 3),
+                dtype="uint8",
+            )
+            self.observation_space = spaces.Dict(
+                {
+                    "image": image_observation_space,
+                    "direction": spaces.Discrete(4),
+                    "mission": mission_space,
+                }
+            )
+        else:
+            assert isinstance(
+                self.observation_space, spaces.Dict
+            ), "observation_space must be a Dict"
+            self.observation_space = gym.spaces.Dict({k: v for k, v in self.observation_space.spaces.items() if k != "mission"})
+            self.observation_space.spaces["mission"] = mission_space
+            
+        # Action enumeration for this environment
+        # IF action_space IS NOT SPECIFIED, DEFAULT ACTION SPACE IS USED
+        self.actions = Actions
+        if not hasattr(self, "action_space"):
+            # Default action space : Actions are finite
+            self.action_space = spaces.Discrete(len(self.actions))
+            
         # Range of possible rewards
         self.reward_range = (0, 1)
 
@@ -91,7 +116,7 @@ class MiniGridEnv(gym.Env):
         self.window = None
         self.clock = None
 
-        # Environment configuration
+        # Environment configuration (CAN BE DEFAULT OR TO SPECIFY IN ENV INSTANTIATION)
         self.width = width
         self.height = height
 
@@ -102,7 +127,7 @@ class MiniGridEnv(gym.Env):
 
         self.see_through_walls = see_through_walls
 
-        # Current position and direction of the agent
+        # Current position and direction of the agent (NEED TO DEFINE IN SUBCLASS _gen_grid)
         self.agent_pos: np.ndarray | tuple[int, int] = None
         self.agent_dir: int = None
 
@@ -122,13 +147,14 @@ class MiniGridEnv(gym.Env):
         seed: int | None = None,
         options: dict[str, Any] | None = None,
     ) -> tuple[ObsType, dict[str, Any]]:
+        # DEFAULT RESET
         super().reset(seed=seed)
 
         # Reinitialize episode-specific variables
         self.agent_pos = (-1, -1)
         self.agent_dir = -1
 
-        # Generate a new random grid at the start of each episode
+        # Generate a new random grid at the start of each episode (NEED TO DEFINE IN SUBCLASS!)
         self._gen_grid(self.width, self.height)
 
         # These fields should be defined by _gen_grid
@@ -243,7 +269,7 @@ class MiniGridEnv(gym.Env):
         """
 
         return 1 - 0.9 * (self.step_count / self.max_steps)
-
+        
     def _rand_int(self, low: int, high: int) -> int:
         """
         Generate random integer in [low,high[

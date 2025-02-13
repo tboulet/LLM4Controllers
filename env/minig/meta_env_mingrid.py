@@ -19,7 +19,9 @@ from core.spaces import FiniteSpace
 from core.curriculums import CurriculumByLevels
 from core.types import ActionType
 
+
 from .env_minigrid_autosuccess import AutoSuccessMGEnv
+from .env_minigrid_return_agent_position import GiveAgentPositionMGEnv
 
 dict_actions = {
     "left": (0, "Turn the direction of the agent to the left"),
@@ -43,11 +45,11 @@ class MinigridMetaEnv(BaseMetaEnv):
     def __init__(self, config: Dict) -> None:
         # Extract parameters from the configuration
         self.viewsize = config.get("viewsize", 7)
-        self.size = config.get("size", 10)
+        self.size = config.get("size", 4)
         self.render_mode = config.get("render_mode", None)
         self.render_mode_eval = config.get("render_mode_eval", None)
         # Define the default observation and action spaces
-        self.observation_space = spaces.Dict(
+        self.observation_space_default = spaces.Dict(
             direction=spaces.Discrete(4),
             image=spaces.Box(
                 low=0,
@@ -57,16 +59,21 @@ class MinigridMetaEnv(BaseMetaEnv):
                 dtype="uint8",
             ),
         )
-        self.action_space = FiniteSpace(
+        self.action_space_default = FiniteSpace(
             elems=sorted(list(dict_actions.keys()), key=lambda x: dict_actions[x][0])
         )
         # Define the curriculum
         self.family_tasks_to_env_class = {
-            "go to the <color> <obj_type>": GoToObjectEnv,
             "do nothing particular": AutoSuccessMGEnv,
+            "Give the position of the agent as a tuple of integers (x, y)": GiveAgentPositionMGEnv,
+            "go to the <color> <obj_type>": GoToObjectEnv,
         }
         self.curriculum = CurriculumByLevels(
-            levels=[{"do nothing particular"}, {"go to the <color> <obj_type>"}]
+            levels=[
+                {"do nothing particular"},
+                {"Give the position of the agent as a tuple of integers (x, y)"},
+                {"go to the <color> <obj_type>"},
+            ]
         )
         # Call the parent class constructor
         super().__init__(config)
@@ -102,32 +109,43 @@ Observations: The observation is a dictionary with the following keys:
     ) -> Tuple[Observation, TaskRepresentation, Dict[str, Any]]:
         # Select a family task
         family_task: str = self.curriculum.sample()
+        ### === Create the environment === ###
+        # Extract the environment class from the family task and instantiate it
         EnvClass: Type[MiniGridEnv] = self.family_tasks_to_env_class[family_task]
         self.env = EnvClass(
             size=self.size,
             render_mode=self.render_mode_eval if is_eval else self.render_mode,
         )
+        # Wrap the environment to get the observation (for now we set the obs to be fully observable)
         self.env = FullyObsWrapper(self.env)
+        # Modify the action space
+        if hasattr(self.env.unwrapped, "get_new_action_space"):
+            self.env.action_space = self.env.unwrapped.get_new_action_space()
+        else:
+            self.env.action_space = self.action_space_default
+        # Reset the environment
         obs, info = self.env.reset()
+        # Extract the task_representation from the environment
         self.task = self.extract_task(self.env)
         assert (
             self.task.family_task == family_task
         ), f"Family task mismatch: {self.task.family_task} != {family_task}"
-        # self.task: str = self.env.env.mission
-        assert isinstance(
-            self.env.action_space, spaces.Discrete
-        ) and self.env.action_space.n == len(
-            self.action_space.elems
-        ), f"Action space mismatch : {self.env.action_space} incompatible with {self.action_space}"
-        assert all(
-            [
-                key == "mission"
-                or (self.observation_space[key] == self.env.observation_space[key])
-                for key in self.observation_space.spaces.keys()
-            ]
-        ), f"Observation space mismatch : {self.env.observation_space} incompatible with {self.observation_space}"
+
+        # assert isinstance(
+        #     self.env.action_space, spaces.Discrete
+        # ) and self.env.action_space.n == len(
+        #     self.action_space.elems
+        # ), f"Action space mismatch : {self.env.action_space} incompatible with {self.action_space}"
+        # assert all(
+        #     [
+        #         key == "mission"
+        #         or (self.observation_space[key] == self.env.observation_space[key])
+        #         for key in self.observation_space.spaces.keys()
+        #     ]
+        # ), f"Observation space mismatch : {self.env.observation_space} incompatible with {self.observation_space}"
+
         # Get observation
-        del obs["mission"]
+        # del obs["mission"]
         # Return reset feedback
         info = {"task": self.task, **info}
         return obs, self.task, info
@@ -135,30 +153,24 @@ Observations: The observation is a dictionary with the following keys:
     def step(self, action: ActionType) -> Tuple[Observation, float, bool, InfoDict]:
         try:
             # Convert the action (e.g. "forward") to the action index (e.g. 2 (int))
-            action_idx = dict_actions[action][0]
+            if not hasattr(self.env.unwrapped, "get_new_action_space"): # if the action space is not modified, perform "forward" -> 2
+                action = dict_actions[action][0]
             # Take the action in the environment
-            obs, reward, terminated, truncated, info = self.env.step(action_idx)
-            # Get observation
-            del obs["mission"]
+            obs, reward, terminated, truncated, info = self.env.step(action)
             # Return step feedback
             return obs, reward, terminated, truncated, info
-        except Exception as e:
-            if not action in dict_actions:
-                info = {
-                    "error": {
-                        "type": "action_error",
-                        "message": f"Action '{action}' of type {type(action)} given to the .step() method of the environment is not an admissible action. Admissible actions are: {list(dict_actions.keys())}",
-                    }
+        except KeyError:
+            assert not action in dict_actions, f"Action '{action}' should not be in dict_actions here"
+            info = {
+                "error": {
+                    "type": "action_error",
+                    "message": f"Action '{action}' of type {type(action)} given to the .step() method of the environment is not an admissible action. Admissible actions are: {list(dict_actions.keys())}",
                 }
-                return None, 0, True, False, info
-            else:
-                assert (
-                    "mission" in obs
-                ), f"Observation should contain the mission string"
-                raise f"An error occured during the step method of the environment: {e}"
+            }
+            return None, 0, True, False, info
 
     def update(self, task: TaskRepresentation, feedback: Dict[str, Any]) -> None:
-        self.curriculum.update(task=task.family_task, feedback=feedback)
+        self.curriculum.update(objective=task.family_task, feedback=feedback)
 
     # ======= Optional interface methods =======
 
@@ -180,6 +192,15 @@ Observations: The observation is a dictionary with the following keys:
     # ======= Helper methods =======
 
     def extract_task(self, env: MiniGridEnv) -> TaskRepresentation:
+        # The name of the task is the mission string
+        name = env.unwrapped.mission
+        # The description of the task is the env's task description if any, else the mission string
+        description = (
+            env.unwrapped.task_description
+            if hasattr(env.unwrapped, "task_description")
+            else name
+        )
+        # The family task is the mission function signature
         mission_space: MissionSpace = env.observation_space["mission"]
         mission_func = (
             mission_space.mission_func
@@ -188,30 +209,45 @@ Observations: The observation is a dictionary with the following keys:
         family_task = mission_func(  # "go to the <color> <obj_type>"
             *[f"<{keys_kwargs[i]}>" for i in range(len(keys_kwargs))]
         )
-        mission = env.env.mission
-        kwargs = self.extract_values(family_task, mission, keys_kwargs)
+        # Extract the values of the placeholders in the family_task
+        kwargs = self.extract_values(family_task, name, keys_kwargs)
+        # Create the task representation
         task = TaskRepresentation(
+            name=name,  # go to the green ball
             family_task=family_task,  # go to the <color> <obj_type>
-            name=mission,  # go to the green ball
-            description=mission,  # go to the green ball
+            description=description,  # go to the green ball using your navigation skills
             kwargs=kwargs,  # {"color": "green", "obj_type": "ball"}
-            observation_space=self.observation_space,  # gym.space object
-            action_space=self.action_space,  # gym.space object
+            # observation_space=self.extract_observation_space_without_mission(
+            #     env.observation_space
+            # ),  # gym.space object
+            observation_space=env.observation_space,  # gym.space object
+            action_space=env.action_space,  # gym.space object
         )
         return task
 
-    def extract_values(self, family, name, keys_kwargs):
+    def extract_values(self, family_task, name, keys_kwargs):
         # Create a regex pattern based on the family string
-        pattern = family.replace("<", "(?P<").replace(">", ">[^ ]+)")
+        family_task_escape = re.escape(family_task)
+        pattern = family_task_escape.replace("<", "(?P<").replace(">", ">[^ ]+)")
         # Use the regex pattern to match the name string
         match = re.match(pattern, name)
         if not match:
-            raise ValueError("The name does not match the family pattern.")
+            breakpoint()
+            raise ValueError(
+                f"The name does not match the family pattern : family_task={family_task}, name={name}, pattern={pattern}"
+            )
         # Extract the values and create the dictionary
         return {key: match.group(key) for key in keys_kwargs}
 
-    def get_observation_space(self) -> spaces.Space:
-        return self.observation_space
+    def extract_observation_space_without_mission(
+        self, observation_space: spaces.Dict
+    ) -> spaces.Dict:
+        return spaces.Dict(
+            {k: v for k, v in observation_space.spaces.items() if k != "mission"}
+        )
 
-    def get_action_space(self) -> spaces.Space:
-        return self.action_space
+    def get_feedback(self):
+        if hasattr(self.env, "get_feedback"):
+            return self.env.unwrapped.get_feedback()
+        else:
+            return super().get_feedback()

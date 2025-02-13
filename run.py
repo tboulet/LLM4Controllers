@@ -61,8 +61,8 @@ def main(config: DictConfig):
 
     # Create the env
     print("Creating the dataset...")
-    EnvClass = env_name_to_MetaEnvClass[env_name]
-    env = EnvClass(config["env"]["config"])
+    MetaEnvClass = env_name_to_MetaEnvClass[env_name]
+    env = MetaEnvClass(config["env"]["config"])
     textual_description_env = env.get_textual_description()
 
     # Get the agent
@@ -139,8 +139,9 @@ def main(config: DictConfig):
             "success": reward > 0,
             "reward": reward,
         }
-        if "error" in info:
+        if "error" in info: # add error info to feedback
             feedback["error"] = info["error"]
+        feedback.update(env.get_feedback()) # add environment feedback to feedback
         agent.update(task, controller, feedback)
 
         # Update the MetaEnv

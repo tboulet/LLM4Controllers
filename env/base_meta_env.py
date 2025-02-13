@@ -69,6 +69,14 @@ class BaseMetaEnv(ABC):
         """
         raise NotImplementedError
     
+    def get_feedback(self) -> Dict[str, Any]:
+        """Return additional feedback about the environment that can be useful for the agent.
+
+        Returns:
+            Dict[str, Any]: a dictionary containing additional feedback about the environment
+        """
+        return {}
+    
     def render(self):
         """Render the environment"""
         pass

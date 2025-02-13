@@ -25,21 +25,21 @@ class TaskRepresentation:
             description (str): a textual description of the task, for example "go to the green ball" (can be the same as the name)
             observation_space (Space): the observation space of the environment
             action_space (Space): the action space of the environment
-            kwargs (Dict[str, Any], optional): the values of the placeholders in the family_task. Defaults to None.
+            kwargs (Dict[str, Any], optional): the values of the placeholders in the family_task. Defaults to None. For example {"color": "green", "obj_type": "ball"} for the task "go to the green ball".
         """
         self.name = name
         self.family_task = family_task
         self.description = description
         self.observation_space = observation_space
         self.action_space = action_space
-        self.variables = kwargs
+        self.kwargs = kwargs
 
     def __repr__(self) -> str:
         return f"""TaskRepresentation(
             name = {self.name},
-            family = {self.family_task},
+            family_task = {self.family_task},
             description = {self.description},
             observation_space = {self.observation_space},
             action_space = {self.action_space},
-            variables = {self.variables}
+            variables = {self.kwargs}
         )"""

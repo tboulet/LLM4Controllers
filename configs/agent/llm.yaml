@@ -3,6 +3,13 @@ config:
   model: gpt-4o-mini
   num_attempts_sc: 5
 
+  config_controllers:
+    do_use: True
+    which_initial_controllers: specific  # none, specific (those in initial_controllers), all (all available in agent.llm_hcg.initial_controllers)
+    initial_controllers:
+      - move_forward.py
+      - turn_to_direction.py
+
   config_logs:
     log_dir: logs
     do_log_on_new: True

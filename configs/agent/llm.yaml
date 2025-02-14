@@ -10,4 +10,4 @@ config:
 
   config_debug:
     breakpoint_on_new_t: True
-    input_on_agent_mistake: True
+    breakpoint_on_failed_sc_extraction: True

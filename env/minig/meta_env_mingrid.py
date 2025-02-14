@@ -1,7 +1,10 @@
 import enum
+import os
 import random
 import re
+import shutil
 from gymnasium import spaces
+import imageio
 from matplotlib import pyplot as plt
 import numpy as np
 from typing import Tuple, Type, Union, Dict, Any, List, Optional
@@ -12,6 +15,9 @@ from minigrid.envs import EmptyEnv, GoToObjectEnv
 from minigrid.core.mission import MissionSpace
 from minigrid.core.actions import Actions
 from minigrid.wrappers import ObservationWrapper, ImgObsWrapper, FullyObsWrapper
+from minigrid.core.constants import IDX_TO_OBJECT, IDX_TO_COLOR, STATE_TO_IDX
+
+IDX_TO_STATE = {v: k for k, v in STATE_TO_IDX.items()}
 
 from env.base_meta_env import BaseMetaEnv, Observation, InfoDict
 from core.task import TaskRepresentation
@@ -45,23 +51,11 @@ class MinigridMetaEnv(BaseMetaEnv):
     def __init__(self, config: Dict) -> None:
         # Extract parameters from the configuration
         self.viewsize = config.get("viewsize", 7)
-        self.size = config.get("size", 4)
+        self.size = config.get("size", 10)
         self.render_mode = config.get("render_mode", None)
         self.render_mode_eval = config.get("render_mode_eval", None)
-        # Define the default observation and action spaces
-        self.observation_space_default = spaces.Dict(
-            direction=spaces.Discrete(4),
-            image=spaces.Box(
-                low=0,
-                high=255,
-                # shape=(self.viewsize, self.viewsize, 3),
-                shape=(self.size, self.size, 3),
-                dtype="uint8",
-            ),
-        )
-        self.action_space_default = FiniteSpace(
-            elems=sorted(list(dict_actions.keys()), key=lambda x: dict_actions[x][0])
-        )
+        # Define other parameters
+        self.t = 0
         # Define the curriculum
         self.family_tasks_to_env_class = {
             "do nothing particular": AutoSuccessMGEnv,
@@ -70,7 +64,7 @@ class MinigridMetaEnv(BaseMetaEnv):
         }
         self.curriculum = CurriculumByLevels(
             levels=[
-                {"do nothing particular"},
+                # {"do nothing particular"},
                 {"Give the position of the agent as a tuple of integers (x, y)"},
                 {"go to the <color> <obj_type>"},
             ]
@@ -95,11 +89,19 @@ Each episode, the agent will be faced with a certain taks among a variety of tas
 These can include navigation tasks (move to a certain location), logical tasks (find the nearest point among a list), manipulative tasks (build a wall), etc.
 
 Actions: The action space consist of the following actions:\n{action_desc_listing}
-Only those (str objects) actions are allowed and should be taken by the controller.
+For classical tasks, these string action should be returned by the act method of the agent.
+However, some tasks will ask you to return an action of a different type (e.g. an integer, a tuple, etc.). In this case, you may be noticed by the task description.
+In any case, the action space (and observation space) is given to you during the task description.
 
 Observations: The observation is a dictionary with the following keys:
 - direction: the direction the agent is facing (0: up, 1: right, 2: down, 3: left)
-- image: the agent's view of the environment as a 3D numpy array of shape (viewsize, viewsize, 3). The channels represent the encoding of the object at position (i,j) in the environment (object type, color, state).
+- image: the map of the environment as a 3D numpy array of shape (viewsize, viewsize, 3). The channels represent the encoding of the object at position (i,j) in the environment (object type, color, state).
+- mission: the mission string describing the task to be accomplished (e.g. "go to the green ball"). This should be the same as the task you will receive later so don't pay attention to it.
+
+The mapping from object type integer to object type string is as follows: {IDX_TO_OBJECT}.
+The mapping from color integer to color string is as follows: {IDX_TO_COLOR}.
+The mapping from state integer to state string is as follows: {IDX_TO_STATE}. Only doors have a non-zero state.
+For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,j) is a key (object type 5) of color blue (color 2) in the open state (state 0).
 """
 
     def reset(
@@ -110,11 +112,22 @@ Observations: The observation is a dictionary with the following keys:
         # Select a family task
         family_task: str = self.curriculum.sample()
         ### === Create the environment === ###
+        # Rendering and logging
+        self.render_mode = self.render_mode_eval if is_eval else self.render_mode
+        if self.render_mode == "rgb_array":
+            self.video_frames: List[np.ndarray] = []
+        config_logs = self.config["config_logs"]
+        log_dir = config_logs["log_dir"]
+        self.list_run_names = []
+        if config_logs["do_log_on_new"]:
+            self.list_run_names.append(self.config["run_name"])
+        if config_logs["do_log_on_last"]:
+            self.list_run_names.append("_last")
         # Extract the environment class from the family task and instantiate it
         EnvClass: Type[MiniGridEnv] = self.family_tasks_to_env_class[family_task]
         self.env = EnvClass(
             size=self.size,
-            render_mode=self.render_mode_eval if is_eval else self.render_mode,
+            render_mode=self.render_mode,
         )
         # Wrap the environment to get the observation (for now we set the obs to be fully observable)
         self.env = FullyObsWrapper(self.env)
@@ -122,7 +135,11 @@ Observations: The observation is a dictionary with the following keys:
         if hasattr(self.env.unwrapped, "get_new_action_space"):
             self.env.action_space = self.env.unwrapped.get_new_action_space()
         else:
-            self.env.action_space = self.action_space_default
+            self.env.action_space = FiniteSpace(
+                elems=sorted(
+                    list(dict_actions.keys()), key=lambda x: dict_actions[x][0]
+                )
+            )
         # Reset the environment
         obs, info = self.env.reset()
         # Extract the task_representation from the environment
@@ -131,43 +148,34 @@ Observations: The observation is a dictionary with the following keys:
             self.task.family_task == family_task
         ), f"Family task mismatch: {self.task.family_task} != {family_task}"
 
-        # assert isinstance(
-        #     self.env.action_space, spaces.Discrete
-        # ) and self.env.action_space.n == len(
-        #     self.action_space.elems
-        # ), f"Action space mismatch : {self.env.action_space} incompatible with {self.action_space}"
-        # assert all(
-        #     [
-        #         key == "mission"
-        #         or (self.observation_space[key] == self.env.observation_space[key])
-        #         for key in self.observation_space.spaces.keys()
-        #     ]
-        # ), f"Observation space mismatch : {self.env.observation_space} incompatible with {self.observation_space}"
-
-        # Get observation
-        # del obs["mission"]
-        # Return reset feedback
+        # Return reset elements
         info = {"task": self.task, **info}
         return obs, self.task, info
 
     def step(self, action: ActionType) -> Tuple[Observation, float, bool, InfoDict]:
-        try:
-            # Convert the action (e.g. "forward") to the action index (e.g. 2 (int))
-            if not hasattr(self.env.unwrapped, "get_new_action_space"): # if the action space is not modified, perform "forward" -> 2
-                action = dict_actions[action][0]
-            # Take the action in the environment
-            obs, reward, terminated, truncated, info = self.env.step(action)
-            # Return step feedback
-            return obs, reward, terminated, truncated, info
-        except KeyError:
-            assert not action in dict_actions, f"Action '{action}' should not be in dict_actions here"
-            info = {
-                "error": {
-                    "type": "action_error",
-                    "message": f"Action '{action}' of type {type(action)} given to the .step() method of the environment is not an admissible action. Admissible actions are: {list(dict_actions.keys())}",
-                }
-            }
-            return None, 0, True, False, info
+        # Unsure the action is in the action space
+        if not action in self.env.action_space:
+            return (
+                None,
+                0,
+                True,
+                False,
+                {
+                    "error": {
+                        "type": "action_error",
+                        "message": f"Action '{action}' of type {type(action)} is not in the env action space {self.env.action_space}",
+                    }
+                },
+            )
+        # Convert the action (e.g. "forward") to the action index (e.g. 2 (int))
+        if not hasattr(
+            self.env.unwrapped, "get_new_action_space"
+        ):  # if the action space is not modified, perform "forward" -> 2
+            action = dict_actions[action][0]
+        # Take the action in the environment
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        # Return step feedback
+        return obs, reward, terminated, truncated, info
 
     def update(self, task: TaskRepresentation, feedback: Dict[str, Any]) -> None:
         self.curriculum.update(objective=task.family_task, feedback=feedback)
@@ -176,18 +184,31 @@ Observations: The observation is a dictionary with the following keys:
 
     def render(self):
         if self.render_mode == "human":
-            self.env.render()
+            pass  # already rendered in self.env.step/reset
         elif self.render_mode == "rgb_array":
-            return self.env.render(
-                "rgb_array"
-            )  # TODO : implement logging of the rgb_array
+            img = self.env.render()
+            self.video_frames.append(img)
         elif self.render_mode == None:
             pass
         else:
             raise ValueError(f"Unknown render mode: {self.render_mode}")
 
     def close(self):
+        # Close the environment
         self.env.close()
+        # Save the video if any
+        if self.render_mode == "rgb_array":
+            config_logs = self.config["config_logs"]
+            log_dir = config_logs["log_dir"]
+            for run_name in self.list_run_names:
+                path_task_t = os.path.join(log_dir, run_name, f"task_{self.t}")
+                shutil.rmtree(path_task_t, ignore_errors=True)
+                os.makedirs(path_task_t, exist_ok=True)
+                path_task_t_video = os.path.join(path_task_t, "video.mp4")
+                imageio.mimwrite(path_task_t_video, self.video_frames, fps=10)
+                
+        # Move forward time
+        self.t += 1
 
     # ======= Helper methods =======
 
@@ -232,7 +253,6 @@ Observations: The observation is a dictionary with the following keys:
         # Use the regex pattern to match the name string
         match = re.match(pattern, name)
         if not match:
-            breakpoint()
             raise ValueError(
                 f"The name does not match the family pattern : family_task={family_task}, name={name}, pattern={pattern}"
             )

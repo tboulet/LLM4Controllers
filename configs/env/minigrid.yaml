@@ -1,5 +1,10 @@
 name: Minigrid
 config:
   viewsize: 7
-  render_mode: null
+  render_mode: rgb_array
   render_mode_eval: human
+
+  config_logs:
+    log_dir: logs
+    do_log_on_new: True
+    do_log_on_last: True

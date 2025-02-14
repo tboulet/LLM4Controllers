@@ -96,7 +96,8 @@ def main(config: DictConfig):
             is_eval = False
         # Reset the environment
         obs, task, info = env.reset(seed=seed, is_eval=is_eval)
-
+        env.render()
+        
         # Ask the agent to generate a controller for the task
         controller = agent.get_controller(task)
 
@@ -112,7 +113,7 @@ def main(config: DictConfig):
                 info = {
                     "error": {
                         "type": "controller_act_error",
-                        "message": f"An error occured during the act method of the controller.\n{full_error_info}",
+                        "message": f"An error occured during the act method of the controller. Full error info :\n{full_error_info}",
                     }
                 }
                 obs, reward, done, truncated = (

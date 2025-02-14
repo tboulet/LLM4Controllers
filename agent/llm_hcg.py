@@ -38,11 +38,6 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
 
     def get_controller(self, task: TaskRepresentation) -> Controller:
 
-        # For now, the LLM-based hierarchical controller only supports string tasks
-        assert isinstance(
-            task, str
-        ), "For now, the LLM-based hierarchical controller only supports string tasks."
-
         # Create tge prompt for the assistant
         messages = []
         messages.append(
@@ -101,11 +96,12 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
                 messages.append(
                     {
                         "role": "system",
-                        "content": "I'm sorry, I could not extract the code from your answer. Please try again and make sure the code obeys the following format:\n```python\n<your code here>\n```",
+                        "content": "I'm sorry, extracting the code from your answer failed. Please try again and make sure the code obeys the following format:\n```python\n<your code here>\n```",
                     }
                 )
-                if self.config["config_debug"]["input_on_agent_mistake"]:
-                    input("Continue ? ...")
+                if self.config["config_debug"]["breakpoint_on_failed_sc_extraction"]:
+                    print("sc_code extraction failed. Press 'c' to continue.")
+                    breakpoint()
                 continue
             # Execute the controller code and retrieve the controller instance
             try:
@@ -125,7 +121,7 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
                         "content": f"I'm sorry, an error occured while executing your code. Please try again and make sure the code is correct. Full error info : {full_error_info}",
                     }
                 )
-                if self.config["config_debug"]["input_on_agent_mistake"]:
+                if self.config["config_debug"]["breakpoint_on_failed_sc_extraction"]:
                     input("Continue ? ...")
                 continue
             # Save the code for update step and return the controller instance

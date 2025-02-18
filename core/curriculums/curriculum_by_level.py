@@ -37,7 +37,7 @@ class CurriculumByLevels(BaseCurriculum):
             p=p,
         )  # uniform distribution
         objective = random.choice(list(level_sampled.keys()))
-        print(f"[CURRICULUM] Sampled objective: {objective}")
+        print(f"\n[CURRICULUM] Sampled objective: {objective}")
         return objective
 
     def update(self, objective: ObjectiveRepresentation, feedback: Dict[str, Any]):

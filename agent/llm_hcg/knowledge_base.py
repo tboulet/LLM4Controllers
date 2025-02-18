@@ -94,9 +94,14 @@ class KnowledgeBase:
         # Controllers
         if self.config_controllers["do_use"]:
             if len(self.controller_library) == 0:
-                res += "\t\tControllers : the controller library is empty.\n"
+                res += "\t- Controllers : the controller library is empty.\n"
             else:
-                res += "\tControllers:\n\n"
+                res += (
+                    "\t- Controllers : these controllers will be imported automatically and you can use them in your code as sub-controllers. "
+                    "For example you can instantiate them in your __init__ or act method and then use them in your act method. "
+                    "Please take care of the signatures of the methods of the controllers you use. "
+                    "\n\n"
+                )
                 for controller_name, controller_def in self.controller_library.items():
                     res += f"{controller_name}:\n{controller_def}\n\n"
         return res

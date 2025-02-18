@@ -1,0 +1,16 @@
+name: FromAPI
+api_key_name: AZURE_API_KEY
+model: gpt-4o
+config:
+  client:
+    _target_: openai.AzureOpenAI
+    azure_endpoint: https://petunia-gpt4o-mini.openai.azure.com/
+    api_key: ${env_variable:'${llm.api_key_name}'}
+    api_version: 2024-02-15-preview
+  model: ${llm.model}
+  kwargs:
+    top_p: 0.9
+
+
+
+

@@ -1,0 +1,14 @@
+name: FromAPI
+api_key_name: ANTHROPIC_API_KEY
+model: claude-3-sonnet
+config:
+  client:
+    _target_: anthropic.Anthropic
+    api_key: ${env_variable:'${llm.api_key_name}'}
+  model: ${llm.model}
+  kwargs:
+    top_p: 0.9
+
+
+
+

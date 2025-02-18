@@ -36,10 +36,10 @@ class TaskRepresentation:
 
     def __repr__(self) -> str:
         return f"""TaskRepresentation(
-            name = {self.name},
-            family_task = {self.family_task},
-            description = {self.description},
-            observation_space = {self.observation_space},
-            action_space = {self.action_space},
-            variables = {self.kwargs}
-        )"""
+name = {self.name},
+family_task = {self.family_task},
+description = {self.description},
+observation_space = {self.observation_space},
+action_space = {self.action_space},
+variables = {self.kwargs},
+)"""

@@ -1,0 +1,14 @@
+name: FromAPI
+api_key_name: OPENAI_API_KEY
+model: gpt-4o-mini
+config:
+  client:
+    _target_: openai.OpenAI
+    api_key: ${env_variable:'${llm.api_key_name}'}
+  model: ${llm.model}
+  kwargs:
+    top_p: 0.9
+
+
+
+

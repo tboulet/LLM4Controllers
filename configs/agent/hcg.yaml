@@ -10,6 +10,15 @@ config:
       - move_forward.py
       - turn_to_direction.py
 
+  config_functions:
+    do_use: False
+
+  config_knowledges:
+    do_use: False
+
+  config_hypotheses:
+    do_use: False
+    
   config_logs:
     log_dir: logs
     do_log_on_new: True

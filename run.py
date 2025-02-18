@@ -25,11 +25,13 @@ from core.loggers.multi_logger import MultiLogger
 from core.loggers.tensorboard import LoggerTensorboard
 from core.loggers.tqdm_logger import LoggerTQDM
 from core.utils import get_error_info
+from core.register_hydra import register_hydra_resolvers
 from src.time_measure import RuntimeMeter
 from src.utils import try_get_seed
 from env import env_name_to_MetaEnvClass
 from agent import agent_name_to_AgentClass
 
+register_hydra_resolvers()
 
 @hydra.main(config_path="configs", config_name="config_default.yaml")
 def main(config: DictConfig):
@@ -58,6 +60,7 @@ def main(config: DictConfig):
     run_name = f"{agent_name}_{env_name}_{datetime.datetime.now().strftime('%dth%mmo_%Hh%Mmin%Ss')}_seed{seed}"
     config["agent"]["config"]["run_name"] = run_name
     config["env"]["config"]["run_name"] = run_name
+    config["llm"]["run_name"] = run_name
 
     # Create the env
     print("Creating the dataset...")
@@ -65,12 +68,17 @@ def main(config: DictConfig):
     env = MetaEnvClass(config["env"]["config"])
     textual_description_env = env.get_textual_description()
 
-    # Get the agent
+    # Give LLM config to the agent
+    config["agent"]["config"]["llm"] = config["llm"]
+    
+    # Create the agent
     print("Creating the agent...")
     AgentClass = agent_name_to_AgentClass[agent_name]
     agent = AgentClass(config=config["agent"]["config"])
     agent.give_textual_description(textual_description_env)
 
+    
+    
     # Initialize loggers
     run_name = config.get(
         "run_name", run_name

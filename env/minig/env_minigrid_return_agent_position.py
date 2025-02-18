@@ -33,7 +33,7 @@ class GiveAgentPositionMGEnv(MiniGridEnv):
 
     @staticmethod
     def _gen_mission():
-        return "Give the position of the agent as a tuple of integers (x, y)"
+        return "give the position of the agent as a tuple of integers (x, y)"
 
     def _gen_grid(self, width, height):
         # MUST BE DONE : create world (grid, objects, etc), place agent, place goal

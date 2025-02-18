@@ -59,13 +59,13 @@ class MinigridMetaEnv(BaseMetaEnv):
         # Define the curriculum
         self.family_tasks_to_env_class = {
             "do nothing particular": AutoSuccessMGEnv,
-            "Give the position of the agent as a tuple of integers (x, y)": GiveAgentPositionMGEnv,
+            "give the position of the agent as a tuple of integers (x, y)": GiveAgentPositionMGEnv,
             "go to the <color> <obj_type>": GoToObjectEnv,
         }
         self.curriculum = CurriculumByLevels(
             levels=[
                 # {"do nothing particular"},
-                {"Give the position of the agent as a tuple of integers (x, y)"},
+                {"give the position of the agent as a tuple of integers (x, y)"},
                 {"go to the <color> <obj_type>"},
             ]
         )
@@ -202,7 +202,6 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
             log_dir = config_logs["log_dir"]
             for run_name in self.list_run_names:
                 path_task_t = os.path.join(log_dir, run_name, f"task_{self.t}")
-                shutil.rmtree(path_task_t, ignore_errors=True)
                 os.makedirs(path_task_t, exist_ok=True)
                 path_task_t_video = os.path.join(path_task_t, "video.mp4")
                 imageio.mimwrite(path_task_t_video, self.video_frames, fps=10)

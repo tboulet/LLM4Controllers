@@ -27,9 +27,10 @@ class KnowledgeBase:
     - the hypothesis of the agent
     """
 
-    def __init__(self, config_agent: Dict):
+    def __init__(self, config_agent: Dict, namespace : Dict[str, Any]):
         # Initialize controller library
         print("Initializing KnowledgeBase...")
+        self.global_namespace = namespace
         self.config_controllers = config_agent["config_controllers"]
         self.controller_library: Dict[str, str] = (
             {}
@@ -87,8 +88,11 @@ class KnowledgeBase:
                 raise ValueError(
                     f"Controller {class_name} was attempted to be added to the controller library but is already present."
                 )
+            # Add the controller's code to the controller library
             self.controller_library[class_name] = class_def
-
+            # Run the controller's code in the namespace to make it available
+            exec(class_def, self.global_namespace)
+            
     def __repr__(self):
         res = "KnowledgeBase:\n"
         # Controllers

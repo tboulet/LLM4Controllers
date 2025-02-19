@@ -3,7 +3,7 @@ from agent.base_controller import Controller
 from env.base_meta_env import Observation, ActionType
 
 
-class TurnToDirection(Controller):
+class TurnToDirectionController(Controller):
     """A controller that will turn to a specific direction (0: up, 1: right, 2: down, 3: left).
     
     Signatures :

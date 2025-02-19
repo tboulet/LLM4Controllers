@@ -12,16 +12,21 @@ class LLM_from_API(LanguageModel):
         self.client: OpenAI = instantiate(config["client"])
         self.model: str = config["model"]
         self.kwargs: Dict[str, Any] = config["kwargs"]
-        self.messages = []
+        self.messages : List[Dict[str, str]] = []
 
     def reset(self):
         """Reset the language model at empty state."""
         self.messages = []
 
-    def add_prompt(self, prompt):
+    def add_prompt(self, prompt: str):
+        """Add a prompt to the language model.
+
+        Args:
+            prompt (str): the prompt to add.
+        """
         # We use user to avoid Claude incompatibility with system
         self.messages.append({"role": "user", "content": prompt})
-        
+
     def generate(self) -> str:
         """Generate a completion for the given prompt.
 
@@ -31,12 +36,19 @@ class LLM_from_API(LanguageModel):
         Returns:
             str: the completion of the prompt.
         """
-        answer =  self.client.chat.completions.create(
-            model=self.model,
-            messages=self.messages,
-        ).choices[0].message.content
+        assert (
+            len(self.messages) > 0
+        ), "You need to add a prompt before generating completions."
+        answer = (
+            self.client.chat.completions.create(
+                model=self.model,
+                messages=self.messages,
+            )
+            .choices[0]
+            .message.content
+        )
         return answer
-    
+
     def add_answer(self, answer: str):
         """Add the answer to the language model.
 
@@ -44,6 +56,6 @@ class LLM_from_API(LanguageModel):
             answer (str): the answer to add.
         """
         self.messages.append({"role": "assistant", "content": answer})
-        
+
     def optimize(self):
         raise NotImplementedError  # not implemented yet

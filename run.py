@@ -26,8 +26,8 @@ from core.loggers.tensorboard import LoggerTensorboard
 from core.loggers.tqdm_logger import LoggerTQDM
 from core.utils import get_error_info
 from core.register_hydra import register_hydra_resolvers
-from src.time_measure import RuntimeMeter
-from src.utils import try_get_seed
+from core.time_measure import RuntimeMeter
+from core.utils import try_get_seed
 from env import env_name_to_MetaEnvClass
 from agent import agent_name_to_AgentClass
 

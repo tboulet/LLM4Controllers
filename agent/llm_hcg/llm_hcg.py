@@ -156,6 +156,7 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
                     log_dir=path_task_t,
                     name_to_text=name_to_text,
                 )
+                print(f"Logs saved in: {path_task_t}")
             return controller_instance
 
         else:

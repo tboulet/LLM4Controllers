@@ -47,7 +47,7 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
     def give_textual_description(self, description: str):
         self.description_env = description
         self.text_controller_base_class = open("agent/base_controller.py").read()
-        self.text_agent_answer_example = open("assets/agent_answer_example.txt").read()
+        self.text_answer_example = open("agent/llm_hcg/answer_example.txt").read()
 
     def get_controller(self, task: TaskRepresentation) -> Controller:
 
@@ -67,8 +67,7 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
             "\n\n"
             "A controller obeys the following interface:\n"
             "```python\n"
-            f"{self.text_controller_base_class}"
-            "```"
+            f"{self.text_controller_base_class}```"
             "\n\n"
             "This can be a very hard task at the beginning since you have very little information about the environment and it's structure. "
             f"That is why you have at your disposal the following ressources :\n{self.knowledge_base}"
@@ -76,11 +75,10 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
             "You should try as much as possible to produce controllers that are short in terms of tokens of code. "
             "This can be done in particular by re-using the functions and controllers that are already implemented in the knowledge base and won't cost a lot of tokens. "
             "\n\n"
-
             "Please reason step-by-step and think about the best way to solve the task before answering. "
             "Globally, your answer should be returned following that example:\n"
             "[--- Example of answer ---]\n"
-            f"{self.text_agent_answer_example}"
+            f"{self.text_answer_example}"
             "[--- End of example of answer ---]"
             "\n\n"
             f"You will have to implement a controller (under the variable 'controller') to solve the following task : {task}."

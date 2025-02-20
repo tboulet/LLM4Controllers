@@ -30,9 +30,9 @@ from .env_minigrid_autosuccess import AutoSuccessMGEnv
 from .env_minigrid_return_agent_position import GiveAgentPositionMGEnv
 
 dict_actions = {
-    "left": (0, "Turn the direction of the agent to the left"),
-    "right": (1, "Turn the direction of the agent to the right"),
-    "forward": (2, "Move one tile forward"),
+    "left": (0, "Turn the direction of the agent to the left (don't move in that direction)"),
+    "right": (1, "Turn the direction of the agent to the right (don't move in that direction)"),
+    "forward": (2, "Move one tile forward in the direction the agent is facing"),
     "pickup": (
         3,
         "Pick up the object the agent is facing (if any) and add it to the agent's inventory",
@@ -95,7 +95,7 @@ In any case, the action space (and observation space) is given to you during the
 
 Observations: The observation is a dictionary with the following keys:
 - direction: the direction the agent is facing (0: up, 1: right, 2: down, 3: left)
-- image: the map of the environment as a 3D numpy array of shape (viewsize, viewsize, 3). The channels represent the encoding of the object at position (i,j) in the environment (object type, color, state).
+- image: the map of the environment as a 3D numpy array of shape (viewsize, viewsize, 3). The channels represent the encoding of the object at position (i,j) in the environment (object type, color, state). The environment is fully observable and the camera position and orientation are fixed (centered on the environment and facing up).
 - mission: the mission string describing the task to be accomplished (e.g. "go to the green ball"). This should be the same as the task you will receive later so don't pay attention to it.
 
 The mapping from object type integer to object type string is as follows: {IDX_TO_OBJECT}.
@@ -230,7 +230,7 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
             *[f"<{keys_kwargs[i]}>" for i in range(len(keys_kwargs))]
         )
         # Extract the values of the placeholders in the family_task
-        kwargs = self.extract_values(family_task, name, keys_kwargs)
+        kwargs = self.extract_kwargs(family_task, name, keys_kwargs)
         # Create the task representation
         task = TaskRepresentation(
             name=name,  # go to the green ball
@@ -245,7 +245,7 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
         )
         return task
 
-    def extract_values(self, family_task, name, keys_kwargs):
+    def extract_kwargs(self, family_task, name, keys_kwargs):
         # Create a regex pattern based on the family string
         family_task_escape = re.escape(family_task)
         pattern = family_task_escape.replace("<", "(?P<").replace(">", ">[^ ]+)")
@@ -266,7 +266,7 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
         )
 
     def get_feedback(self):
-        if hasattr(self.env, "get_feedback"):
+        if hasattr(self.env.unwrapped, "get_feedback"):
             return self.env.unwrapped.get_feedback()
         else:
             return super().get_feedback()

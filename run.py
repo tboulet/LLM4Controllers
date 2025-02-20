@@ -1,5 +1,6 @@
 # Logging
 import os
+import shutil
 import sys
 import wandb
 from tensorboardX import SummaryWriter
@@ -83,7 +84,7 @@ def main(config: DictConfig):
     run_name = config.get(
         "run_name", run_name
     )  # do "python run.py +run_name=<your_run_name>" to change the run name
-    print(f"\nStarting run {run_name}")
+    print(f"\nStarting run {run_name} ...")
     loggers = []
     if do_cli:
         loggers.append(LoggerCLI())
@@ -93,6 +94,9 @@ def main(config: DictConfig):
         loggers.append(LoggerTQDM(n_total=n_episodes))
     logger = MultiLogger(*loggers)
 
+    # Remove logs/_last/ to clean the logs
+    shutil.rmtree("logs/_last/", ignore_errors=True)
+        
     # Training loop
     ep = 0
     ep_training = 0

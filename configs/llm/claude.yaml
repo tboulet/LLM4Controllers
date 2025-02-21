@@ -1,3 +1,4 @@
+# WARNING : Claude is not compatible with the FromAPI class right now, API call is client.messages.create and there is no seed
 name: FromAPI
 api_key_name: ANTHROPIC_API_KEY
 model: claude-3-sonnet

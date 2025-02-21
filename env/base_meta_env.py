@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Tuple, Union, Dict, Any, List, Optional
-from gym import Space
+from gymnasium import Space
 import numpy as np
 
 from core.task import TaskRepresentation

@@ -23,11 +23,10 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
 
     def __init__(self, config: Dict):
         super().__init__(config)
-        # Initialize OpenAI API
+        # Initialize LLM
         name_llm = config["llm"]["name"]
         config_llm = config["llm"]["config"]
         self.llm = llm_name_to_LLMClass[name_llm](config_llm)
-
         # Extract the configuration parameters
         self.model = config["model"]
         self.num_attempts_sc = config.get("num_attempts_sc", 5)
@@ -43,6 +42,14 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
         self.knowledge_base = KnowledgeBase(
             config_agent=config, namespace=self.namespace
         )
+        # Initialize logging
+        config_logs = self.config["config_logs"]
+        self.log_dir = config_logs["log_dir"]
+        self.list_run_names = []
+        if config_logs["do_log_on_new"]:
+            self.list_run_names.append(self.config["run_name"])
+        if config_logs["do_log_on_last"]:
+            self.list_run_names.append("_last")
 
     def give_textual_description(self, description: str):
         self.description_env = description
@@ -103,9 +110,9 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
                 self.llm.add_prompt(
                     "I'm sorry, extracting the code from your answer failed. Please try again and make sure the code obeys the following format:\n```python\n<your code here>\n```"
                 )
-                name_to_text[
-                    f"assistant_answer_failed_{no_attempt}_extraction_reason.txt"
-                ] = answer
+                self.log_dir(
+                    {f"assistant_answer_failed_{no_attempt}_extract_reason.txt": answer}
+                )
                 if self.config["config_debug"]["breakpoint_on_failed_sc_extraction"]:
                     print("sc_code extraction failed. Press 'c' to continue.")
                     breakpoint()
@@ -123,9 +130,9 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
                 self.llm.add_prompt(
                     f"I'm sorry, an error occured while executing your code. Please try again and make sure the code is correct. Full error info : {full_error_info}"
                 )
-                name_to_text[
-                    f"assistant_answer_failed_{no_attempt}_exec_reason.txt"
-                ] = answer
+                self.log_dir(
+                    {f"assistant_answer_failed_{no_attempt}_exec_reason.txt": answer}
+                )
                 if self.config["config_debug"]["breakpoint_on_failed_sc_extraction"]:
                     input("Continue ? ...")
                 continue
@@ -135,28 +142,14 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
             break
 
         if is_controller_instance_generated:
-            config_logs = self.config["config_logs"]
-            log_dir = config_logs["log_dir"]
-            list_run_names = []
-            if config_logs["do_log_on_new"]:
-                list_run_names.append(self.config["run_name"])
-            if config_logs["do_log_on_last"]:
-                list_run_names.append("_last")
-            for run_name in list_run_names:
-                path_task_t = os.path.join(log_dir, run_name, f"task_{self.t}")
-                name_to_text.update(
-                    {
-                        "config.yaml": json.dumps(self.config, indent=4),
-                        "prompt.txt": prompt,
-                        "assistant_answer.txt": answer,
-                        "controller.py": sc_code,
-                    }
-                )
-                self.log_texts(
-                    log_dir=path_task_t,
-                    name_to_text=name_to_text,
-                )
-                print(f"Logs saved in: {path_task_t}")
+            self.log_texts(
+                {
+                    "config.yaml": json.dumps(self.config, indent=4),
+                    "prompt.txt": prompt,
+                    "assistant_answer.txt": answer,
+                    "controller.py": sc_code,
+                }
+            )
             return controller_instance
 
         else:
@@ -173,7 +166,7 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
         self.t += 1
 
     # ================ Helper functions ================
-
+        
     def extract_SC_code(self, answer: str) -> str:
         """Extracts the controller definition and instantiation code from an LLM response.
         The answer should contain one python code block with the controller code and instanciate a Controller variable named 'controller'.
@@ -226,19 +219,16 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
         ), "The controller variable was not defined in the code."
         return temp_namespace.get("controller")
 
-    def log_texts(
-        self,
-        log_dir: str,
-        name_to_text: Dict[str, str],
-    ):
-        """Log texts in a directory. For each (key, value) in the directory, the file "dir_log/key" will contain the value.
-        Remove the directory if it already exists.
+    def log_texts(self, dict_name_to_text: Dict[str, str]):
+        """Log texts in a directory. For each (key, value) in the directory, the file <log_dir>/task_<t>/<key> will contain the value.
 
         Args:
-            log_dir (str): _description_
-            name_to_text (Dict[str, str]): a dictionnary containing the name of the file to create and the text to write in it.
+            dict_name_to_text (Dict[str, str]): a mapping from the name of the file to create to the text to write in it.
         """
-        os.makedirs(log_dir, exist_ok=True)
-        for name, text in name_to_text.items():
-            with open(os.path.join(log_dir, name), "w") as f:
-                f.write(text)
+        for run_name in self.list_run_names:
+            log_dir = f"{self.log_dir}/{run_name}/task_{self.t}"
+            os.makedirs(log_dir, exist_ok=True)
+            for name, text in dict_name_to_text.items():
+                with open(os.path.join(log_dir, name), "w") as f:
+                    f.write(text)
+        print(f"[INFO] Texts logged in {', '.join(self.list_run_names)} : {list(dict_name_to_text.keys())}")

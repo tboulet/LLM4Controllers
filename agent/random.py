@@ -2,7 +2,7 @@ import os
 import re
 from typing import Dict, List
 
-from gym import Space
+from gymnasium import Space
 import numpy as np
 from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller

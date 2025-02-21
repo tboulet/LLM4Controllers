@@ -1,4 +1,5 @@
 
+from typing import Optional
 from minigrid.core.constants import COLOR_NAMES
 from minigrid.core.grid import Grid
 from minigrid.core.mission import MissionSpace
@@ -11,7 +12,7 @@ class AutoSuccessMGEnv(MiniGridEnv):
     def __init__(
         self,
         size=10,
-        max_steps: int | None = None,
+        max_steps: Optional[int] = None,
         **kwargs,
     ):
 

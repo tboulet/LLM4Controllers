@@ -1,3 +1,4 @@
+from typing import Optional
 from minigrid.core.constants import COLOR_NAMES
 from minigrid.core.grid import Grid
 from minigrid.core.mission import MissionSpace
@@ -5,13 +6,13 @@ from minigrid.core.world_object import Door, Goal, Key, Wall
 from minigrid.manual_control import ManualControl
 from minigrid.minigrid_env import MiniGridEnv
 
-from gym import spaces
+from gymnasium import spaces
 
 class GiveAgentPositionMGEnv(MiniGridEnv):
     def __init__(
         self,
         size=10,
-        max_steps: int | None = None,
+        max_steps: Optional[int] = None,
         **kwargs,
     ):
         # Optional things implemented here

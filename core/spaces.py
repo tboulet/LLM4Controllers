@@ -2,12 +2,12 @@ from abc import ABC, abstractmethod
 from enum import Enum
 import random
 from typing import Dict, Iterable, List, Optional, Tuple, Union
-import gym
+import gymnasium
 
 from core.utils import one_time_warning
 
 
-class FiniteSpace(gym.Space[object]):
+class FiniteSpace(gymnasium.Space[object]):
     
     def __init__(self, elems: List[object]):
         assert isinstance(elems, list) and len(elems) > 0, "elems must be a non-empty list"

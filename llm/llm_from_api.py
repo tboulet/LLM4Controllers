@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Union
+
+import numpy as np
 from .base_llm import LanguageModel
 from hydra.utils import instantiate
 from openai import OpenAI
@@ -11,7 +13,7 @@ class LLM_from_API(LanguageModel):
     def __init__(self, config: Dict[str, Any]):
         self.client: OpenAI = instantiate(config["client"])
         self.model: str = config["model"]
-        self.kwargs: Dict[str, Any] = config["kwargs"]
+        self.kwargs: Dict[str, Any] = config.get("kwargs", {})
         self.messages : List[Dict[str, str]] = []
 
     def reset(self):
@@ -43,6 +45,8 @@ class LLM_from_API(LanguageModel):
             self.client.chat.completions.create(
                 model=self.model,
                 messages=self.messages,
+                **self.kwargs,
+                seed=np.random.randint(0, 10000),
             )
             .choices[0]
             .message.content

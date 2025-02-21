@@ -19,6 +19,8 @@ import cProfile
 # ML libraries
 import random
 import numpy as np
+import torch
+import transformers
 
 # Project imports
 from core.loggers.cli import LoggerCLI
@@ -55,6 +57,8 @@ def main(config: DictConfig):
     seed = try_get_seed(config)
     random.seed(seed)
     np.random.seed(seed)
+    torch.manual_seed(seed)
+    transformers.set_seed(seed)  
     print(f"Using seed: {seed}")
 
     # Set the run name

@@ -1,0 +1,15 @@
+name: HuggingFace
+model: gpt2
+config:
+  model: ${llm.model}
+  device: cpu # cpu or cuda or auto
+  method_truncation: last # first, window or last
+  kwargs:
+    top_p: 0.9
+    top_k: 50
+    max_length: 5000
+    do_sample: True # required for top_p and top_k
+
+
+
+

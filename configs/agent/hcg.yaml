@@ -25,5 +25,5 @@ config:
     do_log_on_last: True
 
   config_debug:
-    breakpoint_on_new_t: True
+    breakpoint_on_new_t: False
     breakpoint_on_failed_sc_extraction: True

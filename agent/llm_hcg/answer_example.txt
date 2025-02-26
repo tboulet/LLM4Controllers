@@ -3,21 +3,42 @@ I think I should take into account ... (reasoning)
 
 Controller:
 ```python
-from env.base_meta_env import Observation, ActionType
-from agent.base_controller import Controller
-
 class ControllerForMovingToGoal(Controller):
-    def __init__(self, goal_coords):
+    # Explain the principle of the controller here
+    """A controller that will move to a specific goal coordinates.
+    """
+
+    def __init__(self, goal_coords : Tuple[int, int]):
+        # Detail the signature here
+        """
+        Args:
+            goal_coords (Tuple[int, int]): The coordinates of the goal.
+        """
+        # Implement your code here
         self.goal_coords = goal_coords
 
-    def act(self, observation):
+    def act(self, observation : Observation) -> ActionType:
+        # Detail the signature here
+        """
+        Args:
+            observation (Observation): The observation of the environment.
+        
+        Returns:
+            ActionType: The action to perform.
+        """
+
         # Implement your logic here
         return action
 
-    def has_finished(self):
-        # Implement your logic here
-        return True
+    def has_finished(self) -> bool:
+        # Detail the signature here
+        """
+        Returns:
+            bool: True if the controller has finished, False otherwise.
+        """
+        # Implement your code here
+        return boolean
 
+# Instantiate the controller here
 controller = ControllerForMovingToGoal(goal_coords=(5, 3))
 ```
-

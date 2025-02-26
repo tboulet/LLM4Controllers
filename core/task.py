@@ -35,11 +35,11 @@ class TaskRepresentation:
         self.kwargs = kwargs
 
     def __repr__(self) -> str:
-        return f"""TaskRepresentation(
-name = {self.name},
-family_task = {self.family_task},
-description = {self.description},
-observation_space = {self.observation_space},
-action_space = {self.action_space},
-variables = {self.kwargs},
-)"""
+        res = f"{self.name}."
+        if self.name != self.family_task:
+            res += f"\nThis task belongs to the family of task : {self.family_task}."
+        if self.description != self.name:
+            res += f"\nTask description : {self.description}."
+        res += f"\nThe observation you will receive belong to the following gym space : {self.observation_space}."
+        res += f"\nThe actions you can take MUST belong to the following gym space : {self.action_space}. You HAVE to take an action that belongs to this space."
+        return res

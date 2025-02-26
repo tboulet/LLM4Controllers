@@ -27,6 +27,8 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
         name_llm = config["llm"]["name"]
         config_llm = config["llm"]["config"]
         self.llm = llm_name_to_LLMClass[name_llm](config_llm)
+        self.text_base_controller = open("agent/base_controller.py").read()
+        self.text_answer_example = open("agent/llm_hcg/answer_example.txt").read()
         # Extract the configuration parameters
         self.model = config["model"]
         self.num_attempts_sc = config.get("num_attempts_sc", 5)
@@ -50,11 +52,11 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
             self.list_run_names.append(self.config["run_name"])
         if config_logs["do_log_on_last"]:
             self.list_run_names.append("_last")
+        # Log the config
+        self.log_texts({"config.yaml": json.dumps(self.config, indent=4)})
 
     def give_textual_description(self, description: str):
         self.description_env = description
-        self.text_controller_base_class = open("agent/base_controller.py").read()
-        self.text_answer_example = open("agent/llm_hcg/answer_example.txt").read()
 
     def get_controller(self, task: TaskRepresentation) -> Controller:
 
@@ -65,35 +67,50 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
 
         # Create the prompt for the assistant
         prompt = (
-            "You will be asked to generate the code for a Controller for a given task in a RL-like environment. "
-            "The general description of the environment is the following:"
+            # Purpose prompt
+            "You will be asked to generate the code for a Controller and instanciate this controller for a given task in a RL-like environment. "
             "\n\n"
-            "[--- General description of the environment ---]\n"
+            # Environment prompt
+            "[General description of the environment]\n"
             f"{self.description_env}\n"
-            "[--- End of the general description of the environment ---]"
             "\n\n"
+            # Controller structure prompt
+            "[Controller interface]\n"
             "A controller obeys the following interface:\n"
+            "Note : The objects Controller (the class from which you will inherit), Observation and ActionType (type object for readability) are already imported for you and you don't need to import them. "
+            "However, you shall import any other python module you need (numpy as np, math, etc.).\n"
             "```python\n"
-            f"{self.text_controller_base_class}```"
+            f"{self.text_base_controller}```"
             "\n\n"
-            "This can be a very hard task at the beginning since you have very little information about the environment and it's structure. "
-            f"That is why you have at your disposal the following ressources :\n{self.knowledge_base}"
+            # Knowledge base prompt
+            f"{self.knowledge_base}"
             "\n\n"
-            "You should try as much as possible to produce controllers that are short in terms of tokens of code. "
-            "This can be done in particular by re-using the functions and controllers that are already implemented in the knowledge base and won't cost a lot of tokens. "
-            "\n\n"
+            # Advice prompt
+            "[Advices]\n"
+            "Don't forget to :\n"
+            "- subclass the Controller class when defining your controller class\n"
+            "- implement the __init__, act and has_finished methods\n"
+            "- provide documentation for your code in the docstrings (especially the signatures)\n"
+            "- once the class is defined, instanciate it and assign it to the variable 'controller' with the adapted parameters.\n"
+            # "\n" # (commented for now)
+            # "You should try as much as possible to produce controllers that are short in terms of tokens of code. "
+            # "This can be done in particular by re-using the functions and controllers that are already implemented in the knowledge base and won't cost a lot of tokens. "
+            "\n" 
             "Please reason step-by-step and think about the best way to solve the task before answering. "
-            "Globally, your answer should be returned following that example:\n"
-            "[--- Example of answer ---]\n"
-            f"{self.text_answer_example}"
-            "[--- End of example of answer ---]"
             "\n\n"
-            f"You will have to implement a controller (under the variable 'controller') to solve the following task : {task}."
+            # Example of answer prompt (in-context learning)
+            "[Example of answer]\n"
+            "Your answer should be returned following that example:\n"
+            f"{self.text_answer_example}"
+            "\n\n"
+            # Task prompt
+            "[Task to solve]\n"
+            f"Your task is : you will have to implement a controller (under the variable 'controller') to solve the following task : {task}."
         )
+        self.log_texts({"prompt.txt": prompt})
 
         # Iterate until the controller is generated. If error, log it in the message and ask the assistant to try again.
         is_controller_instance_generated = False
-        name_to_text: Dict[str, str] = {}
         self.llm.reset()
         self.llm.add_prompt(prompt)
         for no_attempt in range(self.num_attempts_sc):
@@ -104,13 +121,13 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
             if sc_code is None:
                 # Retry if the code could not be extracted
                 print(
-                    f"WARNING : Could not extract the code from the answer. Asking the assistant to try again. (Attempt {no_attempt+1}/{self.num_attempts_sc})"
+                    f"[WARNING] : Could not extract the code from the answer. Asking the assistant to try again. (Attempt {no_attempt+1}/{self.num_attempts_sc})"
                 )
                 self.llm.add_answer(answer)
                 self.llm.add_prompt(
                     "I'm sorry, extracting the code from your answer failed. Please try again and make sure the code obeys the following format:\n```python\n<your code here>\n```"
                 )
-                self.log_dir(
+                self.log_texts(
                     {f"assistant_answer_failed_{no_attempt}_extract_reason.txt": answer}
                 )
                 if self.config["config_debug"]["breakpoint_on_failed_sc_extraction"]:
@@ -122,19 +139,23 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
                 self.exec_import_in_global_namespace(sc_code)
                 controller_instance = self.get_controller_instance(sc_code)
             except Exception as e:
+                breakpoint()
                 full_error_info = get_error_info(e)
                 print(
-                    f"WARNING : Could not execute the code from the answer. Asking the assistant to try again (Attempt {no_attempt+1}/{self.num_attempts_sc}). Full error info : {full_error_info}"
+                    f"[WARNING] : Could not execute the code from the answer. Asking the assistant to try again (Attempt {no_attempt+1}/{self.num_attempts_sc}). Full error info : {full_error_info}"
                 )
                 self.llm.add_answer(answer)
                 self.llm.add_prompt(
                     f"I'm sorry, an error occured while executing your code. Please try again and make sure the code is correct. Full error info : {full_error_info}"
                 )
-                self.log_dir(
-                    {f"assistant_answer_failed_{no_attempt}_exec_reason.txt": answer}
+                self.log_texts(
+                    {
+                        f"assistant_answer_failed_{no_attempt}_exec_reason.txt": answer,
+                        f"error_info_exec_{no_attempt}.txt": full_error_info,
+                    }
                 )
                 if self.config["config_debug"]["breakpoint_on_failed_sc_extraction"]:
-                    input("Continue ? ...")
+                    breakpoint()
                 continue
             # Save the code for update step and return the controller instance
             self.sc_code_last = sc_code
@@ -144,8 +165,6 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
         if is_controller_instance_generated:
             self.log_texts(
                 {
-                    "config.yaml": json.dumps(self.config, indent=4),
-                    "prompt.txt": prompt,
                     "assistant_answer.txt": answer,
                     "controller.py": sc_code,
                 }
@@ -166,7 +185,7 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
         self.t += 1
 
     # ================ Helper functions ================
-        
+
     def extract_SC_code(self, answer: str) -> str:
         """Extracts the controller definition and instantiation code from an LLM response.
         The answer should contain one python code block with the controller code and instanciate a Controller variable named 'controller'.
@@ -216,7 +235,7 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
         exec(code, self.namespace, temp_namespace)
         assert (
             "controller" in temp_namespace
-        ), "The controller variable was not defined in the code."
+        ), "The 'controller' variable was not defined in the code."
         return temp_namespace.get("controller")
 
     def log_texts(self, dict_name_to_text: Dict[str, str]):
@@ -225,10 +244,16 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
         Args:
             dict_name_to_text (Dict[str, str]): a mapping from the name of the file to create to the text to write in it.
         """
-        for run_name in self.list_run_names:
-            log_dir = f"{self.log_dir}/{run_name}/task_{self.t}"
+        list_log_dirs = [
+            f"{self.log_dir}/{run_name}/task_{self.t}"
+            for run_name in self.list_run_names
+        ]
+        for log_dir in list_log_dirs:
             os.makedirs(log_dir, exist_ok=True)
             for name, text in dict_name_to_text.items():
                 with open(os.path.join(log_dir, name), "w") as f:
                     f.write(text)
-        print(f"[INFO] Texts logged in {', '.join(self.list_run_names)} : {list(dict_name_to_text.keys())}")
+                f.close()
+        print(
+            f"[LOGGING] Texts logged in {', '.join(list_log_dirs)} : {list(dict_name_to_text.keys())}"
+        )

@@ -11,10 +11,21 @@ black
 wandb
 tensorboardX
 tensorboard
+gputil
 
 # Utils
 matplotlib 
 tqdm
+imageio[ffmpeg]
 
 # Common libraries
 numpy
+
+# Project libraries
+# torch
+transformers
+openai
+huggingface-hub
+gymnasium
+pygame
+minigrid

@@ -82,3 +82,12 @@ def get_memory_allocated():
 
 def get_memory_reserved():
     return torch.cuda.memory_reserved() / 1024**3
+
+
+if __name__ == "__main__":
+    model_id = input("Enter the model ID: ")
+    dtype = input("Enter the data type (float16, int8, etc.): (default: float16) ")
+    if dtype == "":
+        dtype = "float16"
+    memory_GB = get_model_memory_from_model_name(model_id, dtype)
+    print(f"Estimated GPU memory requirement for model {model_id}: {memory_GB} GB")

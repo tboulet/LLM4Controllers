@@ -94,14 +94,15 @@ class KnowledgeBase:
             exec(class_def, self.namespace)
             
     def __repr__(self):
-        res = "KnowledgeBase:\n"
-        # Controllers
+        res = ""
+        # Controllers library
         if self.config_controllers["do_use"]:
+            res += "[Controller library]\n"
             if len(self.controller_library) == 0:
-                res += "\t- Controllers : the controller library is empty.\n"
+                res += "The controller library is empty.\n"
             else:
                 res += (
-                    "\t- Controllers : these controllers will be imported automatically and you can use them in your code as sub-controllers. "
+                    "These controllers will be imported automatically and you may or may not use them in your controller class as sub-controllers simply by calling the class (do NOT import them from anywhere, they are already imported). "
                     "For example you can instantiate them in your __init__ or act method and then use them in your act method. "
                     "Please take care of the signatures of the methods of the controllers you use. "
                     "\n\n"

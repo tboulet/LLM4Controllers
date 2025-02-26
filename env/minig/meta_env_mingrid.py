@@ -42,7 +42,7 @@ dict_actions = {
         "Drop the object from the agent's inventory (if any) in front of the agent",
     ),
     "toggle": (5, "Toggle/activate an object in front of the agent"),
-    "done": (6, "Done completing the task"),
+    "done": (6, "No action"),
 }
 
 

@@ -8,7 +8,7 @@ class Controller(ABC):
     Each controller should be expected to solve a specific task.
 
     A sub-class of controller is expected to implement :
-    - the __init__() method to initialize the controller with the task information (e.g. the coordinates of the goal for a navigation task).
+    - the __init__(**kwargs) method to initialize the controller with eventually task-related informations (e.g. the coordinates of the goal for a navigation task).
     - the act(Observation) -> Action method, in which it should return an action but can also update its internal state.
     - the has_finished() -> bool method to indicate whether the controller has finished its task. If the controller has no notion of task completion or if it unclear, you can return False by default.
 
@@ -18,8 +18,13 @@ class Controller(ABC):
     """
 
     @abstractmethod
-    def __init__(self, **task_information: Dict[str, Any]):
-        pass
+    def __init__(self, **kwargs: Dict[str, Any]):
+        """Initialize the controller with 
+        
+        Args:
+            kwargs (Dict[str, Any]): a dictionary of parameters to initialize the controller.
+        """
+        raise NotImplementedError
 
     @abstractmethod
     def act(self, observation: Observation) -> ActionType:

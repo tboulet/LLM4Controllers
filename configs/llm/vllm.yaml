@@ -1,0 +1,12 @@
+name: VLLM
+model: Qwen/Qwen2.5-1.5B-Instruct
+config:
+  config_server:
+    do_server: False
+  model: ${llm.model}
+  kwargs:
+    top_p: 0.9
+
+
+
+

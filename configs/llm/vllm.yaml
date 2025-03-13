@@ -1,5 +1,5 @@
 name: VLLM
-model: Qwen/Qwen2.5-1.5B-Instruct
+model: Qwen/Qwen2.5-1.5B-Instruct # vllm serve Qwen/Qwen2.5-1.5B-Instruct
 config:
   config_server:
     do_server: False

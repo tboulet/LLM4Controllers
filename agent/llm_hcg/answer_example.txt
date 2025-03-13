@@ -3,22 +3,19 @@ I think I should take into account ... (reasoning)
 
 Controller:
 ```python
+# Eventually you can define a class here
 class ControllerForMovingToGoal(Controller):
-    # Explain the principle of the controller here
     """A controller that will move to a specific goal coordinates.
     """
 
     def __init__(self, goal_coords : Tuple[int, int]):
-        # Detail the signature here
         """
         Args:
             goal_coords (Tuple[int, int]): The coordinates of the goal.
         """
-        # Implement your code here
         self.goal_coords = goal_coords
 
     def act(self, observation : Observation) -> ActionType:
-        # Detail the signature here
         """
         Args:
             observation (Observation): The observation of the environment.
@@ -26,19 +23,17 @@ class ControllerForMovingToGoal(Controller):
         Returns:
             ActionType: The action to perform.
         """
-
-        # Implement your logic here
+        # some code here
         return action
 
     def has_finished(self) -> bool:
-        # Detail the signature here
         """
         Returns:
             bool: True if the controller has finished, False otherwise.
         """
-        # Implement your code here
+        # some code here
         return boolean
 
-# Instantiate the controller here
+# Instantiate the controller here, either from imported controllers or from the class you defined if you did
 controller = ControllerForMovingToGoal(goal_coords=(5, 3))
 ```

@@ -1,4 +1,3 @@
-
 from typing import Optional
 from minigrid.core.constants import COLOR_NAMES
 from minigrid.core.grid import Grid
@@ -8,7 +7,7 @@ from minigrid.manual_control import ManualControl
 from minigrid.minigrid_env import MiniGridEnv
 
 
-class AutoSuccessMGEnv(MiniGridEnv):
+class AutoSuccessEnv(MiniGridEnv):
     def __init__(
         self,
         size=10,
@@ -29,11 +28,11 @@ class AutoSuccessMGEnv(MiniGridEnv):
             max_steps=max_steps,
             **kwargs,
         )
-    
+
     @staticmethod
     def _gen_mission():
         return "do nothing particular"
-    
+
     def _gen_grid(self, width, height):
         # Create an empty grid
         self.grid = Grid(width, height)
@@ -47,23 +46,22 @@ class AutoSuccessMGEnv(MiniGridEnv):
         # Place the agent
         self.agent_pos = (1, 1)
         self.agent_dir = 0
-            
-            
+
     def step(self, action):
         obs, reward, terminated, truncated, info = super().step(action)
-        
+
         terminated = True
         reward = self._reward()
         return obs, reward, terminated, truncated, info
 
 
 def main():
-    env = AutoSuccessMGEnv(render_mode="human")
+    env = AutoSuccessEnv(render_mode="human")
 
     # enable manual control for testing
     manual_control = ManualControl(env, seed=42)
     manual_control.start()
 
-    
+
 if __name__ == "__main__":
     main()

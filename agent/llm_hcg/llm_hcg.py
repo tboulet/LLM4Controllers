@@ -184,7 +184,6 @@ class LLMBasedHierarchicalControllerGenerator(BaseAgent):
         controller: Controller,
         feedback: Dict[str, Union[float, str]],
     ):
-        breakpoint()
         self.t += 1
 
     # ================ Helper functions ================

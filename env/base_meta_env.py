@@ -3,7 +3,7 @@ from typing import Tuple, Union, Dict, Any, List, Optional
 from gymnasium import Space
 import numpy as np
 
-from core.task import TaskRepresentation
+from core.task import Task, TaskRepresentation
 from core.types import Observation, ActionType, InfoDict
 from core.spaces import FiniteSpace
 
@@ -24,7 +24,7 @@ class BaseMetaEnv(ABC):
         """
 
     @abstractmethod
-    def reset(self, seed: Union[int, None] = None, **kwargs) -> Tuple[Observation, TaskRepresentation, Dict[str, Any]]:
+    def reset(self, seed: Union[int, None] = None, **kwargs) -> Tuple[Observation, Task, TaskRepresentation, Dict[str, Any]]:
         """Reset the environment to its initial state and starts a new episode.
         Returns the first observation of the episode as well as the textual description of the task in particular.
         Also returns a dictionary containing additional information about the environment.
@@ -36,6 +36,7 @@ class BaseMetaEnv(ABC):
 
         Returns:
             Observation: the first observation of the episode
+            Task: the "task" object that the agent will have to solve. This should be interpreted as an identifier of the task more strict than the textual description.
             TaskRepresentation: the description of the task in particular. This should involve a textual description of the task but also its caracteristics (e.g. coordinate of the goal, etc.)
             InfoDict: a dictionary containing additional information about the environment
         """

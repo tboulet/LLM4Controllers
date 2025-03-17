@@ -8,7 +8,8 @@ from minigrid.minigrid_env import MiniGridEnv
 
 from gymnasium import spaces
 
-class GiveAgentPositionMGEnv(MiniGridEnv):
+
+class GiveAgentPositionEnv(MiniGridEnv):
     def __init__(
         self,
         size=10,
@@ -19,10 +20,10 @@ class GiveAgentPositionMGEnv(MiniGridEnv):
         if max_steps is None:
             max_steps = 1
         self.failure_reason = None
-        
+
         # MUST BE DONE : create mission space
         mission_space = MissionSpace(mission_func=self._gen_mission)
-        
+
         super().__init__(
             mission_space=mission_space,
             grid_size=size,
@@ -77,7 +78,7 @@ class GiveAgentPositionMGEnv(MiniGridEnv):
         truncated = True
         done = True
         info = {}
-        
+
         if self.render_mode == "human":
             self.render()
 
@@ -87,15 +88,16 @@ class GiveAgentPositionMGEnv(MiniGridEnv):
 
     def get_new_action_space(self) -> spaces.Space:
         return spaces.MultiDiscrete([self.width, self.height])
-    
+
     def get_feedback(self):
         if self.failure_reason is not None:
             return {"failure_reason": self.failure_reason}
         else:
             return {}
-        
+
+
 def main():
-    env = GiveAgentPositionMGEnv(render_mode="human")
+    env = GiveAgentPositionEnv(render_mode="human")
 
     # enable manual control for testing
     manual_control = ManualControl(env, seed=42)

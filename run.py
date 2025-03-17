@@ -111,11 +111,11 @@ def main(config: DictConfig):
         else:
             is_eval = False
         # Reset the environment
-        obs, task, info = env.reset(seed=seed, is_eval=is_eval)
+        obs, task, task_description, info = env.reset(seed=seed, is_eval=is_eval)
         env.render()
         
         # Ask the agent to generate a controller for the task
-        controller = agent.get_controller(task)
+        controller = agent.get_controller(task_description)
 
         # Loop over the episode
         done = False
@@ -159,7 +159,7 @@ def main(config: DictConfig):
         if "error" in info: # add error info to feedback
             feedback["error"] = info["error"]
         feedback.update(env.get_feedback()) # add environment feedback to feedback
-        agent.update(task, controller, feedback)
+        agent.update(task_description, controller, feedback)
 
         # Update the MetaEnv
         env.update(task, feedback)

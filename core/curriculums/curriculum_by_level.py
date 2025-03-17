@@ -2,13 +2,10 @@ import random
 from typing import Any, Dict, List, Tuple, Type, Union, Set
 import numpy
 
-from core.curriculums.base_curriculum import BaseCurriculum, ObjectiveRepresentation
+from core.curriculums.base_curriculum import BaseCurriculum, Objective
 
 
-
-
-
-class CurriculumByLevels(BaseCurriculum):
+class CurriculumByLevels(BaseCurriculum[Objective]):
     """A curriculum model a dynamical objective distribution that is updated depending on the performance of the agent.
     Initially, only very basic objectives are part of its distribution, and more complex objectives are added as the agent's performance improves.
 
@@ -16,23 +13,23 @@ class CurriculumByLevels(BaseCurriculum):
     for levels between 1 and n+1 where n is the highest level the agent has reached.
     """
 
-    def __init__(self, levels: List[Set[ObjectiveRepresentation]]):
+    def __init__(self, levels: List[Set[Objective]]):
         for level in levels:
             assert isinstance(
                 level, set
             ), f"Levels should be sets, got {level} (type {type(level)})"
             assert len(level) > 0, f"Levels should not be empty."
-        self.levels: List[Dict[ObjectiveRepresentation, bool]] = [
+        self.levels: List[Dict[Objective, bool]] = [
             {obj: False for obj in level} for level in levels
         ]
         self.n_levels = len(levels)
         self.idx_max_level = 0
 
-    def sample(self) -> ObjectiveRepresentation:
+    def sample(self) -> Objective:
         levels_pool = self.levels[: min(self.idx_max_level, self.n_levels) + 1]
         p = p = [len(level) for level in levels_pool]
         p = [p_i / sum(p) for p_i in p]
-        level_sampled: Dict[ObjectiveRepresentation, bool] = numpy.random.choice(
+        level_sampled: Dict[Objective, bool] = numpy.random.choice(
             levels_pool,
             p=p,
         )  # uniform distribution
@@ -40,7 +37,7 @@ class CurriculumByLevels(BaseCurriculum):
         print(f"\n[CURRICULUM] Sampled objective: {objective}")
         return objective
 
-    def update(self, objective: ObjectiveRepresentation, feedback: Dict[str, Any]):
+    def update(self, objective: Objective, feedback: Dict[str, Any]):
 
         if self.idx_max_level == self.n_levels:
             return  # do not update if all levels have been completed
@@ -63,4 +60,5 @@ class CurriculumByLevels(BaseCurriculum):
                             print(
                                 f"[CURRICULUM] All levels have been completed. No more objectives to distribute."
                             )
+                            input("Continue?...")
                     return  # stop the loop here

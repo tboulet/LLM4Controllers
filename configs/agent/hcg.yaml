@@ -21,7 +21,7 @@ config:
     
   config_logs:
     log_dir: logs
-    do_log_on_new: True
+    do_log_on_new: False
     do_log_on_last: True
 
   config_debug:

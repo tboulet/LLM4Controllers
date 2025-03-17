@@ -1,4 +1,5 @@
 import enum
+import inspect
 import os
 import random
 import re
@@ -7,31 +8,40 @@ from gymnasium import spaces
 import imageio
 from matplotlib import pyplot as plt
 import numpy as np
-from typing import Tuple, Type, Union, Dict, Any, List, Optional
+from typing import Callable, Tuple, Type, Union, Dict, Any, List, Optional
 
-import minigrid
 from minigrid.minigrid_env import MiniGridEnv
-from minigrid.envs import EmptyEnv, GoToObjectEnv
+from minigrid.envs.empty import EmptyEnv
+from minigrid.envs.gotoobject import GoToObjectEnv
+from minigrid.envs.crossing import CrossingEnv
+from .env_minigrid_autosuccess import AutoSuccessEnv
+from .env_minigrid_give_agent_position import GiveAgentPositionEnv
+from .env_minigrid_give_goal_position import GiveGoalPositionEnv
+
 from minigrid.core.mission import MissionSpace
 from minigrid.core.actions import Actions
 from minigrid.wrappers import ObservationWrapper, ImgObsWrapper, FullyObsWrapper
 from minigrid.core.constants import IDX_TO_OBJECT, IDX_TO_COLOR, STATE_TO_IDX
+from minigrid.core.world_object import Goal, Lava, Wall, Key, Door
 
 IDX_TO_STATE = {v: k for k, v in STATE_TO_IDX.items()}
 
 from env.base_meta_env import BaseMetaEnv, Observation, InfoDict
-from core.task import TaskRepresentation
+from core.task import Task, TaskRepresentation
 from core.spaces import FiniteSpace
 from core.curriculums import CurriculumByLevels
 from core.types import ActionType
 
 
-from .env_minigrid_autosuccess import AutoSuccessMGEnv
-from .env_minigrid_return_agent_position import GiveAgentPositionMGEnv
-
 dict_actions = {
-    "left": (0, "Turn the direction of the agent to the left (don't move in that direction)"),
-    "right": (1, "Turn the direction of the agent to the right (don't move in that direction)"),
+    "left": (
+        0,
+        "Turn the direction of the agent to the left (don't move in that direction)",
+    ),
+    "right": (
+        1,
+        "Turn the direction of the agent to the right (don't move in that direction)",
+    ),
     "forward": (2, "Move one tile forward in the direction the agent is facing"),
     "pickup": (
         3,
@@ -46,6 +56,40 @@ dict_actions = {
 }
 
 
+class TaskMinigrid(Task):
+    """Task class for the Minigrid environment.
+    This is used to represent a task that can be performed in the Minigrid environment.
+    """
+
+    def __init__(self, creator_env_mg_func: Callable[..., MiniGridEnv]) -> None:
+        self.creator_env_mg_func = creator_env_mg_func
+
+    def __repr__(self) -> str:
+        try:
+            # Get the source code of the lambda function
+            source = inspect.getsource(self.creator_env_mg_func).strip()
+
+            # Extract the class name using regex (looking for ClassName(...) inside the lambda)
+            match = re.search(r"(\w+)\s*\(", source)
+            if match:
+                class_name = match.group(1)
+            else:
+                class_name = "<unknown>"
+
+            # Extract key-value arguments if present
+            kwargs_match = re.findall(r"(\w+)\s*=\s*([\w./]+)", source)
+            kwargs_repr = ", ".join(
+                f"{k}={v}" for k, v in kwargs_match if k != "kwargs"
+            )  # Ignore **kwargs
+
+            return f"TaskMinigrid({class_name}({kwargs_repr}))"
+        except Exception:
+            return "TaskMinigrid(<unknown>)"
+
+    def __call__(self, *args, **kwargs):
+        return self.creator_env_mg_func(*args, **kwargs)
+
+
 class MinigridMetaEnv(BaseMetaEnv):
 
     def __init__(self, config: Dict) -> None:
@@ -57,18 +101,34 @@ class MinigridMetaEnv(BaseMetaEnv):
         # Define other parameters
         self.t = 0
         # Define the curriculum
-        self.family_tasks_to_env_class = {
-            "do nothing particular": AutoSuccessMGEnv,
-            "give the position of the agent as a tuple of integers (x, y)": GiveAgentPositionMGEnv,
-            "go to the <color> <obj_type>": GoToObjectEnv,
-        }
-        self.curriculum = CurriculumByLevels(
-            levels=[
-                # {"do nothing particular"},
-                {"give the position of the agent as a tuple of integers (x, y)"},
-                {"go to the <color> <obj_type>"},
-            ]
-        )
+        levels = [
+            {
+                lambda **kwargs: AutoSuccessEnv(size=self.size, **kwargs),
+                lambda **kwargs: GiveAgentPositionEnv(size=self.size, **kwargs),
+            },
+            {
+                lambda **kwargs: GiveGoalPositionEnv(size=self.size, **kwargs),
+                lambda **kwargs: EmptyEnv(size=self.size, **kwargs),
+            },
+            {
+                lambda **kwargs: EmptyEnv(
+                    size=self.size,
+                    agent_start_pos=np.random.randint(1, self.size // 2, size=2),
+                    agent_start_dir=np.random.randint(4),
+                    **kwargs,
+                ),
+            },
+            {
+                lambda **kwargs: GoToObjectEnv(size=self.size, **kwargs),
+                lambda **kwargs: CrossingEnv(size=11, obstacle_type=Lava, **kwargs),
+            },
+        ]
+        levels = [
+            {TaskMinigrid(creator_env_mg_func) for creator_env_mg_func in level}
+            for level in levels
+        ]
+        self.curriculum : CurriculumByLevels[TaskMinigrid] = CurriculumByLevels(levels)
+
         # Call the parent class constructor
         super().__init__(config)
 
@@ -108,10 +168,7 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
         self,
         seed: Union[int, None] = None,
         is_eval: bool = False,
-    ) -> Tuple[Observation, TaskRepresentation, Dict[str, Any]]:
-        # Select a family task
-        family_task: str = self.curriculum.sample()
-        ### === Create the environment === ###
+    ) -> Tuple[Observation, Task, TaskRepresentation, Dict[str, Any]]:
         # Rendering and logging
         self.render_mode = self.render_mode_eval if is_eval else self.render_mode
         if self.render_mode == "rgb_array":
@@ -123,38 +180,35 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
             self.list_run_names.append(self.config["run_name"])
         if config_logs["do_log_on_last"]:
             self.list_run_names.append("_last")
-        # Extract the environment class from the family task and instantiate it
-        EnvClass: Type[MiniGridEnv] = self.family_tasks_to_env_class[family_task]
-        self.env = EnvClass(
-            size=self.size,
+        # Select a task
+        task = self.curriculum.sample()
+        # Instancialize the minigrid environment
+        self.env_mg = task(
             render_mode=self.render_mode,
         )
         # Wrap the environment to get the observation (for now we set the obs to be fully observable)
-        self.env = FullyObsWrapper(self.env)
+        self.env_mg = FullyObsWrapper(self.env_mg)
         # Modify the action space
-        if hasattr(self.env.unwrapped, "get_new_action_space"):
-            self.env.action_space = self.env.unwrapped.get_new_action_space()
+        if hasattr(self.env_mg.unwrapped, "get_new_action_space"):
+            self.env_mg.action_space = self.env_mg.unwrapped.get_new_action_space()
         else:
-            self.env.action_space = FiniteSpace(
+            self.env_mg.action_space = FiniteSpace(
                 elems=sorted(
                     list(dict_actions.keys()), key=lambda x: dict_actions[x][0]
                 )
             )
         # Reset the environment
-        obs, info = self.env.reset()
+        obs, info = self.env_mg.reset()
         # Extract the task_representation from the environment
-        self.task = self.extract_task(self.env)
-        assert (
-            self.task.family_task == family_task
-        ), f"Family task mismatch: {self.task.family_task} != {family_task}"
+        task_description = self.extract_task_repr_from_env_mg(self.env_mg)
 
         # Return reset elements
-        info = {"task": self.task, **info}
-        return obs, self.task, info
+        info = {"task": task, **info}
+        return obs, task, task_description, info
 
     def step(self, action: ActionType) -> Tuple[Observation, float, bool, InfoDict]:
         # Unsure the action is in the action space
-        if not action in self.env.action_space:
+        if not action in self.env_mg.action_space:
             return (
                 None,
                 0,
@@ -163,22 +217,22 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
                 {
                     "error": {
                         "type": "action_error",
-                        "message": f"Action '{action}' of type {type(action)} is not in the env action space {self.env.action_space}",
+                        "message": f"Action '{action}' of type {type(action)} is not in the env action space {self.env_mg.action_space}",
                     }
                 },
             )
         # Convert the action (e.g. "forward") to the action index (e.g. 2 (int))
         if not hasattr(
-            self.env.unwrapped, "get_new_action_space"
+            self.env_mg.unwrapped, "get_new_action_space"
         ):  # if the action space is not modified, perform "forward" -> 2
             action = dict_actions[action][0]
         # Take the action in the environment
-        obs, reward, terminated, truncated, info = self.env.step(action)
+        obs, reward, terminated, truncated, info = self.env_mg.step(action)
         # Return step feedback
         return obs, reward, terminated, truncated, info
 
-    def update(self, task: TaskRepresentation, feedback: Dict[str, Any]) -> None:
-        self.curriculum.update(objective=task.family_task, feedback=feedback)
+    def update(self, task: Task, feedback: Dict[str, Any]) -> None:
+        self.curriculum.update(objective=task, feedback=feedback)
 
     # ======= Optional interface methods =======
 
@@ -186,7 +240,7 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
         if self.render_mode == "human":
             pass  # already rendered in self.env.step/reset
         elif self.render_mode == "rgb_array":
-            img = self.env.render()
+            img = self.env_mg.render()
             self.video_frames.append(img)
         elif self.render_mode == None:
             pass
@@ -195,7 +249,7 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
 
     def close(self):
         # Close the environment
-        self.env.close()
+        self.env_mg.close()
         # Save the video if any
         if self.render_mode == "rgb_array":
             config_logs = self.config["config_logs"]
@@ -205,41 +259,32 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
                 os.makedirs(path_task_t, exist_ok=True)
                 path_task_t_video = os.path.join(path_task_t, "video.mp4")
                 imageio.mimwrite(path_task_t_video, self.video_frames, fps=10)
-                
+
         # Move forward time
         self.t += 1
 
     # ======= Helper methods =======
 
-    def extract_task(self, env: MiniGridEnv) -> TaskRepresentation:
+    def extract_task_repr_from_env_mg(self, env: MiniGridEnv) -> TaskRepresentation:
+        """Extract the task representation from the minigrid environment of the task.
+
+        Args:
+            env (MiniGridEnv): the minigrid environment that will be used to extract the task description
+
+        Returns:
+            TaskRepresentation: the task representation extracted from the minigrid environment
+        """
         # The name of the task is the mission string
-        name = env.unwrapped.mission
-        # The description of the task is the env's task description if any, else the mission string
-        description = (
-            env.unwrapped.task_description
-            if hasattr(env.unwrapped, "task_description")
-            else name
+        name = (
+            f"Env: {env.unwrapped.__class__.__name__}\n"
+            f"Mission: {env.unwrapped.mission}"
         )
-        # The family task is the mission function signature
-        mission_space: MissionSpace = env.observation_space["mission"]
-        mission_func = (
-            mission_space.mission_func
-        )  # f : color, obj_type -> go to the {color} {obj_type}
-        keys_kwargs = mission_func.__code__.co_varnames  # ['color', 'obj_type']
-        family_task = mission_func(  # "go to the <color> <obj_type>"
-            *[f"<{keys_kwargs[i]}>" for i in range(len(keys_kwargs))]
-        )
-        # Extract the values of the placeholders in the family_task
-        kwargs = self.extract_kwargs(family_task, name, keys_kwargs)
+        # The description of the task is the docstring of the env class
+        description = env.unwrapped.__doc__
         # Create the task representation
         task = TaskRepresentation(
             name=name,  # go to the green ball
-            family_task=family_task,  # go to the <color> <obj_type>
             description=description,  # go to the green ball using your navigation skills
-            kwargs=kwargs,  # {"color": "green", "obj_type": "ball"}
-            # observation_space=self.extract_observation_space_without_mission(
-            #     env.observation_space
-            # ),  # gym.space object
             observation_space=env.observation_space,  # gym.space object
             action_space=env.action_space,  # gym.space object
         )
@@ -266,7 +311,7 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
         )
 
     def get_feedback(self):
-        if hasattr(self.env.unwrapped, "get_feedback"):
-            return self.env.unwrapped.get_feedback()
+        if hasattr(self.env_mg.unwrapped, "get_feedback"):
+            return self.env_mg.unwrapped.get_feedback()
         else:
             return super().get_feedback()

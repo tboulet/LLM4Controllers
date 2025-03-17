@@ -14,6 +14,17 @@ from minigrid.minigrid_env import MiniGridEnv
 from minigrid.envs.empty import EmptyEnv
 from minigrid.envs.gotoobject import GoToObjectEnv
 from minigrid.envs.crossing import CrossingEnv
+from minigrid.envs.blockedunlockpickup import BlockedUnlockPickupEnv
+from minigrid.envs.doorkey import DoorKeyEnv
+from minigrid.envs.dynamicobstacles import DynamicObstaclesEnv
+from minigrid.envs.fetch import FetchEnv
+from minigrid.envs.fourrooms import FourRoomsEnv
+from minigrid.envs.gotodoor import GoToDoorEnv
+from minigrid.envs.gotoobject import GoToObjectEnv
+from minigrid.envs.keycorridor import KeyCorridorEnv
+from minigrid.envs.lavagap import LavaGapEnv
+from minigrid.envs.distshift import DistShiftEnv
+
 from .env_minigrid_autosuccess import AutoSuccessEnv
 from .env_minigrid_give_agent_position import GiveAgentPositionEnv
 from .env_minigrid_give_goal_position import GiveGoalPositionEnv
@@ -103,14 +114,15 @@ class MinigridMetaEnv(BaseMetaEnv):
         # Define the curriculum
         levels = [
             {
+                # Observation structure comprehension
                 lambda **kwargs: AutoSuccessEnv(size=self.size, **kwargs),
                 lambda **kwargs: GiveAgentPositionEnv(size=self.size, **kwargs),
-            },
-            {
                 lambda **kwargs: GiveGoalPositionEnv(size=self.size, **kwargs),
-                lambda **kwargs: EmptyEnv(size=self.size, **kwargs),
             },
+            # TODO : navigation comprehension tasks
             {
+                # Navigation tasks (minimalistic)
+                lambda **kwargs: EmptyEnv(size=self.size, **kwargs),
                 lambda **kwargs: EmptyEnv(
                     size=self.size,
                     agent_start_pos=np.random.randint(1, self.size // 2, size=2),
@@ -119,15 +131,24 @@ class MinigridMetaEnv(BaseMetaEnv):
                 ),
             },
             {
+                # Navigation tasks (medium)
+                lambda **kwargs: CrossingEnv(size=11, obstacle_type=Wall, **kwargs),
+            },
+            {
+                # Navigation tasks (hard)
                 lambda **kwargs: GoToObjectEnv(size=self.size, **kwargs),
                 lambda **kwargs: CrossingEnv(size=11, obstacle_type=Lava, **kwargs),
+            },
+            {
+                # Combinatorial tasks
+                lambda **kwargs: BlockedUnlockPickupEnv(size=self.size, **kwargs),
             },
         ]
         levels = [
             {TaskMinigrid(creator_env_mg_func) for creator_env_mg_func in level}
             for level in levels
         ]
-        self.curriculum : CurriculumByLevels[TaskMinigrid] = CurriculumByLevels(levels)
+        self.curriculum: CurriculumByLevels[TaskMinigrid] = CurriculumByLevels(levels)
 
         # Call the parent class constructor
         super().__init__(config)

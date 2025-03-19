@@ -12,11 +12,11 @@ class BaseAgent(ABC):
         self.config = config
 
     @abstractmethod
-    def get_controller(self, task: TaskRepresentation) -> Controller:
+    def get_controller(self, task_description: TaskRepresentation) -> Controller:
         """Get the controller for the given task description.
 
         Args:
-            task (Task): the task description.
+            task_description (Task): the task description.
 
         Returns:
             Controller: the controller for the task.
@@ -25,7 +25,7 @@ class BaseAgent(ABC):
 
     @abstractmethod
     def update(
-        self, task: TaskRepresentation, controller: Controller, feedback: Dict[str, Union[float, str]]
+        self, task_description: TaskRepresentation, controller: Controller, feedback: Dict[str, Union[float, str]]
     ):
         """Update the agent's internal state (library, knowledges, etc.) based on the feedback received from the environment.
 

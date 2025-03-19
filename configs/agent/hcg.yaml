@@ -3,8 +3,11 @@ config:
   model: gpt-4o-mini
   num_attempts_sc: 5
 
+  config_demobank:
+    n_inference: 5
+    n_training: 10
+
   config_controllers:
-    do_use: True
     which_initial_controllers: specific  # none, specific (those in initial_controllers), all (all available in agent.llm_hcg.initial_controllers)
     initial_controllers:
       - move_forward.py
@@ -25,5 +28,5 @@ config:
     do_log_on_last: True
 
   config_debug:
-    breakpoint_on_new_t: False
+    breakpoint_on_new_t: True
     breakpoint_on_failed_sc_extraction: True

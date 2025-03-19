@@ -1,3 +1,5 @@
+from agent.base_controller import Controller, Observation, ActionType
+
 class TurnToDirectionController(Controller):
     """A controller that will turn to a specific direction (0: up, 1: right, 2: down, 3: left).
     It uses the 'left' and 'right' actions to turn towards the desired direction.

@@ -32,9 +32,9 @@ class HumanAgent(BaseAgent):
     def __init__(self, config):
         super().__init__(config)
         
-    def get_controller(self, task: TaskRepresentation) -> Controller:
-        print(f"You are going to solve the following task: {task}")
+    def get_controller(self, task_description: TaskRepresentation) -> Controller:
+        print(f"You are going to solve the following task: {task_description}")
         return HumanController(config = self.config)
 
-    def update(self, task : TaskRepresentation, controller : Controller, feedback : Dict[str, Union[float, str]]):
+    def update(self, task_description : TaskRepresentation, controller : Controller, feedback : Dict[str, Union[float, str]]):
         print(f"Feedback received: {feedback}")

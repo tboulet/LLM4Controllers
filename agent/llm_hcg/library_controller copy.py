@@ -59,7 +59,7 @@ class ControllerLibrary:
 
     def __init__(self, config_agent: Dict, namespace: Dict[str, Any]):
         # Initialize controller library
-        print("Initializing KnowledgeBase...")
+        print("Initializing controller library...")
         self.namespace = namespace
         self.config = config_agent["config_controllers"]
         self.data_controllers: Dict[str, DataController] = (

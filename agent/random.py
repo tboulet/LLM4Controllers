@@ -32,12 +32,12 @@ class RandomAgent(BaseAgent):
     def __init__(self, config):
         super().__init__(config)
 
-    def get_controller(self, task: TaskRepresentation) -> Controller:
-        return RandomController(action_space=task.action_space)
+    def get_controller(self, task_description: TaskRepresentation) -> Controller:
+        return RandomController(action_space=task_description.action_space)
 
     def update(
         self,
-        task: TaskRepresentation,
+        task_description: TaskRepresentation,
         controller: Controller,
         feedback: Dict[str, Union[float, str]],
     ):

@@ -18,7 +18,7 @@ class TaskRepresentation:
     def __init__(
         self,
         name: str,
-        description: str,
+        description: str = None,
         observation_space: Space = None,
         action_space: Space = None,
     ) -> None:
@@ -36,11 +36,13 @@ class TaskRepresentation:
         self.action_space = action_space
 
     def __repr__(self) -> str:
-        res = f"{self.name}."
-        if self.description != self.name:
+        res = ""
+        if self.name is not None:
+            res = f"Task name : {self.name}."
+        if self.description != self.name and self.description is not None:
             res += f"\nTask description : {self.description}."
         if self.observation_space is not None:
-            res += f"\nThe observation you will receive belong to the following gym space : {self.observation_space}."
+            res += f"\nObservation gym space : {self.observation_space}."
         if self.action_space is not None:
-            res += f"\nThe actions you can take MUST belong to the following gym space : {self.action_space}. You HAVE to take an action that belongs to this space."
+            res += f"\nAction gym space (the actions you can take MUST belong to this space) : {self.action_space}. You HAVE to take an action that belongs to this space."
         return res

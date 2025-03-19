@@ -24,6 +24,18 @@ from minigrid.envs.gotoobject import GoToObjectEnv
 from minigrid.envs.keycorridor import KeyCorridorEnv
 from minigrid.envs.lavagap import LavaGapEnv
 from minigrid.envs.distshift import DistShiftEnv
+from minigrid.envs.lockedroom import LockedRoomEnv
+from minigrid.envs.memory import MemoryEnv
+from minigrid.envs.multiroom import MultiRoomEnv
+from minigrid.envs.obstructedmaze import ObstructedMaze_1Dlhb, ObstructedMaze_Full
+from minigrid.envs.obstructedmaze_v1 import ObstructedMaze_Full_V1
+from minigrid.envs.playground import PlaygroundEnv
+from minigrid.envs.putnear import PutNearEnv
+from minigrid.envs.redbluedoors import RedBlueDoorEnv
+from minigrid.envs.unlock import UnlockEnv
+from minigrid.envs.unlockpickup import UnlockPickupEnv
+
+from minigrid.envs.babyai.goto import GoToObj
 
 from .env_minigrid_autosuccess import AutoSuccessEnv
 from .env_minigrid_give_agent_position import GiveAgentPositionEnv
@@ -63,7 +75,7 @@ dict_actions = {
         "Drop the object from the agent's inventory (if any) in front of the agent",
     ),
     "toggle": (5, "Toggle/activate an object in front of the agent"),
-    "done": (6, "No action"),
+    "done": (6, "End the episode if the task is completed"),
 }
 
 
@@ -113,13 +125,17 @@ class MinigridMetaEnv(BaseMetaEnv):
         self.t = 0
         # Define the curriculum
         levels = [
+            # {
+            #     # For testing envs
+            #     lambda **kwargs: GoToObj(room_size=self.size, **kwargs),
+            #     },
             {
                 # Observation structure comprehension
                 lambda **kwargs: AutoSuccessEnv(size=self.size, **kwargs),
                 lambda **kwargs: GiveAgentPositionEnv(size=self.size, **kwargs),
                 lambda **kwargs: GiveGoalPositionEnv(size=self.size, **kwargs),
             },
-            # TODO : navigation comprehension tasks
+            # TODO : navigation comprehension tasks (go south, go to, give shortest path, etc.)
             {
                 # Navigation tasks (minimalistic)
                 lambda **kwargs: EmptyEnv(size=self.size, **kwargs),
@@ -132,17 +148,42 @@ class MinigridMetaEnv(BaseMetaEnv):
             },
             {
                 # Navigation tasks (medium)
+                lambda **kwargs: GoToDoorEnv(size=self.size, **kwargs),
                 lambda **kwargs: CrossingEnv(size=11, obstacle_type=Wall, **kwargs),
+                lambda **kwargs: GoToObjectEnv(size=self.size, numObjs=2, **kwargs),
+                lambda **kwargs: FourRoomsEnv(**kwargs),
+                lambda **kwargs: DistShiftEnv(**kwargs),
             },
             {
                 # Navigation tasks (hard)
-                lambda **kwargs: GoToObjectEnv(size=self.size, **kwargs),
                 lambda **kwargs: CrossingEnv(size=11, obstacle_type=Lava, **kwargs),
+                lambda **kwargs: DynamicObstaclesEnv(size=self.size, n_obstacles=4, **kwargs),
+                lambda **kwargs: LavaGapEnv(size=5, **kwargs),
+                lambda **kwargs: MultiRoomEnv(minNumRooms=3, maxNumRooms=3, **kwargs),
             },
             {
-                # Combinatorial tasks
-                lambda **kwargs: BlockedUnlockPickupEnv(size=self.size, **kwargs),
+                # Simple manipulative tasks (1 step)
+                lambda **kwargs: FetchEnv(size=self.size, numObjs=3, **kwargs),
+                lambda **kwargs: UnlockEnv(**kwargs),
+                },
+            {
+                # Medium manipulative tasks (2-3 steps)
+                lambda **kwargs: UnlockPickupEnv(**kwargs),
+                lambda **kwargs: PutNearEnv(size=6, numObjs=2, **kwargs),
+                lambda **kwargs: MemoryEnv(**kwargs),
+                lambda **kwargs: DoorKeyEnv(**kwargs),
+                lambda **kwargs: KeyCorridorEnv(**kwargs),
+                lambda **kwargs: ObstructedMaze_1Dlhb(**kwargs),
+                lambda **kwargs: RedBlueDoorEnv(**kwargs),
             },
+            {
+                # Hard manipulative tasks (4-5 steps or more)
+                lambda **kwargs: BlockedUnlockPickupEnv(**kwargs),
+                lambda **kwargs: PutNearEnv(size=14, numObjs=6, **kwargs),
+                lambda **kwargs: LockedRoomEnv(size=19, **kwargs),
+                lambda **kwargs: ObstructedMaze_Full(**kwargs),
+                lambda **kwargs: ObstructedMaze_Full_V1(**kwargs),
+                },
         ]
         levels = [
             {TaskMinigrid(creator_env_mg_func) for creator_env_mg_func in level}

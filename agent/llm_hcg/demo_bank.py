@@ -15,7 +15,7 @@ import random
 from typing import Any, Dict, Tuple, Union
 
 
-class Transition:
+class TransitionData:
     """Represents the data of a transition (task, controller, feedback) in the demo bank."""
 
     def __init__(
@@ -24,6 +24,13 @@ class Transition:
         code: str,
         feedback: Dict[str, Any],
     ):
+        """Initialize the TransitionData object.
+
+        Args:
+            task_repr (TaskRepresentation): the task representation
+            code (str): the code used to solve the task. It should contain the instanciation of a 'controller' variable of type Controller.
+            feedback (Dict[str, Any]): the feedback of the transition, as a dictionnary mapping feedback fields to their values (success, metric, errors, ...)
+        """
         self.task_repr = task_repr
         self.code = code
         self.feedback = feedback
@@ -43,22 +50,46 @@ class DemoBank:
     """
 
     def __init__(self, config_agent: Dict):
+        """Initialize the demo bank.
+
+        Args:
+            config_agent (Dict): the agent configuration
+        """
         print("Initializing demo bank...")
         # Extract config
-        self.config = config_agent["config_demobank"]
-        self.n_inference = self.config.get("n_inference", 5)
-        self.n_training = self.config.get("n_training", 100)
-        self.method_inference_sampling = self.config.get("method_inference_sampling", "uniform")
+        self.config_agent = config_agent
         # Initialize the demo bank
-        self.transitions: List[Transition] = []
+        self.transitions: List[TransitionData] = []
 
-    def add_transition(self, transition: Transition):
+    def add_transition(self, transition: TransitionData):
+        """Add a transition to the demo bank.
+
+        Args:
+            transition (TransitionData): the transition data
+        """
         self.transitions.append(transition)
 
-    def sample_transitions(self, task_description : TaskRepresentation) -> List[Transition]:
-        if self.method_inference_sampling == "uniform":
-            # Sample uniformly up to n_inference transitions, less if there are less transitions in the bank
-            transitions = random.sample(self.transitions, k=min(self.n_inference, len(self.transitions)))
+    def sample_transitions(
+        self, n_transitions: int, method: str, **kwargs
+    ) -> List[TransitionData]:
+        """Sample transitions from the demo bank according to a given method.
+
+        Args:
+            n_transitions (int): the number of transitions to sample
+            method (str): the sampling method to use
+            **kwargs: additional arguments for the sampling method
+
+        Returns:
+            List[TransitionData]: a list of sampled transitions
+        """
+        if method == "uniform":
+            # Sample uniformly up to n_transitions transitions, less if there are less transitions in the bank
+            transitions = random.sample(
+                self.transitions, k=min(n_transitions, len(self.transitions))
+            )
             return transitions
         else:
-            raise NotImplementedError(f"Sampling method {self.method_inference_sampling} not implemented.")
+            raise NotImplementedError(f"Sampling method {method} not implemented.")
+
+    def __repr__(self):
+        return "Demo bank :" + "\n\n".join(repr(t) for t in self.transitions)

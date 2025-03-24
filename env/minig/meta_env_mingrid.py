@@ -105,8 +105,11 @@ class TaskMinigrid(Task):
                 f"{k}={v}" for k, v in kwargs_match if k != "kwargs"
             )  # Ignore **kwargs
 
-            return f"TaskMinigrid({class_name}({kwargs_repr}))"
+            return f"{class_name}({kwargs_repr})"
         except Exception:
+            raise ValueError(
+                f"Error while trying to get the representation of the task {self}"
+            )
             return "TaskMinigrid(<unknown>)"
 
     def __call__(self, *args, **kwargs):
@@ -261,12 +264,16 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
             )
         # Reset the environment
         obs, info = self.env_mg.reset()
-        # Extract the task_representation from the environment
-        task_description = self.extract_task_repr_from_env_mg(self.env_mg)
-
+        # Create the task representation
+        task_representation = TaskRepresentation(
+            name = f"{task} - Mission : {self.env_mg.unwrapped.mission}", # GoToObj() - Mission : go to the green ball
+            description=self.env_mg.unwrapped.__doc__,  # go to the green ball using your navigation skills
+            observation_space=self.env_mg.observation_space,  # gym.space object
+            action_space=self.env_mg.action_space,  # gym.space object
+        )
         # Return reset elements
         info = {"task": task, **info}
-        return obs, task, task_description, info
+        return obs, task, task_representation, info
 
     def step(self, action: ActionType) -> Tuple[Observation, float, bool, InfoDict]:
         # Unsure the action is in the action space
@@ -344,13 +351,13 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
         # The description of the task is the docstring of the env class
         description = env.unwrapped.__doc__
         # Create the task representation
-        task = TaskRepresentation(
+        task_representation = TaskRepresentation(
             name=name,  # go to the green ball
             description=description,  # go to the green ball using your navigation skills
             observation_space=env.observation_space,  # gym.space object
             action_space=env.action_space,  # gym.space object
         )
-        return task
+        return task_representation
 
     def extract_kwargs(self, family_task, name, keys_kwargs):
         # Create a regex pattern based on the family string

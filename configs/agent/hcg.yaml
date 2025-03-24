@@ -1,12 +1,22 @@
 name: LLM-HCG
 config:
+
+  # The model tag to use for the LLM.
   model: gpt-4o-mini
-  num_attempts_sc: 5
 
-  config_demobank:
-    n_inference: 5
-    n_training: 10
+  # The number of transitions to sample from the Demo Bank, and the method to use, at an inference step.
+  method_inference_sampling: uniform
+  n_inference: 5
+  # The number of transitions to sample from the Demo Bank during training.
+  n_training: 10
+  method_training_sampling: uniform
+  n_max_training_new_primitives: 5
+  n_max_training_refactorings: 3
 
+  # The number of retry attempts to make when the LLM fails to generate an answer that successfully can be turned to code and then to a controller
+  num_attempts_answer2controller: 5
+
+  # The config for the controller library.
   config_controllers:
     which_initial_controllers: specific  # none, specific (those in initial_controllers), all (all available in agent.llm_hcg.initial_controllers)
     initial_controllers:
@@ -23,10 +33,15 @@ config:
     do_use: False
     
   config_logs:
+    # The directory to save logs to.
     log_dir: logs
+    # Whether to log the run on log_dir/<run name>
     do_log_on_new: False
+    # Whether to log the run on log_dir/_last
     do_log_on_last: True
 
   config_debug:
-    breakpoint_on_new_t: True
-    breakpoint_on_failed_sc_extraction: True
+    # Whether to break on new task
+    breakpoint_on_new_task: False
+    breakpoint_on_failed_controller_extraction: True
+    breakpoint_on_update: True

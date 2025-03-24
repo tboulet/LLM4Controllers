@@ -1,0 +1,30 @@
+Reasoning :
+I think I should take into account ... (reasoning)
+
+New primitive controller:
+```python
+from agent.base_controller import Controller, Observation, ActionType
+
+
+class MyNewPrimitiveController(Controller):
+    ...
+```
+
+New primitive controller:
+```python
+from agent.base_controller import Controller, Observation, ActionType
+
+class MySecondNewPrimitiveController(Controller):
+    ...
+```
+
+Refactored controller for task 3:
+```python
+from agent.base_controller import Controller, Observation, ActionType
+from controller_library import MyNewPrimitiveController, AnOldPrimitiveController
+
+class MyRefactoredController(Controller):
+    ... # code where I use MyNewPrimitiveController and AnOldPrimitiveController
+
+controller = MyRefactoredController(...)
+```

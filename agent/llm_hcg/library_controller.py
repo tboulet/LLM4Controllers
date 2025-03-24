@@ -14,7 +14,7 @@ import enum
 import random
 from typing import Any, Dict, Tuple, Union
 
-class DataController:
+class ControllerData:
     """Represents the data of a controller in the controller library."""
     def __init__(
         self,
@@ -35,14 +35,14 @@ class ControllerLibrary:
         # Initialize controller library
         print("Initializing controller library...")
         self.config = config_agent["config_controllers"]
-        self.controllers: Dict[str, DataController] = (
+        self.controllers: Dict[str, ControllerData] = (
             {}
         )  # map controller_name to code
         print("\tInitializing controller library...")
         which_initial_controllers: str = self.config[
             "which_initial_controllers"
         ]
-        path_to_initial_controllers: str = 'agent/llm_hcg/initial_controllers'
+        path_to_initial_controllers: str = 'agent/llm_hcg/initial_PCs'
         # Initialize the controller library with the controllers defined in the initial_controllers folder
         if which_initial_controllers == "none":
             pass
@@ -89,24 +89,17 @@ class ControllerLibrary:
                 f"Controller {class_name} was attempted to be added to the controller library but is already present."
             )
         # Create a DataController object to store information about the controller
-        data = DataController(
+        data = ControllerData(
             code = code,
         )
         # Add the controller's data to the controller library
         self.controllers[class_name] = data
 
     def __repr__(self):
-        res = "[Controller library]\n"
         if len(self.controllers) == 0:
-            res += "The controller library is empty.\n"
+            res = "The controller library is empty.\n"
         else:
-            res += (
-                "You have here controllers that are already defined as well as information about their performances. \n"
-                "You are not forced to use them (you can define your own controller class and then instanciate it) but you can use them. \n"
-                "These controllers are already imported, do NOT import them again from anywhere else in your code. \n"
-                "If you use them, take care of the signatures of the methods of the controllers you use. \n"
-                "\n"
-            )
+            res = "The controller library contains the following controllers (name: code):\n"
             for name_controller, data_controller in self.controllers.items():
                 res += f"{name_controller}:\n{data_controller}\n\n"
         return res

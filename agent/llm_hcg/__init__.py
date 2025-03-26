@@ -1,1 +1,1 @@
-from .llm_hcg import LLMBasedHierarchicalControllerGenerator
+from .llm_hcg import LLMBasedHCG

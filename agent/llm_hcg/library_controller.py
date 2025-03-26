@@ -14,16 +14,27 @@ import enum
 import random
 from typing import Any, Dict, Tuple, Union
 
+
 class ControllerData:
     """Represents the data of a controller in the controller library."""
+
     def __init__(
         self,
-        code : str,
-        ):
+        code: str,
+        controller: Controller = None,
+    ):
+        """Initialize the ControllerData object.
+
+        Args:
+            code (str): the code of the controller
+            controller (Controller): the controller object
+        """
         self.code = code
-    
+        self.controller = None
+
     def __repr__(self):
-        return self.code
+        return self.code  # TODO : edit this to only show docstrings/resumes
+
 
 class ControllerLibrary:
     """
@@ -35,54 +46,49 @@ class ControllerLibrary:
         # Initialize controller library
         print("Initializing controller library...")
         self.config = config_agent["config_controllers"]
-        self.controllers: Dict[str, ControllerData] = (
-            {}
-        )  # map controller_name to code
+        self.controllers: Dict[str, ControllerData] = {}  # map controller_name to code
         print("\tInitializing controller library...")
-        which_initial_controllers: str = self.config[
-            "which_initial_controllers"
-        ]
-        path_to_initial_controllers: str = 'agent/llm_hcg/initial_PCs'
+        which_initial_controllers: str = self.config["which_initial_controllers"]
+        path_to_initial_controllers: str = "agent/llm_hcg/initial_PCs"
         # Initialize the controller library with the controllers defined in the initial_controllers folder
         if which_initial_controllers == "none":
             pass
         elif which_initial_controllers == "specific":
-            for init_controller_file_name in self.config[
-                "initial_controllers"
-            ]:
-                self.add_controller_from_file(
+            for init_controller_file_name in self.config["initial_controllers"]:
+                f = open(
                     os.path.join(
                         path_to_initial_controllers, init_controller_file_name
-                    )
+                    ),
+                    "r",
                 )
+                code = f.read()
+                self.add_controller(code)
+                f.close()
 
         elif which_initial_controllers == "all":
             for file_name in os.listdir(path_to_initial_controllers):
                 if file_name.endswith(".py"):
-                    self.add_controller_from_file(
-                        os.path.join(
-                            path_to_initial_controllers,
-                            file_name,
-                        )
-                    )
+                    f = open(os.path.join(path_to_initial_controllers, file_name), "r")
+                    code = f.read()
+                    self.add_controller(code)
+                    f.close()
         else:
             raise ValueError(
                 f"Unknown value for which_initial_controllers: {which_initial_controllers}"
             )
 
-    def add_controller_from_file(self, file_name: str):
-        """Add a controller to the controller library from a file.
-        The file should contain imports (who will be ignored) and a class definition.
+    def add_controller(self, code: str):
+        """Add a controller to the controller library from a code string.
+        The code should contain imports and a class definition.
         The name of the class and the class definition will be extracted from the file as strings.
         The name of the class will be used as the key in the controller library, and the class definition as the value.
 
         Args:
-            file_name (str): the name of the file containing the controller definition
+            code (str): the code of the controller
 
         Raises:
             ValueError: if the controller is already present in the controller library (same name)
         """
-        code = open(file_name, "r").read()
         class_name = self.extract_class_name(code)
         if class_name in self.controllers:
             raise ValueError(
@@ -90,7 +96,7 @@ class ControllerLibrary:
             )
         # Create a DataController object to store information about the controller
         data = ControllerData(
-            code = code,
+            code=code,
         )
         # Add the controller's data to the controller library
         self.controllers[class_name] = data

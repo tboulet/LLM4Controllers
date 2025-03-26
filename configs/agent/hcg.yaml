@@ -4,17 +4,21 @@ config:
   # The model tag to use for the LLM.
   model: gpt-4o-mini
 
-  # The number of transitions to sample from the Demo Bank, and the method to use, at an inference step.
+  # Inference hyperparameters.
+  n_samples_inference: 5
   method_inference_sampling: uniform
-  n_inference: 5
-  # The number of transitions to sample from the Demo Bank during training.
-  n_training: 10
-  method_training_sampling: uniform
-  n_max_training_new_primitives: 5
-  n_max_training_refactorings: 3
+  num_attempts_inference: 5
 
-  # The number of retry attempts to make when the LLM fails to generate an answer that successfully can be turned to code and then to a controller
-  num_attempts_answer2controller: 5
+  # Update hyperparameters.
+  n_samples_update: 10
+  method_update_sampling: uniform
+  n_max_update_new_primitives: 5
+  n_max_update_refactorings: 3
+  num_attemps_update_code_extraction: 5
+  num_attempts_update_pc_code_execution: 5
+  num_attempts_update_sc_code_execution: 5
+
+  
 
   # The config for the controller library.
   config_controllers:
@@ -41,7 +45,12 @@ config:
     do_log_on_last: True
 
   config_debug:
-    # Whether to break on new task
-    breakpoint_on_new_task: False
-    breakpoint_on_failed_controller_extraction: True
-    breakpoint_on_update: True
+    # Whether to breakpoint on inference events
+    breakpoint_inference: False
+    breakpoint_inference_on_failed_code_extraction: False
+    breakpoint_inference_on_failed_code_execution: False
+    # Whether to breakpoint on update events
+    breakpoint_update: False
+    breakpoint_update_on_failed_code_extraction: True
+    breakpoint_update_on_failed_pc_code_execution: True
+    breakpoint_update_on_failed_sc_code_execution: True

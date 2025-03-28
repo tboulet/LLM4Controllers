@@ -47,10 +47,10 @@ config:
   config_debug:
     # Whether to breakpoint on inference events
     breakpoint_inference: False
-    breakpoint_inference_on_failed_code_extraction: False
-    breakpoint_inference_on_failed_code_execution: False
+    breakpoint_inference_on_failure_code_extraction: False
+    breakpoint_inference_on_failure_code_execution: False
     # Whether to breakpoint on update events
     breakpoint_update: False
-    breakpoint_update_on_failed_code_extraction: True
-    breakpoint_update_on_failed_pc_code_execution: True
-    breakpoint_update_on_failed_sc_code_execution: True
+    breakpoint_update_on_failure_code_extraction: True
+    breakpoint_update_on_failure_pc_code_execution: True
+    breakpoint_update_on_failure_sc_code_execution: True

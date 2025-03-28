@@ -213,10 +213,10 @@ class LLMBasedHCG(BaseAgent):
                     "I'm sorry, extracting the code from your answer failed. Please try again and make sure the code obeys the following format:\n```python\n<your code here>\n```"
                 )
                 self.log_texts(
-                    {f"assistant_answer_failed_{no_attempt}_extract_reason.txt": answer}
+                    {f"failure_sc_code_extraction_{no_attempt}_answer.txt": answer}
                 )
                 if self.config["config_debug"][
-                    "breakpoint_inference_on_failed_code_extraction"
+                    "breakpoint_inference_on_failure_code_extraction"
                 ]:
                     print("controller code extraction failed. Press 'c' to continue.")
                     breakpoint()
@@ -234,12 +234,12 @@ class LLMBasedHCG(BaseAgent):
                 )
                 self.log_texts(
                     {
-                        f"assistant_answer_failed_{no_attempt}_exec_reason.txt": answer,
-                        f"error_info_exec_{no_attempt}.txt": full_error_info,
+                        f"failure_sc_code_execution_{no_attempt}_answer.txt": answer,
+                        f"failure_sc_code_execution_{no_attempt}_error.txt": full_error_info,
                     }
                 )
                 if self.config["config_debug"][
-                    "breakpoint_inference_on_failed_code_execution"
+                    "breakpoint_inference_on_failure_code_execution"
                 ]:
                     print("controller code execution failed. Press 'c' to continue.")
                     breakpoint()
@@ -251,8 +251,8 @@ class LLMBasedHCG(BaseAgent):
         if is_controller_instance_generated:
             self.log_texts(
                 {
-                    "assistant_answer.txt": answer,
-                    "controller.py": code,
+                    "answer.txt": answer,
+                    "super_controller.py": code,
                 }
             )
             return super_controller
@@ -425,12 +425,12 @@ class LLMBasedHCG(BaseAgent):
                     )
                     self.log_texts(
                         {
-                            f"assistant_answer_failed_{no_attempt}_extract_reason.txt": answer
+                            f"failure_code_extraction_attempt_{no_attempt}_answer.txt": answer,
                         },
                         in_task_folder=True,
                     )
                     if self.config["config_debug"][
-                        "breakpoint_update_on_failed_code_extraction"
+                        "breakpoint_update_on_failure_code_extraction"
                     ]:
                         print(
                             "controller code extraction failed. Press 'c' to continue."
@@ -472,13 +472,13 @@ class LLMBasedHCG(BaseAgent):
                         )
                         self.log_texts(
                             {
-                                f"assistant_answer_failed for PC {i} (attempt {no_attempt}).txt": answer,
-                                f"error_info_exec for PC {i} ({no_attempt}).txt": full_error_info,
+                                f"failure_pc_code_execution_{i}_attempt_{no_attempt}_answer.txt": answer,
+                                f"failure_pc_code_execution_{i}_attempt_{no_attempt}_error.txt": full_error_info,
                             },
                             is_update_step=True,
                         )
                         if self.config["config_debug"][
-                            "breakpoint_update_on_failed_pc_code_execution"
+                            "breakpoint_update_on_failure_pc_code_execution"
                         ]:
                             print(
                                 "controller code execution failed during update. Press 'c' to continue."
@@ -513,13 +513,13 @@ class LLMBasedHCG(BaseAgent):
                         )
                         self.log_texts(
                             {
-                                f"assistant_answer_failed for SC {idx_task} (attempt {no_attempt}).txt": answer,
-                                f"error_info_exec for SC {idx_task} ({no_attempt}).txt": full_error_info,
+                                f"failure_sc_code_execution_{idx_task}_attempt_{no_attempt}_answer.txt": answer,
+                                f"failure_sc_code_execution_{idx_task}_attempt_{no_attempt}_error.txt": full_error_info,
                             },
                             is_update_step=True,
                         )
                         if self.config["config_debug"][
-                            "breakpoint_update_on_failed_sc_code_execution"
+                            "breakpoint_update_on_failure_sc_code_execution"
                         ]:
                             print(
                                 "controller code execution failed during update. Press 'c' to continue."

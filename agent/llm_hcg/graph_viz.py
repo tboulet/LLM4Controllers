@@ -2,13 +2,22 @@ import networkx as nx
 from pyvis.network import Network
 import time
 
-class ControllerVisualizer:
-    def __init__(self):
+
+class VisualizerHCG:
+    """Visualizer for the Hierarchical Controller Generation agent controllers.
+    Based on NetworkX and Pyvis for visualization.
+    Open file <log_dir>/viz.html in your browser to see the visualization.
+    """
+
+    def __init__(self, agent, config: dict):
         self.G = nx.DiGraph()
+        self.agent = agent
+        self.config = config
         self.controllers = {}  # Stores active controllers and their codes
         self.positions = {}  # Stores positions for visualization
         self.time_step = 0  # X-axis position in time
-
+        self.n_cum_controllers = 0  # Number of controllers added so far
+        
     def initialize(self, controllers):
         """Initialize the visualization with a given set of controllers."""
         self.controllers = controllers
@@ -24,26 +33,28 @@ class ControllerVisualizer:
         for idx, name in enumerate(list(self.controllers.keys())):
             old_node = f"{name}_{self.time_step - 1}"
             new_node = f"{name}_{self.time_step}"
-            
+
             self.G.add_node(new_node, label=name, title=self.controllers[name])
             self.G.add_edge(old_node, new_node)
-            new_positions[new_node] = (self.time_step, self.positions[old_node][1])  # Keep y position same
-        
+            new_positions[new_node] = (
+                self.time_step,
+                self.positions[old_node][1],
+            )  # Keep y position same
+
         self.positions.update(new_positions)
 
-    def add_controllers(self, controllers):
-        """Add new controllers at the current time step."""
-        self.controllers.update(controllers)
-        for idx, name in enumerate(controllers.keys()):
-            new_node = f"{name}_{self.time_step}"
-            self.G.add_node(new_node, label=name, title=controllers[name])
-            self.positions[new_node] = (self.time_step, -len(self.controllers) + idx)
+    def add_pc(self, name : str, code : str):
+        """Add a new controller"""
+        self.controllers[name] = code
+        new_node = f"{name}_{self.time_step}"
+        self.G.add_node(new_node, label=name, title=code)
+        self.positions[new_node] = (self.time_step, self.n_cum_controllers)
+        self.n_cum_controllers += 1
 
-    def remove_controllers(self, keys):
-        """Remove controllers from the internal state (they will not move forward)."""
-        for key in keys:
-            if key in self.controllers:
-                del self.controllers[key]
+    def remove_controllers(self, name : str):
+        """Remove controller from the internal state (they will not move forward)."""
+        if name in self.controllers:
+            del self.controllers[name]
 
     def generate_html(self):
         """Generate the visualization as an HTML file and display it."""
@@ -53,16 +64,21 @@ class ControllerVisualizer:
             # Explicitly set positions to avoid internal adjustments by pyvis
             net.get_node(node)["x"] = x * 100  # x position scaling
             net.get_node(node)["y"] = y * 100  # y position scaling
-            net.get_node(node)["physics"] = False  # Disable physics so positions stay fixed
-        net.show("controllers.html")  # Open the visualization directly in your browser
+            net.get_node(node)[
+                "physics"
+            ] = False  # Disable physics so positions stay fixed
+        net.show(
+            "temp/controllers.html"
+        )  # Open the visualization directly in your browser
+
 
 if __name__ == "__main__":
-    viz = ControllerVisualizer()
+    viz = VisualizerHCG()
     viz.initialize({"A": "def foo(): pass", "B": "def bar(): pass"})
-    
+
     # Main loop to update the visualization every 2 seconds
-    print("Visualization started. Check 'controllers.html' for the updated graph.")
-    
+    print("Visualization started. Display <log_dir>/viz.vtml in your browser at ")
+
     try:
         while True:
             viz.new_step()  # Update the controllers' positions

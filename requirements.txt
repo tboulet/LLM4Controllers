@@ -17,6 +17,7 @@ gputil
 matplotlib 
 tqdm
 imageio[ffmpeg]
+pyvis
 
 # Common libraries
 numpy

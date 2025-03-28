@@ -12,22 +12,22 @@ config:
   # Update hyperparameters.
   n_samples_update: 10
   method_update_sampling: uniform
-  n_max_update_new_primitives: 5
+  n_max_update_new_primitives: 3
   n_max_update_refactorings: 3
-  num_attemps_update_code_extraction: 5
-  num_attempts_update_pc_code_execution: 5
+  num_attempts_update_code_extraction: 5
+  num_attempts_update_pc_code_saving: 5
   num_attempts_update_sc_code_execution: 5
 
   
 
   # The config for the controller library.
   config_controllers:
-    which_initial_controllers: specific  # none, specific (those in initial_controllers), all (all available in agent.llm_hcg.initial_controllers)
+    which_initial_controllers: specific  # none, specific (those in the initial_controllers field), all (all available in agent/llm_hcg/initial_controllers)
     initial_controllers:
       - move_forward.py
       - turn_to_direction.py
 
-  config_functions:
+  config_functions: # unused for now
     do_use: False
 
   config_knowledges:
@@ -52,5 +52,5 @@ config:
     # Whether to breakpoint on update events
     breakpoint_update: False
     breakpoint_update_on_failure_code_extraction: True
-    breakpoint_update_on_failure_pc_code_execution: True
+    breakpoint_update_on_failure_pc_code_saving: True
     breakpoint_update_on_failure_sc_code_execution: True

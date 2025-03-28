@@ -36,7 +36,7 @@ from agent import agent_name_to_AgentClass
 
 register_hydra_resolvers()
 
-@hydra.main(config_path="configs", config_name="config_default.yaml")
+@hydra.main(config_path="configs", config_name="config_default.yaml", version_base="1.3.2")
 def main(config: DictConfig):
     print("Configuration used :")
     print(OmegaConf.to_yaml(config))

@@ -57,11 +57,11 @@ class LLMBasedHCG(BaseAgent):
             "n_max_update_new_primitives", 5
         )
         self.n_max_update_refactorings = self.config.get("n_max_update_refactorings", 3)
-        self.num_attemps_update_code_extraction = self.config.get(
-            "num_attemps_update_code_extraction", 5
+        self.num_attempts_update_code_extraction = self.config.get(
+            "num_attempts_update_code_extraction", 5
         )
-        self.num_attempts_update_pc_code_execution = self.config.get(
-            "num_attempts_update_pc_code_execution", 5
+        self.num_attempts_update_pc_code_saving = self.config.get(
+            "num_attempts_update_pc_code_saving", 5
         )
         self.num_attempts_update_sc_code_execution = self.config.get(
             "num_attempts_update_sc_code_execution", 5
@@ -69,7 +69,6 @@ class LLMBasedHCG(BaseAgent):
         # Initialize agent's variables
         self.t = 0  # Time step
         self.base_scope = {}  # Define the base scope that can be used by the assistant
-        exec(open("agent/llm_hcg/base_namespace.py").read(), self.base_scope)
         self.sc_code_last: Optional[str] = None
         # Initialize knowledge base
         self.library_controller = ControllerLibrary(
@@ -119,7 +118,7 @@ class LLMBasedHCG(BaseAgent):
         )
 
         examples_demobank = "\n\n".join(
-            repr(transition_data) for transition_data in transitions_datas_sampled
+            str(transition_data) for transition_data in transitions_datas_sampled
         )
 
         # Create the prompt for the assistant
@@ -185,7 +184,7 @@ class LLMBasedHCG(BaseAgent):
             {
                 "prompt_inference.txt": prompt_inference,
                 "demo_bank_examples.txt": examples_demobank,
-                "task_description.txt": repr(task_description),
+                "task_description.txt": str(task_description),
             },
         )
 
@@ -203,7 +202,7 @@ class LLMBasedHCG(BaseAgent):
             answer = self.llm.generate()
             self.llm.add_answer(answer)
             # Extract the code block from the answer
-            code = self.extract_code_inference(answer)
+            code = self.extract_controller_code(answer)
             if code is None:
                 # Retry if the code could not be extracted
                 print(
@@ -300,7 +299,7 @@ class LLMBasedHCG(BaseAgent):
                 )
 
             examples_demobank = "\n\n".join(
-                repr(transition) for transition in examples_demobank
+                str(transition) for transition in examples_demobank
             )
 
             # Create the prompt for the assistant
@@ -380,8 +379,8 @@ class LLMBasedHCG(BaseAgent):
             self.log_texts(
                 {
                     "prompt_update.txt": prompt_update,
-                    "controller_library.py": self.library_controller.__repr__(),
-                    "demo_bank.py": self.demo_bank.__repr__(),
+                    "controller_library.py": str(self.library_controller),
+                    "demo_bank.py": str(self.demo_bank),
                 },
                 is_update_step=True,
             )
@@ -393,24 +392,29 @@ class LLMBasedHCG(BaseAgent):
             self.llm.reset()
             self.llm.add_prompt(prompt_update)
             # Extract the code blocks from the answer
-            for no_attempt in range(
-                self.num_attemps_update_code_extraction
-            ):
+            for no_attempt in range(self.num_attempts_update_code_extraction):
                 answer = self.llm.generate()
                 self.llm.add_answer(answer)
                 try:
-                    code_primitives, dict_code_refactorings = self.extract_code_update(
+                    code_primitives, dict_code_refactorings = self.extract_update_code(
                         answer
                     )
                     assert len(code_primitives) <= self.n_max_update_new_primitives, (
                         f"You can only add up to {self.n_max_update_new_primitives} new controllers to the library. "
                         f"Here, you tried to add {len(code_primitives)}."
                     )
-                    assert len(dict_code_refactorings) <= self.n_max_update_refactorings, (
+                    assert (
+                        len(dict_code_refactorings) <= self.n_max_update_refactorings
+                    ), (
                         f"You can only refactor up to {self.n_max_update_refactorings} controllers from the demo bank. "
                         f"Here, you tried to refactor {len(dict_code_refactorings)}."
                     )
-                    assert all([idx_task in range(self.n_samples_update) for idx_task in dict_code_refactorings.keys()]), (
+                    assert all(
+                        [
+                            idx_task in range(self.n_samples_update)
+                            for idx_task in dict_code_refactorings.keys()
+                        ]
+                    ), (
                         f"Task index in refactored controllers should be in [0, {self.n_samples_update-1}]."
                         f"But here, you tried to refactor tasks with indexes {dict_code_refactorings.keys()}."
                     )
@@ -419,9 +423,6 @@ class LLMBasedHCG(BaseAgent):
                     full_error_info = get_error_info(e)
                     print(
                         f"[WARNING] : Could not extract the code from the answer. Asking the assistant to try again. Full error info : {full_error_info}"
-                    )
-                    self.llm.add_prompt(
-                        f"I'm sorry, extracting the code from your answer failed. Please try again and make sure the code obeys the format following that example:\n{self.text_example_answer_update}"
                     )
                     self.log_texts(
                         {
@@ -436,16 +437,25 @@ class LLMBasedHCG(BaseAgent):
                             "controller code extraction failed. Press 'c' to continue."
                         )
                         breakpoint()
-                    if no_attempt >= self.num_attemps_update_code_extraction - 1:
+                    if no_attempt >= self.num_attempts_update_code_extraction - 1:
                         raise ValueError(
-                            f"Could not extract the code from the answer after {self.num_attemps_update_code_extraction} attempts. Stopping the process."
+                            f"Could not extract the code from the answer after {self.num_attempts_update_code_extraction} attempts. Stopping the process."
                         )
+                    self.llm.add_prompt(
+                        (
+                            f"I'm sorry, extracting the code from your answer failed. Please try again and make sure the code obeys the format following that example:\n{self.text_example_answer_update}\n"
+                            f"Full error info : {full_error_info}"
+                        )
+                    )
 
-            # Put the LLM state to prompt + accepted answer
+            # Save and log the accepted answer
             answer_accepted = answer
-            self.llm.reset()
-            self.llm.add_prompt(prompt_update)
-            self.llm.add_answer(answer_accepted)
+            self.log_texts(
+                {
+                    "assistant_answer_accepted.txt": answer,
+                },
+                is_update_step=True,
+            )
 
             # Warning if nothing was generated but extract_code_update did not raise an error
             if len(code_primitives) == 0 and len(dict_code_refactorings) == 0:
@@ -455,57 +465,87 @@ class LLMBasedHCG(BaseAgent):
 
             # Execute the PC code(s)
             for i, code_pc in enumerate(code_primitives):
-                for no_attempt in range(
-                    self.num_attempts_update_pc_code_execution
-                ):
+
+                # Put the LLM state to prompt + accepted answer
+                self.llm.reset()
+                self.llm.add_prompt(prompt_update)
+                self.llm.add_answer(answer_accepted)
+
+                # Iterate until the PC is saved. If error, log it in the message and ask the assistant to try again.
+                for no_attempt in range(self.num_attempts_update_pc_code_saving):
                     try:
-                        primitive_controller = (
-                            self.exec_code_and_get_controller(code_pc)
-                        )
-                        self.library_controller.add_controller(code_pc)
-                        # TODO : ASK THE LLM TO REGENERATE THE CODE IF FAILING
+                        self.library_controller.add_primitive_controller(code_pc)
                         break
                     except Exception as e:
                         full_error_info = get_error_info(e)
                         print(
-                            f"[WARNING] : Could not execute the code for a new primitive controller. Full error info : {full_error_info}"
+                            f"[WARNING] : Could not save the code for a new primitive controller. Full error info : {full_error_info}"
                         )
                         self.log_texts(
                             {
-                                f"failure_pc_code_execution_{i}_attempt_{no_attempt}_answer.txt": answer,
-                                f"failure_pc_code_execution_{i}_attempt_{no_attempt}_error.txt": full_error_info,
+                                f"failing_pc_code_saving_{i}_attempt_{no_attempt}_controller.py": code_pc,
+                                f"failure_pc_code_saving_{i}_attempt_{no_attempt}_error.txt": full_error_info,
                             },
                             is_update_step=True,
                         )
                         if self.config["config_debug"][
-                            "breakpoint_update_on_failure_pc_code_execution"
+                            "breakpoint_update_on_failure_pc_code_saving"
                         ]:
                             print(
-                                "controller code execution failed during update. Press 'c' to continue."
+                                "controller code saving failed during update. Press 'c' to continue."
                             )
                             breakpoint()
-                        if no_attempt >= self.num_attempts_inference - 1:
-                            continue # for now, no retry on failed new PC code execution, just continue
-                            raise ValueError(
-                                f"Could not execute the code for a new primitive controller after {self.num_attempts_inference} attempts. Stopping the process."
-                            )
+                        if no_attempt >= self.num_attempts_update_pc_code_saving - 1:
+                            break  # Abort the adding of the primitive controller if it fails too many times
+
+                        # Ask the LLM to regenerate the code directly
+                        prompt_retry_on_failure_pc_code_saving = (
+                            f"Adding new controllers to the library...\n"
+                            f"An error occured while trying to add the following code's controller to the library:\n"
+                            f"```python\n{code_pc}\n```\n\n"
+                            f"Please try again FOR THIS CONTROLLER ONLY (you can change it's class name). "
+                            "IMPORTANT : Note that your answer should now be composed of CODE ONLY (not in python balises) and follow the format of the example below:\n"
+                            f"{self.text_example_pc}"
+                        )
+                        self.log_texts(
+                            {
+                                f"failure_pc_code_saving_{i}_attempt_{no_attempt}_retry_prompt.txt": prompt_retry_on_failure_pc_code_saving,
+                            },
+                            is_update_step=True,
+                        )
+                        self.llm.add_prompt(prompt_retry_on_failure_pc_code_saving)
+                        code_pc = self.llm.generate()
+                        self.llm.add_answer(
+                            code_pc
+                        )  # Add the new code to the LLM state in case of a new error
+                        self.log_texts(
+                            {
+                                f"failure_pc_code_saving_{i}_attempt_{no_attempt}_retry_answer.txt": code_pc,
+                            },
+                            is_update_step=True,
+                        )
 
             # Execute the refactoring code(s)
             for idx_task, transition_data in enumerate(transitions_sampled):
+
+                # Skip if the LLM did not refactor this task
                 if idx_task not in dict_code_refactorings:
                     continue
+
+                # Put the LLM state to prompt + accepted answer
+                self.llm.reset()
+                self.llm.add_prompt(prompt_update)
+                self.llm.add_answer(answer_accepted)
+
+                # Iterate until the SC is executed. If error, log it in the message and ask the assistant to try again.
                 code_sc = dict_code_refactorings[idx_task]
-                for no_attempt in range(
-                    self.num_attempts_update_sc_code_execution
-                ):
+                for no_attempt in range(self.num_attempts_update_sc_code_execution):
                     try:
-                        controller_instance = (
-                            self.exec_code_and_get_controller(code_sc)
-                        )
+                        controller_instance = self.exec_code_and_get_controller(code_sc)
                         transition_data.code = code_sc
-                        # TODO : test if the controller is metric-wise better than the previous one, if not retry
-                        # For now we only add the controller to the library
                         break
+                    # except NoPerfGain as e: # TODO : test if the controller is metric-wise better than the previous one, if not retry
+                    #     pass
                     except Exception as e:
                         full_error_info = get_error_info(e)
                         print(
@@ -513,7 +553,7 @@ class LLMBasedHCG(BaseAgent):
                         )
                         self.log_texts(
                             {
-                                f"failure_sc_code_execution_{idx_task}_attempt_{no_attempt}_answer.txt": answer,
+                                f"failing_sc_code_execution_{idx_task}_attempt_{no_attempt}_controller.py": code_sc,
                                 f"failure_sc_code_execution_{idx_task}_attempt_{no_attempt}_error.txt": full_error_info,
                             },
                             is_update_step=True,
@@ -525,27 +565,42 @@ class LLMBasedHCG(BaseAgent):
                                 "controller code execution failed during update. Press 'c' to continue."
                             )
                             breakpoint()
-                        if no_attempt >= self.num_attempts_inference - 1:
-                            raise ValueError(
-                                f"Could not execute the code for a refactored controller after {self.num_attempts_inference} attempts. Stopping the process."
-                            )
+                        if no_attempt >= self.num_attempts_update_sc_code_execution - 1:
+                            break  # Abort the refactoring of the controller if it fails too many times
 
-            # Log the answer
-            self.log_texts(
-                {
-                    "assistant_answer.txt": answer,
-                    "controller_library.py": self.library_controller.__repr__(),
-                    "demo_bank.txt": self.demo_bank.__repr__(),
-                },
-                is_update_step=True,
-            )
+                        # Ask the LLM to regenerate the answer for that task specifically
+                        prompt_retry_on_failure_sc_code_execution = (
+                            f"Refactoring controllers for tasks ...\n"
+                            f"An error occured while trying to refactor the controller for the task no {idx_task} using the following code:\n"
+                            f"```python\n{code_sc}\n```\n\n"
+                            f"Please try again FOR THIS CONTROLLER ONLY. "
+                            f"IMPORTANT : Note that your answer should now be composed of CODE ONLY (not in python balises) and follow the format of the example below:\n"
+                            f"{self.text_example_sc}"
+                        )
+                        self.log_texts(
+                            {
+                                f"failure_sc_code_execution_{idx_task}_attempt_{no_attempt}_retry_prompt.txt": prompt_retry_on_failure_sc_code_execution,
+                            },
+                            is_update_step=True,
+                        )
+                        self.llm.add_prompt(prompt_retry_on_failure_sc_code_execution)
+                        code_sc = self.llm.generate()
+                        self.llm.add_answer(
+                            code_sc
+                        )  # Add the new code to the LLM state in case of a new error
+                        self.log_texts(
+                            {
+                                f"failure_sc_code_execution_{idx_task}_attempt_{no_attempt}_retry_answer.txt": code_sc,
+                            },
+                            is_update_step=True,
+                        )
 
         # Increment the time step
         self.t += 1
 
     # ================ Helper functions ================
 
-    def extract_code_inference(self, answer: str) -> str:
+    def extract_controller_code(self, answer: str) -> str:
         """From a code corresponding to an inference, extracts the controller definition and
         instantiation code.
         The answer should contain one python code block with the controller code and instanciate a Controller variable named 'controller'.
@@ -635,10 +690,11 @@ class LLMBasedHCG(BaseAgent):
             try:
                 exec(controller_code, self.base_scope, local_scope)
             except Exception as e:
+                print(f"[ERROR] : Could not import the controller {controller_name}.")
                 raise ValueError(
                     f"An error occured while executing the code of the controller {controller_name} from the library. Maybe don't import this controller anymore. Full error info : {get_error_info(e)}"
                 )
-            print(f"Controller {controller_name} imported successfully !")
+            print(f"[GOOD INFO] Controller {controller_name} imported successfully !")
             breakpoint()
 
         # Execute the remaining code
@@ -659,7 +715,7 @@ class LLMBasedHCG(BaseAgent):
                 "No object named 'controller' of the class Controller found in the provided code."
             )
 
-    def extract_code_update(self, answer: str) -> Tuple[List[str], Dict[int, str]]:
+    def extract_update_code(self, answer: str) -> Tuple[List[str], Dict[int, str]]:
         """From a code corresponding to an update, extracts the primitive controllers and
         refactoring code snippets.
 
@@ -730,7 +786,8 @@ class LLMBasedHCG(BaseAgent):
         is_update_step: bool = False,
     ):
         """Log texts in a directory. For each (key, value) in the directory, the file <log_dir>/task_<t>/<key> will contain the value.
-
+        It will do that for all <log_dir> in self.list_run_names.
+        
         Args:
             dict_name_to_text (Dict[str, str]): a mapping from the name of the file to create to the text to write in it.
             in_task_folder (bool, optional): whether to log the files in the task folder (if not, log in the run folder). Defaults to True.
@@ -753,6 +810,9 @@ class LLMBasedHCG(BaseAgent):
         for log_dir in list_log_dirs:
             os.makedirs(log_dir, exist_ok=True)
             for name, text in dict_name_to_text.items():
+                assert isinstance(name, str) and isinstance(
+                    text, str
+                ), "Keys and values of dict_name_to_text should be strings."
                 log_file = os.path.join(log_dir, name)
                 with open(log_file, "w") as f:
                     f.write(text)

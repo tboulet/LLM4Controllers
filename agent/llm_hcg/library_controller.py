@@ -27,7 +27,7 @@ class ControllerData:
 
         Args:
             code (str): the code of the controller
-            controller (Controller): the controller object
+            controller (Controller): the controller object (optional for now)
         """
         self.code = code
         self.controller = None
@@ -62,7 +62,7 @@ class ControllerLibrary:
                     "r",
                 )
                 code = f.read()
-                self.add_controller(code)
+                self.add_primitive_controller(code)
                 f.close()
 
         elif which_initial_controllers == "all":
@@ -70,14 +70,14 @@ class ControllerLibrary:
                 if file_name.endswith(".py"):
                     f = open(os.path.join(path_to_initial_controllers, file_name), "r")
                     code = f.read()
-                    self.add_controller(code)
+                    self.add_primitive_controller(code)
                     f.close()
         else:
             raise ValueError(
                 f"Unknown value for which_initial_controllers: {which_initial_controllers}"
             )
 
-    def add_controller(self, code: str):
+    def add_primitive_controller(self, code: str):
         """Add a controller to the controller library from a code string.
         The code should contain imports and a class definition.
         The name of the class and the class definition will be extracted from the file as strings.
@@ -105,13 +105,24 @@ class ControllerLibrary:
         if len(self.controllers) == 0:
             res = "The controller library is empty.\n"
         else:
-            res = "The controller library contains the following controllers (name: code):\n"
+            res = "The controller library contains the following controllers:\n\n"
             for name_controller, data_controller in self.controllers.items():
-                res += f"{name_controller}:\n{data_controller}\n\n"
+                res += f"{name_controller}:\n```python\n{data_controller.code}\n```\n\n"
         return res
 
-    def extract_class_name(self, file_content: str) -> str:
-        match = re.search(r"class\s+(\w+)\s*\(", file_content)
+    def extract_class_name(self, code: str) -> str:
+        """Extract the name of the class from the code of the controller.
+
+        Args:
+            code (str): the code of the controller
+
+        Raises:
+            ValueError: if no class definition is found in the code
+
+        Returns:
+            str: the name of the class
+        """
+        match = re.search(r"class\s+(\w+)\s*\(", code)
         if match:
             class_name = match.group(1)  # Extracts the class name
             return class_name

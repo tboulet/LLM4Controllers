@@ -38,7 +38,7 @@ class TransitionData:
     def __repr__(self):
         return (
             f"Task description: \n{self.task_repr}\n\n"
-            f"Code: \n{self.code}\n\n"
+            f"Code: \n```python\n{self.code}\n```\n\n"
             f"Feedback: \n{self.feedback}"
         )
 
@@ -92,4 +92,4 @@ class DemoBank:
             raise NotImplementedError(f"Sampling method {method} not implemented.")
 
     def __repr__(self):
-        return "Demo bank :" + "\n\n".join(repr(t) for t in self.transitions)
+        return f"Demo bank :\n\n" + "\n\n".join(str(t) for t in self.transitions)

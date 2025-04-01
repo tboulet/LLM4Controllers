@@ -14,6 +14,7 @@ import enum
 import random
 from typing import Any, Dict, Tuple, Union
 
+from agent.llm_hcg.graph_viz import ControllerVisualizer
 
 class TransitionData:
     """Represents the data of a transition (task, controller, feedback) in the demo bank."""
@@ -49,7 +50,7 @@ class DemoBank:
     that happened during the agent's training.
     """
 
-    def __init__(self, config_agent: Dict):
+    def __init__(self, config_agent: Dict, visualizer: ControllerVisualizer):
         """Initialize the demo bank.
 
         Args:
@@ -58,6 +59,7 @@ class DemoBank:
         print("Initializing demo bank...")
         # Extract config
         self.config_agent = config_agent
+        self.visualizer = visualizer
         # Initialize the demo bank
         self.transitions: List[TransitionData] = []
 

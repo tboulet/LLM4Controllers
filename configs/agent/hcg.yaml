@@ -40,13 +40,12 @@ config:
     # The directory to save logs to.
     log_dir: logs
     # Whether to log the run on log_dir/<run name>
-    do_log_on_new: False
+    do_log_on_new: True
     # Whether to log the run on log_dir/_last
     do_log_on_last: True
 
   config_visualizer:
-    # Whether to visualize HCG's internal state (library)
-    do_visualize: True
+    auto_open_browser: False
 
   config_debug:
     # Whether to breakpoint on inference events

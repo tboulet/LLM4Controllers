@@ -25,6 +25,14 @@ class LLMBasedHCG(BaseAgent):
 
     def __init__(self, config: Dict):
         super().__init__(config)
+        # Initialize logging
+        config_logs = self.config["config_logs"]
+        log_dir = config_logs["log_dir"]
+        self.list_log_dirs_global : List[str] = []
+        if config_logs["do_log_on_new"]:
+            self.list_log_dirs_global.append(os.path.join(log_dir, config["run_name"]))
+        if config_logs["do_log_on_last"]:
+            self.list_log_dirs_global.append(os.path.join(log_dir, "last"))
         # Log the config
         self.log_texts(
             {"config.yaml": json.dumps(self.config, indent=4)}, in_task_folder=False
@@ -77,23 +85,23 @@ class LLMBasedHCG(BaseAgent):
         exec(open("agent/llm_hcg/base_scope.py").read(), self.base_scope)
         self.sc_code_last: Optional[str] = None
         # Initialize HCG visualizer
-        self.visualizer = ControllerVisualizer(agent=self, config=config["config_visualizer"])
+        self.visualizer = ControllerVisualizer(
+            agent=self,
+            log_dirs=self.list_log_dirs_global,
+            **config["config_visualizer"],
+        )
         # Initialize knowledge base
         self.library_controller = ControllerLibrary(
-            config_agent=config, visualizer=self.visualizer,
+            config_agent=config,
+            visualizer=self.visualizer,
         )
         self.demo_bank = DemoBank(
             config_agent=config,
+            visualizer=self.visualizer,
         )
-        # Initialize logging
-        config_logs = self.config["config_logs"]
-        self.log_dir = config_logs["log_dir"]
-        self.list_run_names = []
-        if config_logs["do_log_on_new"]:
-            self.list_run_names.append(self.config["run_name"])
-        if config_logs["do_log_on_last"]:
-            self.list_run_names.append("_last")
-        
+        # Update the visualizer
+        self.visualizer.update_vis()
+
     def give_textual_description(self, description: str):
         self.description_env = description
 
@@ -285,323 +293,325 @@ class LLMBasedHCG(BaseAgent):
                 "feedback.txt": json.dumps(feedback, indent=4),
             }
         )
-        # Update the knowledge base
-        if self.t % 10 == 3:
-            # Move forward the visualizer
-            self.visualizer.new_step()
-            
-            # Sample transitions from the demo bank
-            transitions_sampled = self.demo_bank.sample_transitions(
-                n_transitions=self.n_samples_update,
-                method=self.method_update_sampling,
+        # Skip if not in the update step
+        if self.t % 10 != 3:  # TODO : parameterize this
+            self.t += 1
+            return
+
+        # Move forward the visualizer
+        self.visualizer.new_step()
+
+        # Sample transitions from the demo bank
+        transitions_sampled = self.demo_bank.sample_transitions(
+            n_transitions=self.n_samples_update,
+            method=self.method_update_sampling,
+        )
+        examples_demobank = []
+        for idx_task, transition_data in enumerate(transitions_sampled):
+            examples_demobank.append(
+                (
+                    f"Task no {idx_task+1} :\n"
+                    f"{transition_data.task_repr}\n\n"
+                    f"Super controller code :\n{transition_data.code}\n\n"
+                    f"Performance : {transition_data.feedback['success']}"
+                )
             )
-            examples_demobank = []
-            for idx_task, transition_data in enumerate(transitions_sampled):
-                examples_demobank.append(
+
+        examples_demobank = "\n\n".join(
+            str(transition) for transition in examples_demobank
+        )
+
+        # Create the prompt for the assistant
+        prompt_update = (
+            # Purpose prompt
+            "We are in the context of solving a task-based environment. The tasks consist of interacting with the environment for several steps in order to achieve a specified goal. "
+            "The objects that operates in the environment are called controllers and are sub-classes of the class Controller. "
+            "We maintain a library of (primitive) controllers that are relatively low-level controllers that can be composed by the actually deployed (super) controllers. "
+            "We also maintain a demo bank of transitions (task representation, controller code, feedback) that happened during the agent's training. "
+            "You are an agent that is asked to 1) improve the library of controllers and 2) refactor if needed the super controller codes that are used in the demo bank. "
+            "\n\n"
+            # Environment prompt
+            "[General description of the environment]\n"
+            f"{self.description_env}\n"
+            "\n\n"
+            # Controller structure prompt
+            "[Controller interface]\n"
+            "A controller obeys the following interface:\n"
+            "Note : you MUST import the objects Controller, Observation, and ActionType from the 'agent.base_agent' module.\n"
+            "Also, you shall import any other python module you need (numpy as np, math, etc.).\n"
+            "```python\n"
+            f"{self.text_base_controller}```"
+            "\n\n"
+            # Knowledge base prompt
+            "[Controller library (to improve)]\n"
+            "You have here the library of controllers that are already defined in the 'controller_library' module. "
+            "You cannot use them in the definition of other primitive controllers of the library, but you can use them in the definition of the super controllers when you refactor the demo bank. "
+            "If you wish to use them, you can import them in your super controller code using the following syntax:\n"
+            "```python\n"
+            "from controller_library import Controller1, Controller2\n"
+            "```\n"
+            "If you use them, take care of the signatures of the methods of the controllers you use. \n"
+            "\n"
+            f"{self.library_controller}"
+            "\n\n"
+            "You are asked to improve the library of controllers by making it more modular and creating usefull primitive controllers that can be used in the super controllers. "
+            f"You can add up to {self.n_max_update_new_primitives} new controllers to the library. "
+            "You CAN'T add a controller that is already present in the library. "
+            "For adding a new primitive controller to the library, include 'New primitive controller' followed by "
+            "the definition of the controller in your answer. Example:\n"
+            "New primitive controller:\n"
+            "```python\n"
+            f"{self.text_example_pc}```"
+            "\n\n"
+            # Demo bank prompt
+            "[Demo Bank (to refactor)]\n"
+            "Here are some transitions (task description, controller code, performance) that happened during the agent's training. "
+            "Based on these experiences and the controller library, you are asked to refactor the controller code to improve the agent's performance. "
+            "The performance is a scalar between 0 and 1. If the scalar is near 1, you can hardly improve the controller but you may make it more modular by using the library. "
+            "\n\n"
+            f"{examples_demobank}"
+            "\n\n"
+            "You can refactor the controller code by using the controllers from the library, or by defining new controllers that possibly compose the primitive controllers from the library. "
+            f"You can refactor between 0 to {self.n_max_update_refactorings} controllers from the demo bank. "
+            "For refactoring a controller from the demo bank, include 'Refactored controller for task <idx task>' followed by "
+            "the definition of the controller in your answer. Example:\n"
+            "Refactored controller for task 3:\n"
+            "```python\n"
+            f"{self.text_example_sc}```"
+            "\n\n"
+            # Advice prompt
+            # "[Advices]\n"
+            # "You can write a new controller class and/or use the controllers that are already implemented in the knowledge base. "
+            # "If you define a controller from scratch, you can't define functions outside the controller class, you need to define them inside the class as methods. "
+            # "Your code should create a 'controller' variable that will be extracted for performing in the environment\n"
+            # "\n" # (commented for now)
+            # "You should try as much as possible to produce controllers that are short in terms of tokens of code. "
+            # "This can be done in particular by re-using the functions and controllers that are already implemented in the knowledge base and won't cost a lot of tokens. "
+            "\n"
+            "Please reason step-by-step and think about the best way to solve the task before answering. "
+            "\n\n"
+            # Example of answer prompt (in-context learning)
+            "[Example of answer]\n"
+            "Your answer should be returned following that example:\n"
+            f"{self.text_example_answer_update}"
+        )
+        self.log_texts(
+            {
+                "prompt_update.txt": prompt_update,
+                "controller_library.py": str(self.library_controller),
+                "demo_bank.py": str(self.demo_bank),
+            },
+            is_update_step=True,
+        )
+        if self.config["config_debug"]["breakpoint_update"]:
+            print(f"Update step at t={self.t}. Press 'c' to continue.")
+            breakpoint()
+
+        # Call the LLM
+        self.llm.reset()
+        self.llm.add_prompt(prompt_update)
+        # Extract the code blocks from the answer
+        for no_attempt in range(self.num_attempts_update_code_extraction):
+            answer = self.llm.generate()
+            self.llm.add_answer(answer)
+            try:
+                code_primitives, dict_code_refactorings = self.extract_update_code(
+                    answer
+                )
+                assert len(code_primitives) <= self.n_max_update_new_primitives, (
+                    f"You can only add up to {self.n_max_update_new_primitives} new controllers to the library. "
+                    f"Here, you tried to add {len(code_primitives)}."
+                )
+                assert len(dict_code_refactorings) <= self.n_max_update_refactorings, (
+                    f"You can only refactor up to {self.n_max_update_refactorings} controllers from the demo bank. "
+                    f"Here, you tried to refactor {len(dict_code_refactorings)}."
+                )
+                assert all(
+                    [
+                        idx_task in range(self.n_samples_update)
+                        for idx_task in dict_code_refactorings.keys()
+                    ]
+                ), (
+                    f"Task index in refactored controllers should be in [0, {self.n_samples_update-1}]."
+                    f"But here, you tried to refactor tasks with indexes {dict_code_refactorings.keys()}."
+                )
+                break
+            except Exception as e:
+                full_error_info = get_error_info(e)
+                print(
+                    f"[WARNING] : Could not extract the code from the answer. Asking the assistant to try again. Full error info : {full_error_info}"
+                )
+                self.log_texts(
+                    {
+                        f"failure_code_extraction_attempt_{no_attempt}_answer.txt": answer,
+                    },
+                    in_task_folder=True,
+                )
+                if self.config["config_debug"][
+                    "breakpoint_update_on_failure_code_extraction"
+                ]:
+                    print("controller code extraction failed. Press 'c' to continue.")
+                    breakpoint()
+                if no_attempt >= self.num_attempts_update_code_extraction - 1:
+                    raise ValueError(
+                        f"Could not extract the code from the answer after {self.num_attempts_update_code_extraction} attempts. Stopping the process."
+                    )
+                self.llm.add_prompt(
                     (
-                        f"Task no {idx_task+1} :\n"
-                        f"{transition_data.task_repr}\n\n"
-                        f"Super controller code :\n{transition_data.code}\n\n"
-                        f"Performance : {transition_data.feedback['success']}"
+                        f"I'm sorry, extracting the code from your answer failed. Please try again and make sure the code obeys the format following that example:\n{self.text_example_answer_update}\n"
+                        f"Full error info : {full_error_info}"
                     )
                 )
 
-            examples_demobank = "\n\n".join(
-                str(transition) for transition in examples_demobank
+        # Save and log the accepted answer
+        answer_accepted = answer
+        self.log_texts(
+            {
+                "assistant_answer_accepted.txt": answer,
+            },
+            is_update_step=True,
+        )
+
+        # Warning if nothing was generated but extract_code_update did not raise an error
+        if len(code_primitives) == 0 and len(dict_code_refactorings) == 0:
+            print(
+                f"[WARNING] : Nothing was generated from the LLM. Unexpected behavior but possible."
             )
 
-            # Create the prompt for the assistant
-            prompt_update = (
-                # Purpose prompt
-                "We are in the context of solving a task-based environment. The tasks consist of interacting with the environment for several steps in order to achieve a specified goal. "
-                "The objects that operates in the environment are called controllers and are sub-classes of the class Controller. "
-                "We maintain a library of (primitive) controllers that are relatively low-level controllers that can be composed by the actually deployed (super) controllers. "
-                "We also maintain a demo bank of transitions (task representation, controller code, feedback) that happened during the agent's training. "
-                "You are an agent that is asked to 1) improve the library of controllers and 2) refactor if needed the super controller codes that are used in the demo bank. "
-                "\n\n"
-                # Environment prompt
-                "[General description of the environment]\n"
-                f"{self.description_env}\n"
-                "\n\n"
-                # Controller structure prompt
-                "[Controller interface]\n"
-                "A controller obeys the following interface:\n"
-                "Note : you MUST import the objects Controller, Observation, and ActionType from the 'agent.base_agent' module.\n"
-                "Also, you shall import any other python module you need (numpy as np, math, etc.).\n"
-                "```python\n"
-                f"{self.text_base_controller}```"
-                "\n\n"
-                # Knowledge base prompt
-                "[Controller library (to improve)]\n"
-                "You have here the library of controllers that are already defined in the 'controller_library' module. "
-                "You cannot use them in the definition of other primitive controllers of the library, but you can use them in the definition of the super controllers when you refactor the demo bank. "
-                "If you wish to use them, you can import them in your super controller code using the following syntax:\n"
-                "```python\n"
-                "from controller_library import Controller1, Controller2\n"
-                "```\n"
-                "If you use them, take care of the signatures of the methods of the controllers you use. \n"
-                "\n"
-                f"{self.library_controller}"
-                "\n\n"
-                "You are asked to improve the library of controllers by making it more modular and creating usefull primitive controllers that can be used in the super controllers. "
-                f"You can add up to {self.n_max_update_new_primitives} new controllers to the library. "
-                "You CAN'T add a controller that is already present in the library. "
-                "For adding a new primitive controller to the library, include 'New primitive controller' followed by "
-                "the definition of the controller in your answer. Example:\n"
-                "New primitive controller:\n"
-                "```python\n"
-                f"{self.text_example_pc}```"
-                "\n\n"
-                # Demo bank prompt
-                "[Demo Bank (to refactor)]\n"
-                "Here are some transitions (task description, controller code, performance) that happened during the agent's training. "
-                "Based on these experiences and the controller library, you are asked to refactor the controller code to improve the agent's performance. "
-                "The performance is a scalar between 0 and 1. If the scalar is near 1, you can hardly improve the controller but you may make it more modular by using the library. "
-                "\n\n"
-                f"{examples_demobank}"
-                "\n\n"
-                "You can refactor the controller code by using the controllers from the library, or by defining new controllers that possibly compose the primitive controllers from the library. "
-                f"You can refactor between 0 to {self.n_max_update_refactorings} controllers from the demo bank. "
-                "For refactoring a controller from the demo bank, include 'Refactored controller for task <idx task>' followed by "
-                "the definition of the controller in your answer. Example:\n"
-                "Refactored controller for task 3:\n"
-                "```python\n"
-                f"{self.text_example_sc}```"
-                "\n\n"
-                # Advice prompt
-                # "[Advices]\n"
-                # "You can write a new controller class and/or use the controllers that are already implemented in the knowledge base. "
-                # "If you define a controller from scratch, you can't define functions outside the controller class, you need to define them inside the class as methods. "
-                # "Your code should create a 'controller' variable that will be extracted for performing in the environment\n"
-                # "\n" # (commented for now)
-                # "You should try as much as possible to produce controllers that are short in terms of tokens of code. "
-                # "This can be done in particular by re-using the functions and controllers that are already implemented in the knowledge base and won't cost a lot of tokens. "
-                "\n"
-                "Please reason step-by-step and think about the best way to solve the task before answering. "
-                "\n\n"
-                # Example of answer prompt (in-context learning)
-                "[Example of answer]\n"
-                "Your answer should be returned following that example:\n"
-                f"{self.text_example_answer_update}"
-            )
-            self.log_texts(
-                {
-                    "prompt_update.txt": prompt_update,
-                    "controller_library.py": str(self.library_controller),
-                    "demo_bank.py": str(self.demo_bank),
-                },
-                is_update_step=True,
-            )
-            if self.config["config_debug"]["breakpoint_update"]:
-                print(f"Update step at t={self.t}. Press 'c' to continue.")
-                breakpoint()
+        # Add the new primitive controllers to the library
+        for i, code_pc in enumerate(code_primitives):
 
-            # Call the LLM
+            # Put the LLM state to prompt + accepted answer
             self.llm.reset()
             self.llm.add_prompt(prompt_update)
-            # Extract the code blocks from the answer
-            for no_attempt in range(self.num_attempts_update_code_extraction):
-                answer = self.llm.generate()
-                self.llm.add_answer(answer)
+            self.llm.add_answer(answer_accepted)
+
+            # Iterate until the PC is saved. If error, log it in the message and ask the assistant to try again.
+            for no_attempt in range(self.num_attempts_update_pc_code_saving):
                 try:
-                    code_primitives, dict_code_refactorings = self.extract_update_code(
-                        answer
-                    )
-                    assert len(code_primitives) <= self.n_max_update_new_primitives, (
-                        f"You can only add up to {self.n_max_update_new_primitives} new controllers to the library. "
-                        f"Here, you tried to add {len(code_primitives)}."
-                    )
-                    assert (
-                        len(dict_code_refactorings) <= self.n_max_update_refactorings
-                    ), (
-                        f"You can only refactor up to {self.n_max_update_refactorings} controllers from the demo bank. "
-                        f"Here, you tried to refactor {len(dict_code_refactorings)}."
-                    )
-                    assert all(
-                        [
-                            idx_task in range(self.n_samples_update)
-                            for idx_task in dict_code_refactorings.keys()
-                        ]
-                    ), (
-                        f"Task index in refactored controllers should be in [0, {self.n_samples_update-1}]."
-                        f"But here, you tried to refactor tasks with indexes {dict_code_refactorings.keys()}."
-                    )
+                    self.library_controller.add_primitive_controller(code_pc)
                     break
                 except Exception as e:
                     full_error_info = get_error_info(e)
                     print(
-                        f"[WARNING] : Could not extract the code from the answer. Asking the assistant to try again. Full error info : {full_error_info}"
+                        f"[WARNING] : Could not save the code for a new primitive controller. Full error info : {full_error_info}"
                     )
                     self.log_texts(
                         {
-                            f"failure_code_extraction_attempt_{no_attempt}_answer.txt": answer,
+                            f"failing_pc_code_saving_{i}_attempt_{no_attempt}_controller.py": code_pc,
+                            f"failure_pc_code_saving_{i}_attempt_{no_attempt}_error.txt": full_error_info,
                         },
-                        in_task_folder=True,
+                        is_update_step=True,
                     )
                     if self.config["config_debug"][
-                        "breakpoint_update_on_failure_code_extraction"
+                        "breakpoint_update_on_failure_pc_code_saving"
                     ]:
                         print(
-                            "controller code extraction failed. Press 'c' to continue."
+                            "controller code saving failed during update. Press 'c' to continue."
                         )
                         breakpoint()
-                    if no_attempt >= self.num_attempts_update_code_extraction - 1:
-                        raise ValueError(
-                            f"Could not extract the code from the answer after {self.num_attempts_update_code_extraction} attempts. Stopping the process."
-                        )
-                    self.llm.add_prompt(
-                        (
-                            f"I'm sorry, extracting the code from your answer failed. Please try again and make sure the code obeys the format following that example:\n{self.text_example_answer_update}\n"
-                            f"Full error info : {full_error_info}"
-                        )
+                    if no_attempt >= self.num_attempts_update_pc_code_saving - 1:
+                        break  # Abort the adding of the primitive controller if it fails too many times
+
+                    # Ask the LLM to regenerate the code directly
+                    prompt_retry_on_failure_pc_code_saving = (
+                        f"Adding new controllers to the library...\n"
+                        f"An error occured while trying to add the following code's controller to the library:\n"
+                        f"```python\n{code_pc}\n```\n\n"
+                        f"Please try again FOR THIS CONTROLLER ONLY (you can change it's class name). "
+                        "IMPORTANT : Note that your answer should now be composed of CODE ONLY (not in python balises) and follow the format of the example below:\n"
+                        f"{self.text_example_pc}"
+                    )
+                    self.log_texts(
+                        {
+                            f"failure_pc_code_saving_{i}_attempt_{no_attempt}_retry_prompt.txt": prompt_retry_on_failure_pc_code_saving,
+                        },
+                        is_update_step=True,
+                    )
+                    self.llm.add_prompt(prompt_retry_on_failure_pc_code_saving)
+                    code_pc = self.llm.generate()
+                    self.llm.add_answer(
+                        code_pc
+                    )  # Add the new code to the LLM state in case of a new error
+                    self.log_texts(
+                        {
+                            f"failure_pc_code_saving_{i}_attempt_{no_attempt}_retry_answer.txt": code_pc,
+                        },
+                        is_update_step=True,
                     )
 
-            # Save and log the accepted answer
-            answer_accepted = answer
-            self.log_texts(
-                {
-                    "assistant_answer_accepted.txt": answer,
-                },
-                is_update_step=True,
-            )
+        # Execute the refactoring code(s)
+        for idx_task, transition_data in enumerate(transitions_sampled):
 
-            # Warning if nothing was generated but extract_code_update did not raise an error
-            if len(code_primitives) == 0 and len(dict_code_refactorings) == 0:
-                print(
-                    f"[WARNING] : Nothing was generated from the LLM. Unexpected behavior but possible."
-                )
+            # Skip if the LLM did not refactor this task
+            if idx_task not in dict_code_refactorings:
+                continue
 
-            # Add the new primitive controllers to the library
-            for i, code_pc in enumerate(code_primitives):
+            # Put the LLM state to prompt + accepted answer
+            self.llm.reset()
+            self.llm.add_prompt(prompt_update)
+            self.llm.add_answer(answer_accepted)
 
-                # Put the LLM state to prompt + accepted answer
-                self.llm.reset()
-                self.llm.add_prompt(prompt_update)
-                self.llm.add_answer(answer_accepted)
-
-                # Iterate until the PC is saved. If error, log it in the message and ask the assistant to try again.
-                for no_attempt in range(self.num_attempts_update_pc_code_saving):
-                    try:
-                        self.library_controller.add_primitive_controller(code_pc)
-                        break
-                    except Exception as e:
-                        full_error_info = get_error_info(e)
+            # Iterate until the SC is executed. If error, log it in the message and ask the assistant to try again.
+            code_sc = dict_code_refactorings[idx_task]
+            for no_attempt in range(self.num_attempts_update_sc_code_execution):
+                try:
+                    controller_instance = self.exec_code_and_get_controller(code_sc)
+                    transition_data.code = code_sc
+                    break
+                # except NoPerfGain as e: # TODO : test if the controller is metric-wise better than the previous one, if not retry
+                #     pass
+                except Exception as e:
+                    full_error_info = get_error_info(e)
+                    print(
+                        f"[WARNING] : Could not execute the code for a refactored controller. Full error info : {full_error_info}"
+                    )
+                    self.log_texts(
+                        {
+                            f"failing_sc_code_execution_{idx_task}_attempt_{no_attempt}_controller.py": code_sc,
+                            f"failure_sc_code_execution_{idx_task}_attempt_{no_attempt}_error.txt": full_error_info,
+                        },
+                        is_update_step=True,
+                    )
+                    if self.config["config_debug"][
+                        "breakpoint_update_on_failure_sc_code_execution"
+                    ]:
                         print(
-                            f"[WARNING] : Could not save the code for a new primitive controller. Full error info : {full_error_info}"
+                            "controller code execution failed during update. Press 'c' to continue."
                         )
-                        self.log_texts(
-                            {
-                                f"failing_pc_code_saving_{i}_attempt_{no_attempt}_controller.py": code_pc,
-                                f"failure_pc_code_saving_{i}_attempt_{no_attempt}_error.txt": full_error_info,
-                            },
-                            is_update_step=True,
-                        )
-                        if self.config["config_debug"][
-                            "breakpoint_update_on_failure_pc_code_saving"
-                        ]:
-                            print(
-                                "controller code saving failed during update. Press 'c' to continue."
-                            )
-                            breakpoint()
-                        if no_attempt >= self.num_attempts_update_pc_code_saving - 1:
-                            break  # Abort the adding of the primitive controller if it fails too many times
+                        breakpoint()
+                    if no_attempt >= self.num_attempts_update_sc_code_execution - 1:
+                        break  # Abort the refactoring of the controller if it fails too many times
 
-                        # Ask the LLM to regenerate the code directly
-                        prompt_retry_on_failure_pc_code_saving = (
-                            f"Adding new controllers to the library...\n"
-                            f"An error occured while trying to add the following code's controller to the library:\n"
-                            f"```python\n{code_pc}\n```\n\n"
-                            f"Please try again FOR THIS CONTROLLER ONLY (you can change it's class name). "
-                            "IMPORTANT : Note that your answer should now be composed of CODE ONLY (not in python balises) and follow the format of the example below:\n"
-                            f"{self.text_example_pc}"
-                        )
-                        self.log_texts(
-                            {
-                                f"failure_pc_code_saving_{i}_attempt_{no_attempt}_retry_prompt.txt": prompt_retry_on_failure_pc_code_saving,
-                            },
-                            is_update_step=True,
-                        )
-                        self.llm.add_prompt(prompt_retry_on_failure_pc_code_saving)
-                        code_pc = self.llm.generate()
-                        self.llm.add_answer(
-                            code_pc
-                        )  # Add the new code to the LLM state in case of a new error
-                        self.log_texts(
-                            {
-                                f"failure_pc_code_saving_{i}_attempt_{no_attempt}_retry_answer.txt": code_pc,
-                            },
-                            is_update_step=True,
-                        )
+                    # Ask the LLM to regenerate the answer for that task specifically
+                    prompt_retry_on_failure_sc_code_execution = (
+                        f"Refactoring controllers for tasks ...\n"
+                        f"An error occured while trying to refactor the controller for the task no {idx_task} using the following code:\n"
+                        f"```python\n{code_sc}\n```\n\n"
+                        f"Please try again FOR THIS CONTROLLER ONLY. "
+                        f"IMPORTANT : Note that your answer should now be composed of CODE ONLY (not in python balises) and follow the format of the example below:\n"
+                        f"{self.text_example_sc}"
+                    )
+                    self.log_texts(
+                        {
+                            f"failure_sc_code_execution_{idx_task}_attempt_{no_attempt}_retry_prompt.txt": prompt_retry_on_failure_sc_code_execution,
+                        },
+                        is_update_step=True,
+                    )
+                    self.llm.add_prompt(prompt_retry_on_failure_sc_code_execution)
+                    code_sc = self.llm.generate()
+                    self.llm.add_answer(
+                        code_sc
+                    )  # Add the new code to the LLM state in case of a new error
+                    self.log_texts(
+                        {
+                            f"failure_sc_code_execution_{idx_task}_attempt_{no_attempt}_retry_answer.txt": code_sc,
+                        },
+                        is_update_step=True,
+                    )
 
-            # Execute the refactoring code(s)
-            for idx_task, transition_data in enumerate(transitions_sampled):
-
-                # Skip if the LLM did not refactor this task
-                if idx_task not in dict_code_refactorings:
-                    continue
-
-                # Put the LLM state to prompt + accepted answer
-                self.llm.reset()
-                self.llm.add_prompt(prompt_update)
-                self.llm.add_answer(answer_accepted)
-
-                # Iterate until the SC is executed. If error, log it in the message and ask the assistant to try again.
-                code_sc = dict_code_refactorings[idx_task]
-                for no_attempt in range(self.num_attempts_update_sc_code_execution):
-                    try:
-                        controller_instance = self.exec_code_and_get_controller(code_sc)
-                        transition_data.code = code_sc
-                        break
-                    # except NoPerfGain as e: # TODO : test if the controller is metric-wise better than the previous one, if not retry
-                    #     pass
-                    except Exception as e:
-                        full_error_info = get_error_info(e)
-                        print(
-                            f"[WARNING] : Could not execute the code for a refactored controller. Full error info : {full_error_info}"
-                        )
-                        self.log_texts(
-                            {
-                                f"failing_sc_code_execution_{idx_task}_attempt_{no_attempt}_controller.py": code_sc,
-                                f"failure_sc_code_execution_{idx_task}_attempt_{no_attempt}_error.txt": full_error_info,
-                            },
-                            is_update_step=True,
-                        )
-                        if self.config["config_debug"][
-                            "breakpoint_update_on_failure_sc_code_execution"
-                        ]:
-                            print(
-                                "controller code execution failed during update. Press 'c' to continue."
-                            )
-                            breakpoint()
-                        if no_attempt >= self.num_attempts_update_sc_code_execution - 1:
-                            break  # Abort the refactoring of the controller if it fails too many times
-
-                        # Ask the LLM to regenerate the answer for that task specifically
-                        prompt_retry_on_failure_sc_code_execution = (
-                            f"Refactoring controllers for tasks ...\n"
-                            f"An error occured while trying to refactor the controller for the task no {idx_task} using the following code:\n"
-                            f"```python\n{code_sc}\n```\n\n"
-                            f"Please try again FOR THIS CONTROLLER ONLY. "
-                            f"IMPORTANT : Note that your answer should now be composed of CODE ONLY (not in python balises) and follow the format of the example below:\n"
-                            f"{self.text_example_sc}"
-                        )
-                        self.log_texts(
-                            {
-                                f"failure_sc_code_execution_{idx_task}_attempt_{no_attempt}_retry_prompt.txt": prompt_retry_on_failure_sc_code_execution,
-                            },
-                            is_update_step=True,
-                        )
-                        self.llm.add_prompt(prompt_retry_on_failure_sc_code_execution)
-                        code_sc = self.llm.generate()
-                        self.llm.add_answer(
-                            code_sc
-                        )  # Add the new code to the LLM state in case of a new error
-                        self.log_texts(
-                            {
-                                f"failure_sc_code_execution_{idx_task}_attempt_{no_attempt}_retry_answer.txt": code_sc,
-                            },
-                            is_update_step=True,
-                        )
+        # Update the visualizer
+        self.visualizer.update_vis()
 
         # Increment the time step
         self.t += 1
@@ -795,24 +805,23 @@ class LLMBasedHCG(BaseAgent):
     ):
         """Log texts in a directory. For each (key, value) in the directory, the file <log_dir>/task_<t>/<key> will contain the value.
         It will do that for all <log_dir> in self.list_run_names.
-        
+
         Args:
             dict_name_to_text (Dict[str, str]): a mapping from the name of the file to create to the text to write in it.
             in_task_folder (bool, optional): whether to log the files in the task folder (if not, log in the run folder). Defaults to True.
             is_update_step (bool, optional): whether we are in an update step (if so, replace task_t by task_t_update). Defaults to False.
         """
-        list_log_dirs = []
-        for run_name in self.list_run_names:
-            log_dir = os.path.join(self.log_dir, run_name)
+        list_log_dirs : List[str] = []
+        for log_dir_global in self.list_log_dirs_global:
             if is_update_step:
                 assert (
                     in_task_folder
                 ), "is_update_step should be True if in_task_folder is True."
-                log_dir = os.path.join(log_dir, f"task_{self.t}_update")
+                log_dir = os.path.join(log_dir_global, f"task_{self.t}_update")
             elif in_task_folder:
-                log_dir = os.path.join(log_dir, f"task_{self.t}")
+                log_dir = os.path.join(log_dir_global, f"task_{self.t}")
             else:
-                log_dir = log_dir
+                log_dir = log_dir_global
             list_log_dirs.append(log_dir)
 
         for log_dir in list_log_dirs:

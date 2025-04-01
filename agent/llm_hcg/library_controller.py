@@ -103,7 +103,7 @@ class ControllerLibrary:
         # Add the controller's data to the controller library
         self.controllers[class_name] = data
         # Add the controller to the visualizer
-        self.visualizer.add_pc(name=class_name, code=code)
+        self.visualizer.add_PCs({class_name: code})
 
     def __repr__(self):
         if len(self.controllers) == 0:

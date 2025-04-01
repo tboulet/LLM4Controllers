@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 import numpy as np
 from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller
-from agent.llm_hcg.graph_viz import VisualizerHCG
+from agent.llm_hcg.graph_viz import ControllerVisualizer
 from core.task import TaskRepresentation
 from core.utils import get_error_info
 from env.base_meta_env import BaseMetaEnv, Observation, ActionType, InfoDict
@@ -43,7 +43,7 @@ class ControllerLibrary:
     It implements method to update it and to query it.
     """
 
-    def __init__(self, config_agent: Dict, visualizer: VisualizerHCG):
+    def __init__(self, config_agent: Dict, visualizer: ControllerVisualizer):
         # Initialize controller library
         print("Initializing controller library...")
         self.config = config_agent["config_controllers"]

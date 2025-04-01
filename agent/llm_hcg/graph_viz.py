@@ -4,13 +4,11 @@ import networkx as nx
 from pyvis.network import Network
 import time
 
-from agent.llm_hcg.demo_bank import TransitionData
-from agent.llm_hcg.library_controller import ControllerData
 
 class ControllerVisualizer:
     def __init__(self, log_dirs: List[str] = ["logs"]):
         self.G = nx.DiGraph()
-        self.PCs : Dict[str, ControllerData] = {}  # Stores active controllers and their codes
+        self.PCs : Dict[str, str] = {}  # Stores active controllers and their codes
         self.positions : Dict[str, Tuple[int, int]] = {}  # Stores positions for visualization
         self.time_step = 0  # time step
         self.x_current_step = 0 # X-axis position of the current time step
@@ -22,7 +20,7 @@ class ControllerVisualizer:
         for log_dir in self.log_dirs:
             os.makedirs(log_dir, exist_ok=True)
             
-    def add_PCs(self, PCs : Dict[str, ControllerData]):
+    def add_PCs(self, PCs : Dict[str, str]):
         """Add new controllers at the current time step."""
         self.PCs.update(PCs)
         for controller_name, pc_code in PCs.items():
@@ -42,8 +40,10 @@ class ControllerVisualizer:
     def new_step(self):
         """Move time forward by one step, keeping track of active controllers."""
         self.time_step += 1
-        self.x_current_step = max([x for x, _ in self.positions.values()]) + 3  
+        self.x_current_step = max([x for x, _ in self.positions.values()], default=0) + 3  
         new_positions = {}
+        max_y = 0  # Track maximum y-position for the vertical bar
+
         for name, pc_code in self.PCs.items():
             old_node = f"{name}_{self.time_step - 1}"
             new_node = f"{name}_{self.time_step}"
@@ -53,7 +53,20 @@ class ControllerVisualizer:
             x_last, y_last = self.positions[old_node]
             x_position = self.x_current_step + y_last
             y_position = y_last
-            new_positions[new_node] = (x_position, y_position)  # Keep y position same
+            new_positions[new_node] = (x_position, y_position)
+            max_y = max(max_y, y_position)  # Update max_y
+
+        # Add vertical bar node (special node that will be rendered as a line)
+        bar_node = f"time_bar_{self.time_step}"
+        self.G.add_node(bar_node, 
+                       label=f"Step {self.time_step}",
+                       shape="line",
+                       color="#888888",
+                       width=2,
+                       level=-1)  # Ensure it's drawn behind other nodes
+        # Position the bar at x=self.x_current_step + 2, centered vertically
+        self.positions[bar_node] = (self.x_current_step + 2, max_y / 2 if max_y > 0 else 0)
+
         self.positions.update(new_positions)
 
     def get_first_available_y_position(self):
@@ -66,13 +79,23 @@ class ControllerVisualizer:
     
     def generate_html(self):
         """Generate the visualization as an HTML file and display it."""
-        net = Network(notebook=True, directed=True)
+        net = Network(notebook=True, directed=True, height="800px", width="100%")
         net.from_nx(self.G)
+        
         for node, (x, y) in self.positions.items():
-            # Explicitly set positions to avoid internal adjustments by pyvis
-            net.get_node(node)["x"] = x * 100  # x position scaling
-            net.get_node(node)["y"] = - y * 100  # y position scaling
-            net.get_node(node)["physics"] = False  # Disable physics so positions stay fixed
+            net.get_node(node)["x"] = x * 100
+            net.get_node(node)["y"] = -y * 100  # Invert y-axis for display
+            net.get_node(node)["physics"] = False
+            
+            # Customize the vertical bar appearance
+            if "time_bar" in node:
+                net.get_node(node)["shape"] = "line"
+                net.get_node(node)["color"] = "#888888"
+                net.get_node(node)["width"] = 2
+                net.get_node(node)["level"] = -1
+                # Make the line span vertically by adjusting size
+                net.get_node(node)["size"] = 50  # This affects the line length in pyvis
+        
         for log_dir in self.log_dirs:
             net.show(f"{log_dir}/graph.html")  # Save the visualization as an HTML file
 
@@ -103,6 +126,3 @@ if __name__ == "__main__":
      
     viz.new_step()
     viz.generate_html()
-     
-    
-    

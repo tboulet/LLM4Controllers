@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 import numpy as np
 from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller
-from agent.llm_hcg.graph_viz import VisualizerHCG
+from agent.llm_hcg.graph_viz import ControllerVisualizer
 from agent.llm_hcg.library_controller import ControllerLibrary
 from agent.llm_hcg.demo_bank import DemoBank, TransitionData
 from core.task import TaskRepresentation
@@ -77,7 +77,7 @@ class LLMBasedHCG(BaseAgent):
         exec(open("agent/llm_hcg/base_scope.py").read(), self.base_scope)
         self.sc_code_last: Optional[str] = None
         # Initialize HCG visualizer
-        self.visualizer = VisualizerHCG(agent=self, config=config["config_visualizer"])
+        self.visualizer = ControllerVisualizer(agent=self, config=config["config_visualizer"])
         # Initialize knowledge base
         self.library_controller = ControllerLibrary(
             config_agent=config, visualizer=self.visualizer,

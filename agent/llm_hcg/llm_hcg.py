@@ -7,6 +7,7 @@ from typing import Dict, List, Optional
 import numpy as np
 from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller
+from agent.llm_hcg.graph_viz import VisualizerHCG
 from agent.llm_hcg.library_controller import ControllerLibrary
 from agent.llm_hcg.demo_bank import DemoBank, TransitionData
 from core.task import TaskRepresentation
@@ -24,6 +25,10 @@ class LLMBasedHCG(BaseAgent):
 
     def __init__(self, config: Dict):
         super().__init__(config)
+        # Log the config
+        self.log_texts(
+            {"config.yaml": json.dumps(self.config, indent=4)}, in_task_folder=False
+        )
         # Initialize LLM
         name_llm = config["llm"]["name"]
         config_llm = config["llm"]["config"]
@@ -69,10 +74,13 @@ class LLMBasedHCG(BaseAgent):
         # Initialize agent's variables
         self.t = 0  # Time step
         self.base_scope = {}  # Define the base scope that can be used by the assistant
+        exec(open("agent/llm_hcg/base_scope.py").read(), self.base_scope)
         self.sc_code_last: Optional[str] = None
+        # Initialize HCG visualizer
+        self.visualizer = VisualizerHCG(agent=self, config=config["config_visualizer"])
         # Initialize knowledge base
         self.library_controller = ControllerLibrary(
-            config_agent=config,
+            config_agent=config, visualizer=self.visualizer,
         )
         self.demo_bank = DemoBank(
             config_agent=config,
@@ -85,11 +93,7 @@ class LLMBasedHCG(BaseAgent):
             self.list_run_names.append(self.config["run_name"])
         if config_logs["do_log_on_last"]:
             self.list_run_names.append("_last")
-        # Log the config
-        self.log_texts(
-            {"config.yaml": json.dumps(self.config, indent=4)}, in_task_folder=False
-        )
-
+        
     def give_textual_description(self, description: str):
         self.description_env = description
 
@@ -283,6 +287,10 @@ class LLMBasedHCG(BaseAgent):
         )
         # Update the knowledge base
         if self.t % 10 == 3:
+            # Move forward the visualizer
+            self.visualizer.new_step()
+            
+            # Sample transitions from the demo bank
             transitions_sampled = self.demo_bank.sample_transitions(
                 n_transitions=self.n_samples_update,
                 method=self.method_update_sampling,
@@ -463,7 +471,7 @@ class LLMBasedHCG(BaseAgent):
                     f"[WARNING] : Nothing was generated from the LLM. Unexpected behavior but possible."
                 )
 
-            # Execute the PC code(s)
+            # Add the new primitive controllers to the library
             for i, code_pc in enumerate(code_primitives):
 
                 # Put the LLM state to prompt + accepted answer

@@ -313,7 +313,7 @@ class LLMBasedHCG(BaseAgent):
                     f"Task no {idx_task+1} :\n"
                     f"{transition_data.task_repr}\n\n"
                     f"Super controller code :\n{transition_data.code}\n\n"
-                    f"Performance : {transition_data.feedback['success']}"
+                    f"Performance : \n{transition_data.feedback}"
                 )
             )
 
@@ -467,7 +467,7 @@ class LLMBasedHCG(BaseAgent):
         answer_accepted = answer
         self.log_texts(
             {
-                "assistant_answer_accepted.txt": answer,
+                "assistant_answer_accepted.txt": answer_accepted,
             },
             is_update_step=True,
         )
@@ -588,6 +588,7 @@ class LLMBasedHCG(BaseAgent):
                         f"Refactoring controllers for tasks ...\n"
                         f"An error occured while trying to refactor the controller for the task no {idx_task} using the following code:\n"
                         f"```python\n{code_sc}\n```\n\n"
+                        f"The error is the following : {full_error_info}\n\n"
                         f"Please try again FOR THIS CONTROLLER ONLY. "
                         f"IMPORTANT : Note that your answer should now be composed of CODE ONLY (not in python balises) and follow the format of the example below:\n"
                         f"{self.text_example_sc}"
@@ -712,13 +713,14 @@ class LLMBasedHCG(BaseAgent):
                 raise ValueError(
                     f"An error occured while executing the code of the controller {controller_name} from the library. Maybe don't import this controller anymore. Full error info : {get_error_info(e)}"
                 )
-            print(f"[GOOD INFO] Controller {controller_name} imported successfully !")
-            breakpoint()
 
         # Execute the remaining code
         try:
+            scope_with_imports = self.base_scope.copy()
+            scope_with_imports.update(local_scope)
             exec(code_without_controller_imports, self.base_scope, local_scope)
         except Exception as e:
+            breakpoint()
             raise ValueError(
                 f"An error occured while executing the code for instanciating a controller. Full error info : {get_error_info(e)}"
             )

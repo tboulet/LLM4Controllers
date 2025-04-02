@@ -36,12 +36,14 @@ class ControllerVisualizer:
             x_position = self.x_current_step + n_nodes_in_this_step
             y_position = n_nodes_in_this_step
             self.positions[node] = (x_position, y_position)
-
+        self.update_vis()
+        
     def remove_controllers(self, pc_names: List[str]):
         for pc_name in pc_names:
             if pc_name in self.PCs:
                 del self.PCs[pc_name]
-
+        self.update_vis()
+        
     def new_step(self):
         self.time_step += 1
         self.x_current_step = max([x for x, _ in self.positions.values()]) + 3
@@ -70,10 +72,13 @@ class ControllerVisualizer:
         self.G.add_node(bar_top, label="", shape="square", color="black")
         self.G.add_node(bar_bottom, label="", shape="square", color="black")
         self.G.add_edge(bar_top, bar_bottom, color="black", width=2)
-
+        self.G[bar_top][bar_bottom]["arrows"] = "" # Remove the arrow from the edge
         self.positions[bar_top] = (bar_x, max_y + 1)
         self.positions[bar_bottom] = (bar_x, -1)
 
+        # Update the visualizer
+        self.update_vis()
+        
     def get_first_available_y_position(self):
         y_positions_taken = [
             y for x, y in self.positions.values() if x >= self.x_current_step
@@ -100,15 +105,17 @@ class ControllerVisualizer:
         for log_dir in self.log_dirs:
             file_path = os.path.abspath(rf"{log_dir}/graph.html")
             net.show(file_path)
+        # Notify the update
+        print(
+            (
+                "[VISUALIZER] : Visualizer updated. "
+                f"\033]8;;{file_path}\033\\Click here to open the graph in your browser\033]8;;\033\\"
+            )
+        )
+
         # Notify the user that the graph is ready, and eventually open it in the browser
         if not self.is_update_vis_called:
             self.is_update_vis_called = True
-            print(
-                (
-                    "[VISUALIZER] : Visualizer initialized. "
-                    f"\033]8;;{file_path}\033\\Click here to open the graph in your browser\033]8;;\033\\"
-                )
-            )
             if self.auto_open_browser:
                 webbrowser.open(file_path)  # open in browser the last graph
 

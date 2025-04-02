@@ -22,3 +22,5 @@ class GoNorthController(Controller):
             bool: Whether the controller has finished.
         """
         return False
+
+controller = GoNorthController()

@@ -1,0 +1,39 @@
+Reasoning :
+I think I should take into account ... (reasoning)
+
+Controller:
+```python
+# Eventually you can define a class here
+class ControllerForMovingToGoal(Controller):
+    """A controller that will move to a specific goal coordinates.
+    """
+
+    def __init__(self, goal_coords : Tuple[int, int]):
+        """
+        Args:
+            goal_coords (Tuple[int, int]): The coordinates of the goal.
+        """
+        self.goal_coords = goal_coords
+
+    def act(self, observation : Observation) -> ActionType:
+        """
+        Args:
+            observation (Observation): The observation of the environment.
+        
+        Returns:
+            ActionType: The action to perform.
+        """
+        # some code here
+        return "forward"
+
+    def has_finished(self) -> bool:
+        """
+        Returns:
+            bool: True if the controller has finished, False otherwise.
+        """
+        # some code here
+        return True
+
+# Instantiate the controller here, either from imported controllers or from the class you defined if you did
+controller = ControllerForMovingToGoal(goal_coords=(5, 3))
+```

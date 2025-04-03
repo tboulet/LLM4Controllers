@@ -313,7 +313,7 @@ class LLMBasedHCG(BaseAgent):
                 (
                     f"Task no {idx_task+1} :\n"
                     f"{transition_data.task_repr}\n\n"
-                    f"Super controller code :\n{transition_data.code}\n\n"
+                    f"Super controller code :\n```python\n{transition_data.code}\n```\n\n"
                     f"Performance : \n{transition_data.feedback}"
                 )
             )

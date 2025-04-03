@@ -130,7 +130,8 @@ class LLMBasedHCG(BaseAgent):
         )
 
         examples_demobank = "\n\n".join(
-            str(transition_data) for transition_data in transitions_datas_sampled
+            f"Example no {idx_example+1} :\n\n{transition_data}"
+            for idx_example, transition_data in enumerate(transitions_datas_sampled)
         )
 
         # Create the prompt for the assistant

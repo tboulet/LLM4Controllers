@@ -2,7 +2,7 @@ name: VLLM
 model: Qwen/Qwen2.5-1.5B-Instruct # vllm serve Qwen/Qwen2.5-1.5B-Instruct
 config:
   config_server:
-    do_server: False
+    do_server: True
   model: ${llm.model}
   kwargs:
     top_p: 0.9

@@ -18,6 +18,7 @@ matplotlib
 tqdm
 imageio[ffmpeg]
 pyvis
+pynvml
 
 # Common libraries
 numpy

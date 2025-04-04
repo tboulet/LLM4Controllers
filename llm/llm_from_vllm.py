@@ -1,8 +1,11 @@
 from abc import ABC, abstractmethod
 import os
+import subprocess
+import time
 from typing import Any, Dict, List, Union
 
 import numpy as np
+import requests
 from .base_llm import LanguageModel
 from hydra.utils import instantiate
 from openai import OpenAI
@@ -16,14 +19,26 @@ class LLM_from_VLLM(LanguageModel):
         self.config_server: Dict[str, Any] = config["config_server"]
         if self.config_server["do_server"]:
             print("Starting VLLM server...")
-            os.system(f"vllm serve {self.model} &")
+            # os.system(f"vllm serve {self.model} &")
+            self.launch_vllm_server(
+                n_gpu=1,
+                model_name=self.model,
+                model_len=5000,
+                enable_prefix_caching=True,
+                gpu_memory_utilization=0.9,
+            )
+            if not self.wait_for_server2start(
+                delay=10,
+                port=8000,
+            ):
+                raise RuntimeError("VLLM server failed to start.")
             print("VLLM server started.")
         self.client = OpenAI(
             api_key="EMPTY",
             base_url="http://localhost:8000/v1",
         )
         self.kwargs: Dict[str, Any] = config.get("kwargs", {})
-        self.messages : List[Dict[str, str]] = []
+        self.messages: List[Dict[str, str]] = []
 
     def reset(self):
         """Reset the language model at empty state."""
@@ -72,3 +87,51 @@ class LLM_from_VLLM(LanguageModel):
 
     def optimize(self):
         raise NotImplementedError  # not implemented yet
+
+    def launch_vllm_server(
+        model_name,
+        n_gpu,
+        model_len=32000,
+        enable_prefix_caching=True,
+        gpu_memory_utilization=0.97,
+    ):
+        command = [
+            "vllm",
+            "serve",
+            model_name,
+            "--tensor-parallel-size",
+            str(n_gpu),
+            "--max-model-len",
+            str(model_len),
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "8000",
+            "--swap-space",
+            "8",
+            "--gpu-memory-utilization",
+            str(gpu_memory_utilization),
+        ]
+        if enable_prefix_caching:
+            command.append("--enable-prefix-caching")
+
+        try:
+            process = subprocess.Popen(command)
+            print("Server launching...")
+            return process
+        except Exception as e:
+            print(f"Failed to launch server: {str(e)}")
+            return None
+
+    def wait_for_server2start(max_retries=60, delay=10, port=8000):
+        for _ in range(max_retries):
+            try:
+                response = requests.get(f"http://localhost:{port}/health")
+                if response.status_code == 200:
+                    print("Server is ready.")
+                    return True
+            except requests.exceptions.RequestException:
+                pass
+            time.sleep(delay)
+        print("Server failed to start in time.")
+        return False

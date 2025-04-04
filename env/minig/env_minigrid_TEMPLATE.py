@@ -7,6 +7,8 @@ from minigrid.minigrid_env import MiniGridEnv
 
 
 class AutoSuccessMGEnv(MiniGridEnv):
+    # SHOULD BE DONE : docstring
+    
     def __init__(
         self,
         size=10,
@@ -74,7 +76,7 @@ class AutoSuccessMGEnv(MiniGridEnv):
         if False:
             return super().step(action) # normal step
 
-        # OR MUST BE DONE :
+        # MUST BE DONE (note : super().step() does all 4):
         # 1. update t and check if t >= max_steps
         # 2. deals with action
         # 3. render if render_mode is "human"
@@ -93,6 +95,17 @@ class AutoSuccessMGEnv(MiniGridEnv):
         obs = self.gen_obs()
 
         return obs, reward, done, truncated, info
+
+    # CAN BE DONE : define an alternative action space to the default one
+    def get_new_action_space(self) -> spaces.Space:
+        return spaces.MultiDiscrete([self.width, self.height])
+
+    # CAN BE DONE : define a get_feedback function that add additional env-based feedback to F_i
+    def get_feedback(self):
+        if self.failure_reason is not None:
+            return {"failure_reason": self.failure_reason}
+        else:
+            return {}
 
 
 def main():

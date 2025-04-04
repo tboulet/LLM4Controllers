@@ -1,3 +1,4 @@
+# Python imports
 import enum
 import inspect
 import os
@@ -9,8 +10,16 @@ import imageio
 from matplotlib import pyplot as plt
 import numpy as np
 from typing import Callable, Tuple, Type, Union, Dict, Any, List, Optional
-
+# Minigrid imports
 from minigrid.minigrid_env import MiniGridEnv
+from minigrid.core.grid import Grid
+from minigrid.core.mission import MissionSpace
+from minigrid.core.actions import Actions
+from minigrid.manual_control import ManualControl
+from minigrid.wrappers import ObservationWrapper, ImgObsWrapper, FullyObsWrapper
+from minigrid.core.constants import IDX_TO_OBJECT, IDX_TO_COLOR, STATE_TO_IDX
+from minigrid.core.world_object import Goal, Lava, Wall, Key, Door
+# Env from minigrid
 from minigrid.envs.empty import EmptyEnv
 from minigrid.envs.gotoobject import GoToObjectEnv
 from minigrid.envs.crossing import CrossingEnv
@@ -34,21 +43,23 @@ from minigrid.envs.putnear import PutNearEnv
 from minigrid.envs.redbluedoors import RedBlueDoorEnv
 from minigrid.envs.unlock import UnlockEnv
 from minigrid.envs.unlockpickup import UnlockPickupEnv
-
+# Env from BabyAI
 from minigrid.envs.babyai.goto import GoToObj
 
-from .env_minigrid_autosuccess import AutoSuccessEnv
-from .env_minigrid_give_agent_position import GiveAgentPositionEnv
-from .env_minigrid_give_goal_position import GiveGoalPositionEnv
+from env.minig.env_minigrid_go_to_direction import GoTowardsDirection
+# Env customs
+from env.minig.env_minigrid_autosuccess import AutoSuccessEnv
+from env.minig.env_minigrid_give_agent_position import GiveAgentPositionEnv
+from env.minig.env_minigrid_give_goal_position import GiveGoalPositionEnv
 
-from minigrid.core.mission import MissionSpace
-from minigrid.core.actions import Actions
-from minigrid.wrappers import ObservationWrapper, ImgObsWrapper, FullyObsWrapper
-from minigrid.core.constants import IDX_TO_OBJECT, IDX_TO_COLOR, STATE_TO_IDX
-from minigrid.core.world_object import Goal, Lava, Wall, Key, Door
+# Minig imports
+from env.minig.utils import (
+    IDX_TO_STATE,
+    dict_actions,
+    dict_directions,
+)
 
-IDX_TO_STATE = {v: k for k, v in STATE_TO_IDX.items()}
-
+# Project imports
 from env.base_meta_env import BaseMetaEnv, Observation, InfoDict
 from core.task import Task, TaskRepresentation
 from core.spaces import FiniteSpace
@@ -56,27 +67,7 @@ from core.curriculums import CurriculumByLevels
 from core.types import ActionType
 
 
-dict_actions = {
-    "left": (
-        0,
-        "Turn the direction of the agent to the left (don't move in that direction)",
-    ),
-    "right": (
-        1,
-        "Turn the direction of the agent to the right (don't move in that direction)",
-    ),
-    "forward": (2, "Move one tile forward in the direction the agent is facing"),
-    "pickup": (
-        3,
-        "Pick up the object the agent is facing (if any) and add it to the agent's inventory",
-    ),
-    "drop": (
-        4,
-        "Drop the object from the agent's inventory (if any) in front of the agent",
-    ),
-    "toggle": (5, "Toggle/activate an object in front of the agent"),
-    "done": (6, "End the episode if the task is completed"),
-}
+
 
 
 class TaskMinigrid(Task):
@@ -134,9 +125,9 @@ class MinigridMetaEnv(BaseMetaEnv):
             #     },
             {
                 # Observation structure comprehension
-                lambda **kwargs: AutoSuccessEnv(size=self.size, **kwargs),
                 lambda **kwargs: GiveAgentPositionEnv(size=self.size, **kwargs),
                 lambda **kwargs: GiveGoalPositionEnv(size=self.size, **kwargs),
+                lambda **kwargs: GoTowardsDirection(size=self.size, direction = "up", **kwargs),
             },
             # TODO : navigation comprehension tasks (go south, go to, give shortest path, etc.)
             {
@@ -160,7 +151,9 @@ class MinigridMetaEnv(BaseMetaEnv):
             {
                 # Navigation tasks (hard)
                 lambda **kwargs: CrossingEnv(size=11, obstacle_type=Lava, **kwargs),
-                lambda **kwargs: DynamicObstaclesEnv(size=self.size, n_obstacles=4, **kwargs),
+                lambda **kwargs: DynamicObstaclesEnv(
+                    size=self.size, n_obstacles=4, **kwargs
+                ),
                 lambda **kwargs: LavaGapEnv(size=5, **kwargs),
                 lambda **kwargs: MultiRoomEnv(minNumRooms=3, maxNumRooms=3, **kwargs),
             },
@@ -168,7 +161,7 @@ class MinigridMetaEnv(BaseMetaEnv):
                 # Simple manipulative tasks (1 step)
                 lambda **kwargs: FetchEnv(size=self.size, numObjs=3, **kwargs),
                 lambda **kwargs: UnlockEnv(**kwargs),
-                },
+            },
             {
                 # Medium manipulative tasks (2-3 steps)
                 lambda **kwargs: UnlockPickupEnv(**kwargs),
@@ -186,7 +179,7 @@ class MinigridMetaEnv(BaseMetaEnv):
                 lambda **kwargs: LockedRoomEnv(size=19, **kwargs),
                 lambda **kwargs: ObstructedMaze_Full(**kwargs),
                 lambda **kwargs: ObstructedMaze_Full_V1(**kwargs),
-                },
+            },
         ]
         levels = [
             {TaskMinigrid(creator_env_mg_func) for creator_env_mg_func in level}
@@ -219,9 +212,9 @@ However, some tasks will ask you to return an action of a different type (e.g. a
 In any case, the action space (and observation space) is given to you during the task description.
 
 Observations: The observation is a dictionary with the following keys:
-- direction: the direction the agent is facing (0: up, 1: right, 2: down, 3: left)
-- image: the map of the environment as a 3D numpy array of shape (viewsize, viewsize, 3). The channels represent the encoding of the object at position (i,j) in the environment (object type, color, state). The environment is fully observable and the camera position and orientation are fixed (centered on the environment and facing up).
-- mission: the mission string describing the task to be accomplished (e.g. "go to the green ball"). This should be the same as the task you will receive later so don't pay attention to it.
+- direction (int) : the direction the agent is facing : {dict_directions}
+- image (nd.array) : the map of the environment as a 3D numpy array of shape (viewsize, viewsize, 3). The channels represent the encoding of the object at position (i,j) in the environment (object type, color, state). The environment is fully observable and the camera position and orientation are fixed (centered on the environment and facing up).
+- mission (str) : the mission string describing the task to be accomplished (e.g. "go to the green ball"). This should be the same as the task you will receive later so don't pay attention to it.
 
 The mapping from object type integer to object type string is as follows: {IDX_TO_OBJECT}.
 The mapping from color integer to color string is as follows: {IDX_TO_COLOR}.
@@ -266,7 +259,7 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
         obs, info = self.env_mg.reset()
         # Create the task representation
         task_representation = TaskRepresentation(
-            name = f"{task} - Mission : {self.env_mg.unwrapped.mission}", # GoToObj() - Mission : go to the green ball
+            name=f"{task} - Mission : {self.env_mg.unwrapped.mission}",  # GoToObj() - Mission : go to the green ball
             description=self.env_mg.unwrapped.__doc__,  # go to the green ball using your navigation skills
             observation_space=self.env_mg.observation_space,  # gym.space object
             action_space=self.env_mg.action_space,  # gym.space object

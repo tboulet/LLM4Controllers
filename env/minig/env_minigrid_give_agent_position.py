@@ -70,11 +70,11 @@ class GiveAgentPositionEnv(MiniGridEnv):
 
         x, y = action
         x_true, y_true = self.agent_pos
-        if x == x_true and y == y_true:
+        if (x, y) == (x_true, y_true):
             reward = 1
         else:
             reward = 0
-            self.failure_reason = "The agent is not at the given position."
+            self.failure_reason = f"The agent given position ({x}, {y}) is not the true position ({x_true}, {y_true})"
         truncated = True
         done = True
         info = {}

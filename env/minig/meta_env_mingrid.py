@@ -115,6 +115,7 @@ class MinigridMetaEnv(BaseMetaEnv):
         self.size = config.get("size", 10)
         self.render_mode = config.get("render_mode", None)
         self.render_mode_eval = config.get("render_mode_eval", None)
+        self.log_dir = config["config_logs"]["log_dir"]
         # Define other parameters
         self.t = 0
         # Define the curriculum
@@ -127,7 +128,7 @@ class MinigridMetaEnv(BaseMetaEnv):
                 # Observation structure comprehension
                 lambda **kwargs: GiveAgentPositionEnv(size=self.size, **kwargs),
                 lambda **kwargs: GiveGoalPositionEnv(size=self.size, **kwargs),
-                lambda **kwargs: GoTowardsDirection(size=self.size, direction = "up", **kwargs),
+                # lambda **kwargs: GoTowardsDirection(size=self.size, direction = "up", **kwargs),
             },
             # TODO : navigation comprehension tasks (go south, go to, give shortest path, etc.)
             {
@@ -232,12 +233,15 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
         if self.render_mode == "rgb_array":
             self.video_frames: List[np.ndarray] = []
         config_logs = self.config["config_logs"]
-        log_dir = config_logs["log_dir"]
-        self.list_run_names = []
+        self.list_log_dirs_global = []
         if config_logs["do_log_on_new"]:
-            self.list_run_names.append(self.config["run_name"])
+            self.list_log_dirs_global.append(
+                os.path.join(self.log_dir, self.config["run_name"])
+            )
         if config_logs["do_log_on_last"]:
-            self.list_run_names.append("_last")
+            self.list_log_dirs_global.append(
+                os.path.join(self.log_dir, "last")
+            )
         # Select a task
         task = self.curriculum.sample()
         # Instancialize the minigrid environment
@@ -314,10 +318,8 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
         self.env_mg.close()
         # Save the video if any
         if self.render_mode == "rgb_array":
-            config_logs = self.config["config_logs"]
-            log_dir = config_logs["log_dir"]
-            for run_name in self.list_run_names:
-                path_task_t = os.path.join(log_dir, run_name, f"task_{self.t}")
+            for log_dir_global in self.list_log_dirs_global:
+                path_task_t = os.path.join(log_dir_global, f"task_{self.t}")
                 os.makedirs(path_task_t, exist_ok=True)
                 path_task_t_video = os.path.join(path_task_t, "video.mp4")
                 imageio.mimwrite(path_task_t_video, self.video_frames, fps=10)

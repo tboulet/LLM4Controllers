@@ -1,0 +1,2 @@
+/var/spool/slurmd/job2021277/slurm_script: line 20: limit: command not found
+slurmstepd: error: *** JOB 2021277 ON jzxh008 CANCELLED AT 2025-04-04T18:43:40 DUE TO TIME LIMIT ***

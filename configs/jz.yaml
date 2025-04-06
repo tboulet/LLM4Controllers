@@ -4,6 +4,7 @@ n_training_episodes: 10
 n_eval_episodes: 0
 
 # Logging
+# log_dir : /scratch/rech/genluq01/upb99ot/logs_llm4code
 log_dir : logs
 do_wandb : False
 wandb_config:

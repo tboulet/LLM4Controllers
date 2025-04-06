@@ -1,0 +1,547 @@
+/var/spool/slurmd/job2047139/slurm_script: line 20: limit: command not found
+Configuration used :
+n_episodes: 100
+n_training_episodes: 10
+n_eval_episodes: 0
+log_dir: logs
+do_wandb: false
+wandb_config:
+  project: wandb_project_example
+  entity: wandb_entity_example
+do_tb: true
+do_cli: true
+do_tqdm: true
+env:
+  name: Minigrid
+  config:
+    viewsize: 7
+    render_mode: rgb_array
+    render_mode_eval: human
+    config_logs:
+      log_dir: ${log_dir}
+      do_log_on_new: true
+      do_log_on_last: true
+agent:
+  name: Random
+  config: {}
+llm:
+  name: FromAPI
+  api_key_name: OPENAI_API_KEY
+  model: gpt-4o-mini
+  config:
+    client:
+      _target_: openai.OpenAI
+      api_key: ${env_variable:'${llm.api_key_name}'}
+    model: ${llm.model}
+    kwargs:
+      top_p: 0.9
+
+Using seed: 154
+Creating the dataset...
+Creating the agent...
+
+Starting run Random_Minigrid_06th04mo_01h58min48s_seed154 ...
+  0%|          | 0/100 [00:00<?, ?it/s]Episode 0/100:   0%|          | 0/100 [00:00<?, ?it/s]Episode 0/100:   0%|          | 0/100 [00:00<?, ?it/s]Episode 0/100:   0%|          | 0/100 [00:00<?, ?it/s]Episode 0/100:   1%|          | 1/100 [00:00<00:30,  3.27it/s]Episode 1/100:   1%|          | 1/100 [00:00<00:30,  3.27it/s]Episode 2/100:   2%|▏         | 2/100 [00:01<00:29,  3.27it/s]Episode 2/100:   3%|▎         | 3/100 [00:01<00:14,  6.58it/s]Episode 3/100:   3%|▎         | 3/100 [00:01<00:14,  6.58it/s]Episode 3/100:   4%|▍         | 4/100 [00:01<00:18,  5.09it/s]Episode 4/100:   4%|▍         | 4/100 [00:01<00:18,  5.09it/s]Episode 5/100:   5%|▌         | 5/100 [00:01<00:18,  5.09it/s]Episode 5/100:   6%|▌         | 6/100 [00:01<00:13,  6.77it/s]Episode 6/100:   6%|▌         | 6/100 [00:01<00:13,  6.77it/s]Episode 7/100:   7%|▋         | 7/100 [00:01<00:13,  6.77it/s]Episode 7/100:   8%|▊         | 8/100 [00:01<00:11,  7.89it/s]Episode 8/100:   8%|▊         | 8/100 [00:01<00:11,  7.89it/s]Episode 9/100:   9%|▉         | 9/100 [00:01<00:11,  7.89it/s]Episode 9/100:  10%|█         | 10/100 [00:02<00:10,  8.57it/s]Episode 10/100:  10%|█         | 10/100 [00:02<00:10,  8.57it/s]Episode 11/100:  11%|█         | 11/100 [00:02<00:10,  8.57it/s]Episode 11/100:  12%|█▏        | 12/100 [00:02<00:09,  9.09it/s]Episode 12/100:  12%|█▏        | 12/100 [00:02<00:09,  9.09it/s]Episode 13/100:  13%|█▎        | 13/100 [00:02<00:09,  9.09it/s]Episode 13/100:  14%|█▍        | 14/100 [00:02<00:09,  9.48it/s]Episode 14/100:  14%|█▍        | 14/100 [00:02<00:09,  9.48it/s]Episode 15/100:  15%|█▌        | 15/100 [00:02<00:08,  9.48it/s]Episode 15/100:  16%|█▌        | 16/100 [00:02<00:08,  9.73it/s]Episode 16/100:  16%|█▌        | 16/100 [00:02<00:08,  9.73it/s]Episode 17/100:  17%|█▋        | 17/100 [00:02<00:08,  9.73it/s]Episode 17/100:  18%|█▊        | 18/100 [00:02<00:08,  9.90it/s]Episode 18/100:  18%|█▊        | 18/100 [00:02<00:08,  9.90it/s]Episode 19/100:  19%|█▉        | 19/100 [00:02<00:08,  9.90it/s]Episode 19/100:  20%|██        | 20/100 [00:03<00:10,  7.85it/s]Episode 20/100:  20%|██        | 20/100 [00:03<00:10,  7.85it/s]Episode 21/100:  21%|██        | 21/100 [00:03<00:10,  7.85it/s]Episode 21/100:  22%|██▏       | 22/100 [00:03<00:09,  8.47it/s]Episode 22/100:  22%|██▏       | 22/100 [00:03<00:09,  8.47it/s]Episode 23/100:  23%|██▎       | 23/100 [00:03<00:09,  8.47it/s]Episode 23/100:  24%|██▍       | 24/100 [00:03<00:09,  8.37it/s]Episode 24/100:  24%|██▍       | 24/100 [00:03<00:09,  8.37it/s]Episode 24/100:  25%|██▌       | 25/100 [00:03<00:08,  8.49it/s]Episode 25/100:  25%|██▌       | 25/100 [00:03<00:08,  8.49it/s]Episode 26/100:  26%|██▌       | 26/100 [00:03<00:08,  8.49it/s]Episode 26/100:  27%|██▋       | 27/100 [00:03<00:08,  9.02it/s]Episode 27/100:  27%|██▋       | 27/100 [00:03<00:08,  9.02it/s]Episode 28/100:  28%|██▊       | 28/100 [00:04<00:07,  9.02it/s]Episode 28/100:  29%|██▉       | 29/100 [00:04<00:07,  9.40it/s]Episode 29/100:  29%|██▉       | 29/100 [00:04<00:07,  9.40it/s]Episode 30/100:  30%|███       | 30/100 [00:04<00:07,  9.40it/s]Episode 30/100:  31%|███       | 31/100 [00:04<00:07,  9.67it/s]Episode 31/100:  31%|███       | 31/100 [00:04<00:07,  9.67it/s]Episode 32/100:  32%|███▏      | 32/100 [00:04<00:07,  9.67it/s]Episode 32/100:  33%|███▎      | 33/100 [00:04<00:07,  9.32it/s]Episode 33/100:  33%|███▎      | 33/100 [00:04<00:07,  9.32it/s]Episode 34/100:  34%|███▍      | 34/100 [00:04<00:07,  9.32it/s]Episode 34/100:  35%|███▌      | 35/100 [00:04<00:06,  9.59it/s]Episode 35/100:  35%|███▌      | 35/100 [00:04<00:06,  9.59it/s]Episode 36/100:  36%|███▌      | 36/100 [00:04<00:06,  9.59it/s]Episode 36/100:  37%|███▋      | 37/100 [00:04<00:06,  9.81it/s]Episode 37/100:  37%|███▋      | 37/100 [00:04<00:06,  9.81it/s]Episode 38/100:  38%|███▊      | 38/100 [00:05<00:06,  9.81it/s]Episode 38/100:  39%|███▉      | 39/100 [00:05<00:06,  9.94it/s]Episode 39/100:  39%|███▉      | 39/100 [00:05<00:06,  9.94it/s]Episode 40/100:  40%|████      | 40/100 [00:05<00:06,  9.94it/s]Episode 40/100:  41%|████      | 41/100 [00:05<00:05, 10.05it/s]Episode 41/100:  41%|████      | 41/100 [00:05<00:05, 10.05it/s]Episode 42/100:  42%|████▏     | 42/100 [00:05<00:05, 10.05it/s]Episode 42/100:  43%|████▎     | 43/100 [00:05<00:05, 10.10it/s]Episode 43/100:  43%|████▎     | 43/100 [00:05<00:05, 10.10it/s]Episode 44/100:  44%|████▍     | 44/100 [00:05<00:05, 10.10it/s]Episode 44/100:  45%|████▌     | 45/100 [00:05<00:05, 10.14it/s]Episode 45/100:  45%|████▌     | 45/100 [00:05<00:05, 10.14it/s]Episode 46/100:  46%|████▌     | 46/100 [00:05<00:05, 10.14it/s]Episode 46/100:  47%|████▋     | 47/100 [00:05<00:05, 10.18it/s]Episode 47/100:  47%|████▋     | 47/100 [00:05<00:05, 10.18it/s]Episode 48/100:  48%|████▊     | 48/100 [00:06<00:05, 10.18it/s]Episode 48/100:  49%|████▉     | 49/100 [00:06<00:05,  9.82it/s]Episode 49/100:  49%|████▉     | 49/100 [00:06<00:05,  9.82it/s]Episode 50/100:  50%|█████     | 50/100 [00:06<00:05,  9.82it/s]Episode 50/100:  51%|█████     | 51/100 [00:06<00:04,  9.96it/s]Episode 51/100:  51%|█████     | 51/100 [00:06<00:04,  9.96it/s]Episode 52/100:  52%|█████▏    | 52/100 [00:06<00:04,  9.96it/s]Episode 52/100:  53%|█████▎    | 53/100 [00:06<00:04, 10.10it/s]Episode 53/100:  53%|█████▎    | 53/100 [00:06<00:04, 10.10it/s]Episode 54/100:  54%|█████▍    | 54/100 [00:06<00:04, 10.10it/s]Episode 54/100:  55%|█████▌    | 55/100 [00:06<00:04, 10.15it/s]Episode 55/100:  55%|█████▌    | 55/100 [00:06<00:04, 10.15it/s]Episode 56/100:  56%|█████▌    | 56/100 [00:06<00:04, 10.15it/s]Episode 56/100:  57%|█████▋    | 57/100 [00:06<00:04, 10.21it/s]Episode 57/100:  57%|█████▋    | 57/100 [00:06<00:04, 10.21it/s]Episode 58/100:  58%|█████▊    | 58/100 [00:07<00:04, 10.21it/s]Episode 58/100:  59%|█████▉    | 59/100 [00:07<00:04, 10.25it/s]Episode 59/100:  59%|█████▉    | 59/100 [00:07<00:04, 10.25it/s]Episode 60/100:  60%|██████    | 60/100 [00:07<00:03, 10.25it/s]Episode 60/100:  61%|██████    | 61/100 [00:07<00:03, 10.25it/s]Episode 61/100:  61%|██████    | 61/100 [00:07<00:03, 10.25it/s]Episode 62/100:  62%|██████▏   | 62/100 [00:07<00:03, 10.25it/s]Episode 62/100:  63%|██████▎   | 63/100 [00:07<00:03,  9.98it/s]Episode 63/100:  63%|██████▎   | 63/100 [00:07<00:03,  9.98it/s]Episode 64/100:  64%|██████▍   | 64/100 [00:07<00:03,  9.98it/s]Episode 64/100:  65%|██████▌   | 65/100 [00:07<00:03, 10.09it/s]Episode 65/100:  65%|██████▌   | 65/100 [00:07<00:03, 10.09it/s]Episode 66/100:  66%|██████▌   | 66/100 [00:07<00:03, 10.09it/s]Episode 66/100:  67%|██████▋   | 67/100 [00:07<00:03, 10.15it/s]Episode 67/100:  67%|██████▋   | 67/100 [00:07<00:03, 10.15it/s]Episode 68/100:  68%|██████▊   | 68/100 [00:07<00:03, 10.15it/s]Episode 68/100:  69%|██████▉   | 69/100 [00:08<00:03, 10.18it/s]Episode 69/100:  69%|██████▉   | 69/100 [00:08<00:03, 10.18it/s]Episode 70/100:  70%|███████   | 70/100 [00:08<00:02, 10.18it/s]Episode 70/100:  71%|███████   | 71/100 [00:08<00:02, 10.17it/s]Episode 71/100:  71%|███████   | 71/100 [00:08<00:02, 10.17it/s]Episode 72/100:  72%|███████▏  | 72/100 [00:08<00:02, 10.17it/s]Episode 72/100:  73%|███████▎  | 73/100 [00:08<00:02,  9.93it/s]Episode 73/100:  73%|███████▎  | 73/100 [00:08<00:02,  9.93it/s]Episode 74/100:  74%|███████▍  | 74/100 [00:08<00:02,  9.93it/s]Episode 74/100:  75%|███████▌  | 75/100 [00:08<00:02, 10.04it/s]Episode 75/100:  75%|███████▌  | 75/100 [00:08<00:02, 10.04it/s]Episode 76/100:  76%|███████▌  | 76/100 [00:08<00:02, 10.04it/s]Episode 76/100:  77%|███████▋  | 77/100 [00:08<00:02, 10.09it/s]Episode 77/100:  77%|███████▋  | 77/100 [00:08<00:02, 10.09it/s]Episode 78/100:  78%|███████▊  | 78/100 [00:08<00:02, 10.09it/s]Episode 78/100:  79%|███████▉  | 79/100 [00:09<00:02,  9.98it/s]Episode 79/100:  79%|███████▉  | 79/100 [00:09<00:02,  9.98it/s]Episode 79/100:  80%|████████  | 80/100 [00:09<00:02,  9.89it/s]Episode 80/100:  80%|████████  | 80/100 [00:09<00:02,  9.89it/s]Episode 81/100:  81%|████████  | 81/100 [00:09<00:01,  9.89it/s]Episode 81/100:  82%|████████▏ | 82/100 [00:09<00:01, 10.01it/s]Episode 82/100:  82%|████████▏ | 82/100 [00:09<00:01, 10.01it/s]Episode 83/100:  83%|████████▎ | 83/100 [00:09<00:01, 10.01it/s]Episode 83/100:  84%|████████▍ | 84/100 [00:09<00:01, 10.09it/s]Episode 84/100:  84%|████████▍ | 84/100 [00:09<00:01, 10.09it/s]Episode 85/100:  85%|████████▌ | 85/100 [00:09<00:01, 10.09it/s]Episode 85/100:  86%|████████▌ | 86/100 [00:09<00:01, 10.16it/s]Episode 86/100:  86%|████████▌ | 86/100 [00:09<00:01, 10.16it/s]Episode 87/100:  87%|████████▋ | 87/100 [00:09<00:01, 10.16it/s]Episode 87/100:  88%|████████▊ | 88/100 [00:09<00:01, 10.18it/s]Episode 88/100:  88%|████████▊ | 88/100 [00:09<00:01, 10.18it/s]Episode 89/100:  89%|████████▉ | 89/100 [00:10<00:01, 10.18it/s]Episode 89/100:  90%|█████████ | 90/100 [00:10<00:00, 10.03it/s]Episode 90/100:  90%|█████████ | 90/100 [00:10<00:00, 10.03it/s]Episode 91/100:  91%|█████████ | 91/100 [00:10<00:00, 10.03it/s]Episode 91/100:  92%|█████████▏| 92/100 [00:10<00:00, 10.11it/s]Episode 92/100:  92%|█████████▏| 92/100 [00:10<00:00, 10.11it/s]Episode 93/100:  93%|█████████▎| 93/100 [00:10<00:00, 10.11it/s]Episode 93/100:  94%|█████████▍| 94/100 [00:10<00:00,  9.87it/s]Episode 94/100:  94%|█████████▍| 94/100 [00:10<00:00,  9.87it/s]Episode 95/100:  95%|█████████▌| 95/100 [00:10<00:00,  9.87it/s]Episode 95/100:  96%|█████████▌| 96/100 [00:10<00:00,  9.98it/s]Episode 96/100:  96%|█████████▌| 96/100 [00:10<00:00,  9.98it/s]Episode 96/100:  97%|█████████▋| 97/100 [00:10<00:00,  9.78it/s]Episode 97/100:  97%|█████████▋| 97/100 [00:10<00:00,  9.78it/s]Episode 98/100:  98%|█████████▊| 98/100 [00:11<00:00,  9.78it/s]Episode 98/100:  99%|█████████▉| 99/100 [00:11<00:00,  9.92it/s]Episode 99/100:  99%|█████████▉| 99/100 [00:11<00:00,  9.92it/s]Episode 99/100:  99%|█████████▉| 99/100 [00:11<00:00,  8.92it/s]
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 0 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 1 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 2 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 3 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 4 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 5 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 6 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 7 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 8 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 9 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 10 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 11 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 12 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 13 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 14 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 15 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 16 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 17 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 18 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 19 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 20 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 21 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 22 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 23 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 24 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 25 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 26 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 27 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 28 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 29 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 30 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 31 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 32 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 33 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 34 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 35 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 36 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 37 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 38 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 39 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 40 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 41 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 42 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 43 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 44 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 45 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 46 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 47 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 48 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 49 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 50 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 51 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 52 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 53 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 54 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 55 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 56 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 57 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 58 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 59 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 60 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 61 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 62 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 63 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 64 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 65 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 66 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 67 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 68 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 69 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 70 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 71 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 72 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 73 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 74 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 75 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 76 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 77 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 78 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 79 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 80 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 81 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 82 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 83 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 84 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 85 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 86 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 87 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 88 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 89 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 90 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 91 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 92 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 93 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 94 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveAgentPositionEnv(size=self.size)
+Step 95 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 96 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 97 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 98 :
+	success : 0
+	reward : 0
+
+[CURRICULUM] Sampled objective: GiveGoalPositionEnv(size=self.size)
+Step 99 :
+	success : 0
+	reward : 0
+
+Profile stats dumped to profile_stats.prof
+You can visualize the profile stats using snakeviz by running 'snakeviz logs/profile_stats.prof'

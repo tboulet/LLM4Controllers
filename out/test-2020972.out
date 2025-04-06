@@ -1,0 +1,56 @@
+/var/spool/slurmd/job2020972/slurm_script: line 20: limit: command not found
+Configuration used :
+n_episodes: 100
+n_training_episodes: 10
+n_eval_episodes: 0
+do_wandb: false
+wandb_config:
+  project: wandb_project_example
+  entity: wandb_entity_example
+do_tb: true
+do_cli: true
+do_tqdm: true
+env:
+  name: Minigrid
+  config:
+    viewsize: 7
+    render_mode: rgb_array
+    render_mode_eval: human
+    config_logs:
+      log_dir: logs
+      do_log_on_new: true
+      do_log_on_last: true
+agent:
+  name: Random
+  config: {}
+llm:
+  name: FromAPI
+  api_key_name: OPENAI_API_KEY
+  model: gpt-4o-mini
+  config:
+    client:
+      _target_: openai.OpenAI
+      api_key: ${env_variable:'${llm.api_key_name}'}
+    model: ${llm.model}
+    kwargs:
+      top_p: 0.9
+
+Using seed: 687
+Creating the dataset...
+Creating the agent...
+
+Starting run Random_Minigrid_04th04mo_16h37min26s_seed687 ...
+  0%|          | 0/100 [00:00<?, ?it/s]Episode 0/100:   0%|          | 0/100 [00:00<?, ?it/s]Error executing job with overrides: ['agent=random']
+Traceback (most recent call last):
+  File "/lustre/fswork/projects/rech/imi/upb99ot/LLM4Controllers/run.py", line 161, in main
+    feedback.update(env.get_feedback()) # add environment feedback to feedback
+  File "/lustre/fswork/projects/rech/imi/upb99ot/LLM4Controllers/env/minig/meta_env_mingrid.py", line 377, in get_feedback
+    return self.env_mg.unwrapped.get_feedback()
+  File "/lustre/fswork/projects/rech/imi/upb99ot/LLM4Controllers/env/minig/env_minigrid_go_to_direction.py", line 115, in get_feedback
+    if self.failure_reason is not None:
+AttributeError: 'GoTowardsDirection' object has no attribute 'failure_reason'
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+
+[CURRICULUM] Sampled objective: GoTowardsDirection(size=self.size)
+Episode 0/100:   0%|          | 0/100 [00:01<?, ?it/s]

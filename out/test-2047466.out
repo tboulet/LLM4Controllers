@@ -1,0 +1,12 @@
+/var/spool/slurmd/job2047466/slurm_script: line 20: limit: command not found
+Traceback (most recent call last):
+  File "/lustre/fswork/projects/rech/imi/upb99ot/LLM4Controllers/run.py", line 34, in <module>
+    from env import env_name_to_MetaEnvClass
+  File "/lustre/fswork/projects/rech/imi/upb99ot/LLM4Controllers/env/__init__.py", line 3, in <module>
+    from env.minig import MinigridMetaEnv
+  File "/lustre/fswork/projects/rech/imi/upb99ot/LLM4Controllers/env/minig/__init__.py", line 1, in <module>
+    from .meta_env_mingrid import MinigridMetaEnv
+  File "/lustre/fswork/projects/rech/imi/upb99ot/LLM4Controllers/env/minig/meta_env_mingrid.py", line 240
+    task = self.curriculum.sample()
+    ^^^^
+IndentationError: expected an indented block after 'if' statement on line 237

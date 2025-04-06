@@ -38,7 +38,7 @@ config:
     
   config_logs:
     # The directory to save logs to.
-    log_dir: logs
+    log_dir: ${log_dir}
     # Whether to log the run on log_dir/<run name>
     do_log_on_new: False
     # Whether to log the run on log_dir/_last

@@ -34,25 +34,25 @@ from env.minig.utils import (
 
 
 
-class GoTowardsDirection(MiniGridEnv):
+class MoveToPosition(MiniGridEnv):
     def __init__(
         self,
-        direction: str,
+        position: Tuple[int, int],
         size=10,
         max_steps: Optional[int] = None,
         **kwargs,
     ):
         # Optional things implemented here
-        self.direction_target = direction
-        if self.direction_target == "random":
-            self.direction_target = random.choice(list(dict_directions.keys()))
+        self.position_target = position
+        if self.position_target == "random":
+            self.position_target = np.random.randint(low=1, high=size - 1, size=2)
         self.size = size
         if max_steps is None:
             max_steps = 4 * size**2
 
         # MUST BE DONE : create mission space
         mission_space = MissionSpace(
-            mission_func=lambda : f"go towards direction {self.direction_target}",
+            mission_func=lambda : f"go at position {self.position_target}",
         )
 
         super().__init__(
@@ -63,10 +63,6 @@ class GoTowardsDirection(MiniGridEnv):
             max_steps=max_steps,
             **kwargs,
         )
-
-    # @staticmethod
-    def _gen_mission(self):
-        return f"go towards direction {self.direction_target}"
 
     def _gen_grid(self, width, height):
         # Create an empty grid
@@ -80,7 +76,7 @@ class GoTowardsDirection(MiniGridEnv):
         )  # important to avoid falling in void I think
 
         # Place the agent
-        self.agent_pos = np.random.randint(2, self.size - 2, size=2)
+        self.agent_pos = np.random.randint(1, self.size - 2, size=2)
         self.agent_dir = np.random.randint(0, 4)
 
     def step(self, action):
@@ -97,30 +93,15 @@ class GoTowardsDirection(MiniGridEnv):
         
         # Check if the agent reached any of the direction
         x, y = self.agent_pos
-        if x in [1, self.size - 2] or y in [1, self.size - 2]:
+        if x == self.position_target[0] and y == self.position_target[1]:
             done = True
-            if (
-                self.direction_target == "left" and x == 1
-                or self.direction_target == "right" and x == self.size - 2
-                or self.direction_target == "up" and y == 1
-                or self.direction_target == "down" and y == self.size - 2
-            ):
-                reward = self._reward()
-            else:
-                reward = 0
-                self.failure_reason = f"The agent went to a wrong direction, and not to {self.direction_target}."
-        
+            reward = self._reward()
+                    
         return obs, reward, done, truncated, info
-
-    def get_feedback(self):
-        if hasattr(self, "failure_reason"):
-            return {"failure_reason": self.failure_reason}
-        else:
-            return {}
 
 
 def main():
-    env = GoTowardsDirection("up", render_mode="human")
+    env = MoveToPosition("up", render_mode="human")
 
     # enable manual control for testing
     manual_control = ManualControl(env, seed=42)

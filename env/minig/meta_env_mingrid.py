@@ -46,11 +46,12 @@ from minigrid.envs.unlockpickup import UnlockPickupEnv
 # Env from BabyAI
 from minigrid.envs.babyai.goto import GoToObj
 
-from env.minig.env_minigrid_go_to_direction import GoTowardsDirection
 # Env customs
 from env.minig.env_minigrid_autosuccess import AutoSuccessEnv
 from env.minig.env_minigrid_give_agent_position import GiveAgentPositionEnv
 from env.minig.env_minigrid_give_goal_position import GiveGoalPositionEnv
+from env.minig.env_minigrid_go_to_direction import GoTowardsDirection
+from env.minig.env_minigrid_go_to_position import MoveToPosition
 
 # Minig imports
 from env.minig.utils import (
@@ -91,11 +92,10 @@ class TaskMinigrid(Task):
                 class_name = "<unknown>"
 
             # Extract key-value arguments if present
-            kwargs_match = re.findall(r"(\w+)\s*=\s*([\w./]+)", source)
+            kwargs_match = re.findall(r"(\w+)\s*=\s*([\"']?[\w./]+[\"']?)", source)
             kwargs_repr = ", ".join(
                 f"{k}={v}" for k, v in kwargs_match if k != "kwargs"
             )  # Ignore **kwargs
-
             return f"{class_name}({kwargs_repr})"
         except Exception:
             raise ValueError(
@@ -120,17 +120,19 @@ class MinigridMetaEnv(BaseMetaEnv):
         self.t = 0
         # Define the curriculum
         levels = [
+            
             # {
             #     # For testing envs
             #     lambda **kwargs: GoToObj(room_size=self.size, **kwargs),
-            #     },
+            # },
+            
             {
-                # Observation structure comprehension
-                lambda **kwargs: GiveAgentPositionEnv(size=self.size, **kwargs),
-                lambda **kwargs: GiveGoalPositionEnv(size=self.size, **kwargs),
-                # lambda **kwargs: GoTowardsDirection(size=self.size, direction = "up", **kwargs),
+                # Observation structure comprehension and navigation comprehension tasks
+                lambda **kwargs: GoTowardsDirection(size=self.size, direction = "up", **kwargs),
+                lambda **kwargs: GoTowardsDirection(size=self.size, direction = "random", **kwargs),
+                lambda **kwargs: MoveToPosition(size=self.size, position = (3, 3), **kwargs),
+                lambda **kwargs: MoveToPosition(size=self.size, position = "random", **kwargs),
             },
-            # TODO : navigation comprehension tasks (go south, go to, give shortest path, etc.)
             {
                 # Navigation tasks (minimalistic)
                 lambda **kwargs: EmptyEnv(size=self.size, **kwargs),

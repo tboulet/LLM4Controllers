@@ -1,10 +1,23 @@
-
-        if config_logs["do_log_on_new"]:
-            self.list_log_dirs_global.append(os.path.join(log_dir, config["run_name"]))
-        if config_logs["do_log_on_last"]:
-            self.list_log_dirs_global.append(os.path.join(log_dir, "last"))
+import json
+import os
+import re
+import shutil
+from typing import Dict, List, Optional
+import numpy as np
+from openai import OpenAI
+from agent.base_agent import BaseAgent, Controller
+from agent.llm_hcg.graph_viz import ControllerVisualizer
+from agent.llm_hcg.library_controller import ControllerLibrary
+from agent.llm_hcg.demo_bank import DemoBank, TransitionData
+from core.task import TaskRepresentation
+from core.utils import get_error_info
+from env.base_meta_env import BaseMetaEnv, Observation, ActionType, InfoDict
+from abc import ABC, abstractmethod
+import enum
+import random
+from typing import Any, Dict, Tuple, Union
+from hydra.utils import instantiate
 from llm import llm_name_to_LLMClass
-
 
 class LLMBasedHCG(BaseAgent):
 

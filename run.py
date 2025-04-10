@@ -24,7 +24,8 @@ import transformers
 
 # Project imports
 from agent.base_controller import Controller
-from core.feedback_aggregator import FeedbackAggregator
+from core.error_trace import ErrorTrace
+from core.feedback_aggregator import FeedbackAggregated
 from core.loggers.cli import LoggerCLI
 from core.loggers.multi_logger import MultiLogger
 from core.loggers.tensorboard import LoggerTensorboard
@@ -119,23 +120,23 @@ def main(config: DictConfig):
             is_eval = True
         else:
             is_eval = False
-        # Get the task
+        # Get the task and its description
         task = env.get_task()
         task_description = task.get_description()
 
         # Ask the agent to generate a controller for the task
         controller = agent.get_controller(task_description)
 
+        # Play the controller in the task
         def play_controller_in_task(
             controller: Controller,
             task: Task,
             n_episodes: int,
             is_eval: bool,
-        ) -> Dict[str, Any]:
-            pass
+        ) -> FeedbackAggregated:
             """Play the controller in the task for n_episodes episodes and return the feedback."""
             # Initialize the feedback
-            feedback = FeedbackAggregator()
+            feedback_agg = FeedbackAggregated()
             for k in range(n_episodes):
                 # Reset the environment
                 obs, info = task.reset(is_eval=is_eval)
@@ -150,24 +151,14 @@ def main(config: DictConfig):
                         action = controller.act(obs)
                     except Exception as e:
                         full_error_info = get_error_info(e)
-                        info = {
-                            "error": {
-                                "type": "controller_act_error",
-                                "message": f"An error occured during the act method of the controller. Full error info :\n{full_error_info}",
-                            }
-                        }
-                        obs, reward, done, truncated = (
-                            None,
-                            0,
-                            False,
-                            True,
-                        )
-                        print(f"ERROR WARNING : {info['error']}")
+                        error_message = f"An error occured during the act method of the controller. Full error info : {full_error_info}"
+                        info = {"Error": ErrorTrace(error_message)}
+                        obs, reward, done, truncated = None, 0, False, True
                         break
                     # Step in the environment
                     obs, reward, done, truncated, info = task.step(action)
-                    if "error" in info:
-                        print(f"ERROR WARNING : {info['error']}")
+                    if "Error" in info:
+                        print(f"ERROR WARNING : {info['Error']}")
                         break
                     # Render and log
                     task.render()
@@ -183,28 +174,28 @@ def main(config: DictConfig):
                     "success": reward > 0,
                     "reward": reward,
                 }
-                if "error" in info:  # add error info to feedback
-                    feedback["error"] = info["error"]
-        
-        
+                if "Error" in info:  # add error info to feedback
+                    feedback["Error"] = info["Error"]
+
                 feedback.update(env_feedback)  # add environment feedback to feedback
-        
-        
-        agent.update(task_description, controller, feedback)
 
-        # Update the MetaEnv
-        env.update(task, feedback)
+                # Add feedback to the feedback aggregator
+                feedback_agg.add_feedback(feedback)
 
-        # Log the episode
-        metrics = {
-            "success": int(feedback["success"]),
-            "reward": feedback["reward"],
-            f"success_task({task})": int(feedback["success"]),
-            f"reward_task({task})": feedback["reward"],
-        }
-        if "error" in feedback:
-            error_type = feedback["error"]["type"]
-            metrics[f"error_{error_type}"] = 1.0
+            return feedback_agg
+
+        feedback_agg = play_controller_in_task(
+            controller, task, n_episodes=n_episodes_per_step, is_eval=is_eval
+        )
+        feedback_agg.aggregate()
+
+        # Update the agent and the MetaEnv
+        agent.update(task, task_description, controller, feedback_agg)
+        env.update(task, feedback_agg)
+
+        # Log the metrics
+        metrics = feedback_agg.get_metrics()
+        metrics.update(feedback_agg.get_metrics(task=task))
         logger.log_scalars(metrics, step=step)
 
         # Update the progress bar

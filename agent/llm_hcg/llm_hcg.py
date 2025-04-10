@@ -9,7 +9,8 @@ from agent.base_agent import BaseAgent, Controller
 from agent.llm_hcg.graph_viz import ControllerVisualizer
 from agent.llm_hcg.library_controller import ControllerLibrary
 from agent.llm_hcg.demo_bank import DemoBank, TransitionData
-from core.task import TaskDescription
+from core.feedback_aggregator import FeedbackAggregated
+from core.task import Task, TaskDescription
 from core.utils import get_error_info
 from env.base_meta_env import BaseMetaEnv, Observation, ActionType, InfoDict
 from abc import ABC, abstractmethod
@@ -277,9 +278,10 @@ class LLMBasedHCG(BaseAgent):
 
     def update(
         self,
+        task: Task,
         task_repr: TaskDescription,
         controller: Controller,
-        feedback: Dict[str, Union[float, str]],
+        feedback: FeedbackAggregated,
     ):
         # Add the transition to the demo bank
         self.demo_bank.add_transition(

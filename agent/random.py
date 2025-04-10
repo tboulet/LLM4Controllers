@@ -6,7 +6,7 @@ from gymnasium import Space
 import numpy as np
 from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller
-from core.task import TaskDescription
+from core.task import Task, TaskDescription
 from env.base_meta_env import BaseMetaEnv, Observation, ActionType, InfoDict
 from abc import ABC, abstractmethod
 import enum
@@ -37,6 +37,7 @@ class RandomAgent(BaseAgent):
 
     def update(
         self,
+        task: Task,
         task_description: TaskDescription,
         controller: Controller,
         feedback: Dict[str, Union[float, str]],

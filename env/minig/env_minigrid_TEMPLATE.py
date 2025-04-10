@@ -5,6 +5,8 @@ from minigrid.core.world_object import Door, Goal, Key, Wall
 from minigrid.manual_control import ManualControl
 from minigrid.minigrid_env import MiniGridEnv
 
+from core.error_trace import ErrorTrace
+
 
 class AutoSuccessMGEnv(MiniGridEnv):
     # SHOULD BE DONE : docstring
@@ -103,7 +105,7 @@ class AutoSuccessMGEnv(MiniGridEnv):
     # CAN BE DONE : define a get_feedback function that add additional env-based feedback to F_i
     def get_feedback(self):
         if self.failure_reason is not None:
-            return {"failure_reason": self.failure_reason}
+            return {"failure_reason": ErrorTrace(self.failure_reason)}
         else:
             return {}
 

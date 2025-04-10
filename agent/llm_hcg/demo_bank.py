@@ -6,6 +6,7 @@ from typing import Dict, List, Optional
 import numpy as np
 from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller
+from core.feedback_aggregator import FeedbackAggregated
 from core.task import TaskDescription
 from core.utils import get_error_info
 from env.base_meta_env import BaseMetaEnv, Observation, ActionType, InfoDict
@@ -24,14 +25,14 @@ class TransitionData:
         self,
         task_repr: TaskDescription,
         code: str,
-        feedback: Dict[str, Any],
+        feedback: FeedbackAggregated,
     ):
         """Initialize the TransitionData object.
 
         Args:
             task_repr (TaskRepresentation): the task representation
             code (str): the code used to solve the task. It should contain the instanciation of a 'controller' variable of type Controller.
-            feedback (Dict[str, Any]): the feedback of the transition, as a dictionnary mapping feedback fields to their values (success, metric, errors, ...)
+            feedback (FeedbackAggregated): the feedback of the transition
         """
         self.task_repr = task_repr
         self.code = code

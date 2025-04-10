@@ -8,6 +8,8 @@ from minigrid.minigrid_env import MiniGridEnv
 
 from gymnasium import spaces
 
+from core.error_trace import ErrorTrace
+
 
 class GiveGoalPositionEnv(MiniGridEnv):
     def __init__(
@@ -92,7 +94,7 @@ class GiveGoalPositionEnv(MiniGridEnv):
 
     def get_feedback(self):
         if self.failure_reason is not None:
-            return {"failure_reason": self.failure_reason}
+            return {"failure_reason": ErrorTrace(self.failure_reason)}
         else:
             return {}
 

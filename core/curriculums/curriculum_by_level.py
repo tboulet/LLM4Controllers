@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Tuple, Type, Union, Set
 import numpy
 
 from core.curriculums.base_curriculum import BaseCurriculum, Objective
+from core.feedback_aggregator import FeedbackAggregated
 
 
 class CurriculumByLevels(BaseCurriculum[Objective]):
@@ -37,12 +38,12 @@ class CurriculumByLevels(BaseCurriculum[Objective]):
         print(f"\n[CURRICULUM] Sampled objective: {objective}")
         return objective
 
-    def update(self, objective: Objective, feedback: Dict[str, Any]):
+    def update(self, objective: Objective, feedback: FeedbackAggregated):
 
         if self.idx_max_level == self.n_levels:
             return  # do not update if all levels have been completed
 
-        if not feedback["success"]:
+        if not feedback.dict_aggregated_feedback["success"] > 0.9:
             return  # do not update if the objective was not successful
 
         for idx_level, level in enumerate(self.levels):

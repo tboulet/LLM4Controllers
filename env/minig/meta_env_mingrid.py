@@ -124,43 +124,24 @@ class TaskMinigrid(Task):
     def __init__(
         self,
         creator_env_mg_func: Callable[..., MiniGridEnv],
-        sections_docstring: List[str],
-        timestep: int,
-        list_log_dirs_global: Optional[List[str]] = [],
+        meta_env: "MinigridMetaEnv",
         assert_task_identity_constancy: Optional[bool] = True,
-        kwargs_env_mg: Optional[Dict[str, Any]] = {},
-        render_mode_train: Optional[str] = None,
-        render_mode_eval: Optional[str] = None,
     ) -> None:
         self.creator_env_mg_func = creator_env_mg_func
-        self.sections_docstring = sections_docstring
-        self.timestep = timestep
-        self.list_log_dirs_global = list_log_dirs_global
+        self.meta_env = meta_env
         self.assert_task_identity_constancy = assert_task_identity_constancy
-        self.kwargs_env_mg = kwargs_env_mg
-        self.render_mode_train = render_mode_train
-        self.render_mode_eval = render_mode_eval
-        self.was_never_reset = True
 
         # Get the task name from the creator_env_mg_func
         self.func_str = inspect.getsource(self.creator_env_mg_func).strip()
-        match = re.match(r"\s*lambda\s+[^\:]*\:\s*(.+)", self.func_str)
-        assert (
-            match is not None
-        ), f"Could not extract the task name from the function string: {self.func_str}"
-        self.func_str = match.group(1)
-
-        # Instantiate the environment for the first time and do some wrapping
-        env_mg = self.create_new_env_mg(render_mode=None)
-        env_mg.reset()
-
-        # Build the task description
-        self.name = f"{self.func_str} - Mission : {env_mg.unwrapped.mission}"
-        self.task_description = self.extract_task_description_from_env(env_mg)
+        self.func_str = self.func_str.replace("lambda **kwargs: ", "")
+        self.func_str = self.func_str.replace("**kwargs", "")
+        self.func_str = re.sub(r"\s+", " ", self.func_str).strip()
 
         # Other variables
-        self.n_times_timestep_logged = 0
-        
+        self.task_description = None
+        self.env_mg = None
+        self.n_times_task_logged_this_timestep = 0
+
     # ===== Helper methods ===
 
     def extract_task_description_from_env(self, env_mg: MiniGridEnv) -> TaskDescription:
@@ -176,7 +157,7 @@ class TaskMinigrid(Task):
             name=f"{self.func_str} - Mission : {env_mg.unwrapped.mission}",
             description=extract_sections(
                 docstring=env_mg.unwrapped.__doc__,
-                sections_docstring=self.sections_docstring,
+                sections_docstring=self.meta_env.sections_docstring,
             ),
             observation_space=env_mg.observation_space,
             action_space=env_mg.action_space,
@@ -198,10 +179,20 @@ class TaskMinigrid(Task):
     # ===== Mandatory interface methods ======
 
     def get_description(self) -> TaskDescription:
+        if self.task_description is None:
+            if self.env_mg is None:
+                self.env_mg = self.create_new_env_mg(render_mode=None)
+            # Extract the task description from the environment
+            self.task_description = self.extract_task_description_from_env(self.env_mg)
+            del self.env_mg
+            self.env_mg = None
         return self.task_description
 
-    def reset(self, is_eval: str) -> Tuple[Observation, InfoDict]:
+    def reset(self, is_eval: str = False) -> Tuple[Observation, InfoDict]:
         """Reset the task to its initial state.
+
+        Args:
+            is_eval (bool): Whether to reset the environment in evaluation mode or not.
 
         Returns:
             Tuple[Observation, InfoDict]: The observation and info dictionary.
@@ -209,9 +200,9 @@ class TaskMinigrid(Task):
 
         # Initialize rendering
         if is_eval:
-            self.render_mode = self.render_mode_eval
+            self.render_mode = self.meta_env.render_mode_eval
         else:
-            self.render_mode = self.render_mode_train
+            self.render_mode = self.meta_env.render_mode_train
 
         if self.render_mode == "rgb_array":
             self.video_frames = []
@@ -221,14 +212,15 @@ class TaskMinigrid(Task):
         obs, info = self.env_mg.reset()
 
         # Build info
-        info = {"task_name": self.name, **info}
+        info = {"task_name": self.func_str, **info}
 
         # Check if the task description is the same as the first one
         if self.assert_task_identity_constancy:
             new_task_description = self.extract_task_description_from_env(self.env_mg)
-            if new_task_description != self.task_description:
+            old_task_description = self.get_description()
+            if new_task_description != old_task_description:
                 raise ValueError(
-                    f"Task identity constancy check failed: {self.task_description} != {new_task_description}"
+                    f"Task identity constancy check failed: {old_task_description} != {new_task_description}"
                 )
 
         # Return the observation and info
@@ -252,6 +244,9 @@ class TaskMinigrid(Task):
         Returns:
             Tuple[Observation, float, bool, bool, InfoDict]: The observation, reward, done, truncated and info.
         """
+        assert (
+            self.env_mg is not None
+        ), "The environment is not initialized. Please call reset() first."
         # Unsure the action is in the action space
         if not action in self.env_mg.action_space:
             return (
@@ -272,12 +267,14 @@ class TaskMinigrid(Task):
         # Take the action in the environment
         obs, reward, terminated, truncated, info = self.env_mg.step(action)
         # Return step feedback
-        info = {"task_name": self.name, **info}
         return obs, reward, terminated, truncated, info
 
     # ===== Other methods ======
 
     def render(self) -> None:
+        assert (
+            self.env_mg is not None
+        ), "The environment is not initialized. Please call reset() first."
         if self.render_mode == "human":
             pass  # already rendered in self.env_mg.step/reset
         elif self.render_mode == "rgb_array":
@@ -289,16 +286,20 @@ class TaskMinigrid(Task):
             raise ValueError(f"Unknown render mode: {self.render_mode}")
 
     def close(self) -> None:
+        assert (
+            self.env_mg is not None
+        ), "The environment is not initialized. Please call reset() first."
         # Close the environment
         self.env_mg.close()
+        del self.env_mg
         # Save the video if any
         if self.render_mode == "rgb_array":
-            self.n_times_timestep_logged += 1
-            if self.n_times_timestep_logged > 1:
-                dir_task = f"task_{self.timestep}_{self.n_times_timestep_logged}"
+            self.n_times_task_logged_this_timestep += 1
+            if self.n_times_task_logged_this_timestep > 1:
+                dir_task = f"task_{self.meta_env.timestep}_{self.n_times_task_logged_this_timestep}"
             else:
-                dir_task = f"task_{self.timestep}"
-            for log_dir_global in self.list_log_dirs_global:
+                dir_task = f"task_{self.meta_env.timestep}"
+            for log_dir_global in self.meta_env.list_log_dirs_global:
                 path_task_t = os.path.join(log_dir_global, dir_task)
                 os.makedirs(path_task_t, exist_ok=True)
                 path_task_t_video = os.path.join(path_task_t, "video.mp4")
@@ -311,27 +312,36 @@ class TaskMinigrid(Task):
             return {}
 
     def __repr__(self) -> str:
-        return self.name
+        return self.func_str
 
 
 class MinigridMetaEnv(BaseMetaEnv):
 
     def __init__(self, config: Dict) -> None:
         # --- Extract parameters from the configuration file ---
+        self.config = config
         # Env parameters
         self.viewsize = config.get("viewsize", 7)
         self.size = config.get("size", 10)
         # Representation parameter
         self.sections_docstring = config.get("sections_docstring")
         # Logging and render
-        self.log_dir = config["config_logs"]["log_dir"]
         self.render_mode_train = config.get("render_mode_train", None)
         self.render_mode_eval = config.get("render_mode_eval", None)
+        config_logs = self.config["config_logs"]
+        self.log_dir = config_logs["log_dir"]
+        self.list_log_dirs_global = []
+        if config_logs["do_log_on_new"]:
+            self.list_log_dirs_global.append(
+                os.path.join(self.log_dir, self.config["run_name"])
+            )
+        if config_logs["do_log_on_last"]:
+            self.list_log_dirs_global.append(os.path.join(self.log_dir, "last"))
 
         # Define variables
         self.timestep = 0
         # Define the curriculum
-        levels: List[Set[Callable[..., MiniGridEnv]]] = [
+        levels = [
             # {
             #     # For testing envs
             #     lambda **kwargs: GoToObj(room_size=self.size, **kwargs),
@@ -396,12 +406,21 @@ class MinigridMetaEnv(BaseMetaEnv):
                 lambda **kwargs: ObstructedMaze_Full_V1(**kwargs),
             },
         ]
+
+        levels = [
+            {
+                TaskMinigrid(
+                    creator_env_mg_func=creator_env_mg_func,
+                    meta_env=self,
+                )
+                for creator_env_mg_func in level
+            }
+            for level in levels
+        ]
+
         self.curriculum: CurriculumByLevels[Callable[..., MiniGridEnv]] = (
             CurriculumByLevels(levels=levels)
         )
-
-        # Call the parent class constructor
-        super().__init__(config)
 
     # ======= Mandatory interface methods =======
 
@@ -438,28 +457,7 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
     def get_task(
         self,
     ) -> TaskMinigrid:
-        # Rendering and logging
-        config_logs = self.config["config_logs"]
-        self.list_log_dirs_global = []
-        if config_logs["do_log_on_new"]:
-            self.list_log_dirs_global.append(
-                os.path.join(self.log_dir, self.config["run_name"])
-            )
-        if config_logs["do_log_on_last"]:
-            self.list_log_dirs_global.append(os.path.join(self.log_dir, "last"))
-        # Select a task
-        creator_env_mg_func = self.curriculum.sample()
-        task = TaskMinigrid(
-            creator_env_mg_func=creator_env_mg_func,
-            sections_docstring=self.sections_docstring,
-            list_log_dirs_global=self.list_log_dirs_global,
-            assert_task_identity_constancy=True,  # true for now
-            render_mode_train=self.render_mode_train,
-            render_mode_eval=self.render_mode_eval,
-            timestep=self.timestep,
-        )
-        # Instancialize the minigrid environment
-        return task
+        return self.curriculum.sample()
 
     def update(self, task: TaskMinigrid, feedback: Dict[str, Any]) -> None:
         self.curriculum.update(objective=task, feedback=feedback)

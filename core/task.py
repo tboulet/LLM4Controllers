@@ -66,7 +66,7 @@ class Task(ABC):
         """
 
     @abstractmethod
-    def reset(self) -> Tuple[Observation, InfoDict]:
+    def reset(self, **kwargs) -> Tuple[Observation, InfoDict]:
         """Reset the task to its initial state.
 
         Returns:

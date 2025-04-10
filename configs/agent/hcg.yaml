@@ -1,19 +1,27 @@
 name: LLM-HCG
 config:
 
-  # The model tag to use for the LLM.
+  # The model tag to use for the LLM (in case the LLM class requires a model tag).
   model: gpt-4o-mini
 
-  # Inference hyperparameters.
+  # === Inference hyperparameters ===
+  # The number of examples to sample from the demo bank during inference
   n_samples_inference: 5
+  # The method for sampling
   method_inference_sampling: uniform
+  # The number of attemps to get a correct answer from the LLM before crashing
   num_attempts_inference: 5
 
-  # Update hyperparameters.
+  # === Update hyperparameters ===
+  # The number of examples to sample from the demo bank during update
   n_samples_update: 10
+  # The method for sampling
   method_update_sampling: uniform
+  # The maximal number of new primitives that can be added to the demo bank
   n_max_update_new_primitives: 3
+  # The maximal number of new refactorings that can be applied to the demo bank
   n_max_update_refactorings: 3
+  # The number of attempts to get a correct answer from the LLM before crashing/giving up the step (for various steps)
   num_attempts_update_code_extraction: 5
   num_attempts_update_pc_code_saving: 5
   num_attempts_update_sc_code_execution: 5
@@ -35,10 +43,9 @@ config:
 
   config_hypotheses:
     do_use: False
-    
-  config_logs: ${config_logs}
 
   config_visualizer:
+    # Whether to automatically open the browser to visualize the library evolving
     auto_open_browser: False
 
   config_debug:
@@ -51,3 +58,5 @@ config:
     breakpoint_update_on_failure_code_extraction: True
     breakpoint_update_on_failure_pc_code_saving: True
     breakpoint_update_on_failure_sc_code_execution: True
+    
+  config_logs: ${config_logs}

@@ -13,7 +13,7 @@ from omegaconf import OmegaConf, DictConfig
 from tqdm import tqdm
 import datetime
 from time import time, sleep
-from typing import Dict, Type
+from typing import Any, Dict, Type
 import cProfile
 
 # ML libraries
@@ -23,10 +23,13 @@ import torch
 import transformers
 
 # Project imports
+from agent.base_controller import Controller
+from core.feedback_aggregator import FeedbackAggregator
 from core.loggers.cli import LoggerCLI
 from core.loggers.multi_logger import MultiLogger
 from core.loggers.tensorboard import LoggerTensorboard
 from core.loggers.tqdm_logger import LoggerTQDM
+from core.task import Task
 from core.utils import get_error_info
 from core.register_hydra import register_hydra_resolvers
 from core.time_measure import RuntimeMeter
@@ -36,7 +39,10 @@ from agent import agent_name_to_AgentClass
 
 register_hydra_resolvers()
 
-@hydra.main(config_path="configs", config_name="config_default.yaml", version_base="1.3.2")
+
+@hydra.main(
+    config_path="configs", config_name="config_default.yaml", version_base="1.3.2"
+)
 def main(config: DictConfig):
     print("Configuration used :")
     print(OmegaConf.to_yaml(config))
@@ -45,10 +51,13 @@ def main(config: DictConfig):
     # Get the config values from the config object.
     agent_name: str = config["agent"]["name"]
     env_name: str = config["env"]["name"]
-    n_episodes: int = config.get("n_episodes", np.inf)
-    n_episodes = to_maybe_inf(n_episodes)
-    n_training_episodes: int = config["n_training_episodes"]
-    n_eval_episodes: int = config["n_eval_episodes"]
+
+    n_steps_max: int = config.get("n_steps_max", np.inf)
+    n_steps_max = to_maybe_inf(n_steps_max)
+    n_training_steps: int = config["n_training_steps"]
+    n_eval_steps: int = config["n_eval_steps"]
+    n_episodes_per_step: int = config["n_episodes_per_step"]
+
     log_dir: str = config["log_dir"]
     do_cli: bool = config["do_cli"]
     do_wandb: bool = config["do_wandb"]
@@ -60,7 +69,7 @@ def main(config: DictConfig):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    transformers.set_seed(seed)  
+    transformers.set_seed(seed)
     print(f"Using seed: {seed}")
 
     # Set the run name
@@ -77,15 +86,13 @@ def main(config: DictConfig):
 
     # Give LLM config to the agent
     config["agent"]["config"]["llm"] = config["llm"]
-    
+
     # Create the agent
     print("Creating the agent...")
     AgentClass = agent_name_to_AgentClass[agent_name]
     agent = AgentClass(config=config["agent"]["config"])
     agent.give_textual_description(textual_description_env)
 
-    
-    
     # Initialize loggers
     run_name = config.get(
         "run_name", run_name
@@ -96,80 +103,98 @@ def main(config: DictConfig):
         loggers.append(LoggerCLI())
     if do_tb:
         loggers.append(LoggerTensorboard(log_dir=f"{log_dir}/{run_name}"))
-    if do_tqdm and n_episodes != np.inf:
-        loggers.append(LoggerTQDM(n_total=n_episodes))
+    if do_tqdm and n_steps_max != np.inf:
+        loggers.append(LoggerTQDM(n_total=n_steps_max))
     logger = MultiLogger(*loggers)
 
     # Remove log_dir/last/ to clean the logs
     shutil.rmtree(f"{log_dir}/last/", ignore_errors=True)
-        
+
     # Training loop
-    ep = 0
-    ep_training = 0
-    while ep_training < n_episodes:
+    step = 0
+    step_training = 0
+    while step_training < n_steps_max:
         # Define training/evaluation mode
-        if ep % (n_training_episodes + n_eval_episodes) < n_eval_episodes:
+        if step % (n_training_steps + n_eval_steps) < n_eval_steps:
             is_eval = True
         else:
             is_eval = False
         # Get the task
         task = env.get_task()
         task_description = task.get_description()
-                
+
         # Ask the agent to generate a controller for the task
         controller = agent.get_controller(task_description)
 
-        # Reset the environment
-        obs, info = task.reset(is_eval=is_eval)
-        task.render()
-        
-        # Loop over the episode
-        done = False
-        truncated = False
-        while not done and not truncated:
-            # Act in the environment
-            try:
-                action = controller.act(obs)
-            except Exception as e:
-                full_error_info = get_error_info(e)
-                info = {
-                    "error": {
-                        "type": "controller_act_error",
-                        "message": f"An error occured during the act method of the controller. Full error info :\n{full_error_info}",
-                    }
+        def play_controller_in_task(
+            controller: Controller,
+            task: Task,
+            n_episodes: int,
+            is_eval: bool,
+        ) -> Dict[str, Any]:
+            pass
+            """Play the controller in the task for n_episodes episodes and return the feedback."""
+            # Initialize the feedback
+            feedback = FeedbackAggregator()
+            for k in range(n_episodes):
+                # Reset the environment
+                obs, info = task.reset(is_eval=is_eval)
+                task.render()
+
+                # Loop over the episode
+                done = False
+                truncated = False
+                while not done and not truncated:
+                    # Act in the environment
+                    try:
+                        action = controller.act(obs)
+                    except Exception as e:
+                        full_error_info = get_error_info(e)
+                        info = {
+                            "error": {
+                                "type": "controller_act_error",
+                                "message": f"An error occured during the act method of the controller. Full error info :\n{full_error_info}",
+                            }
+                        }
+                        obs, reward, done, truncated = (
+                            None,
+                            0,
+                            False,
+                            True,
+                        )
+                        print(f"ERROR WARNING : {info['error']}")
+                        break
+                    # Step in the environment
+                    obs, reward, done, truncated, info = task.step(action)
+                    if "error" in info:
+                        print(f"ERROR WARNING : {info['error']}")
+                        break
+                    # Render and log
+                    task.render()
+
+                # Env feedback
+                env_feedback = task.get_feedback()
+
+                # Close the environment
+                task.close()
+
+                # Update the agent
+                feedback = {
+                    "success": reward > 0,
+                    "reward": reward,
                 }
-                obs, reward, done, truncated = (
-                    None,
-                    0,
-                    False,
-                    True,
-                )
-                print(f"ERROR WARNING : {info['error']}")
-                break
-            # Step in the environment
-            obs, reward, done, truncated, info = task.step(action)
-            if "error" in info:
-                print(f"ERROR WARNING : {info['error']}")
-                break
-            # Render and log
-            task.render()
-
-        # Close the environment
-        task.close()
-
-        # Update the agent
-        feedback = {
-            "success": reward > 0,
-            "reward": reward,
-        }
-        if "error" in info: # add error info to feedback
-            feedback["error"] = info["error"]
-        feedback.update(task.get_feedback()) # add environment feedback to feedback
+                if "error" in info:  # add error info to feedback
+                    feedback["error"] = info["error"]
+        
+        
+                feedback.update(env_feedback)  # add environment feedback to feedback
+        
+        
         agent.update(task_description, controller, feedback)
 
         # Update the MetaEnv
         env.update(task, feedback)
-        
+
         # Log the episode
         metrics = {
             "success": int(feedback["success"]),
@@ -180,14 +205,14 @@ def main(config: DictConfig):
         if "error" in feedback:
             error_type = feedback["error"]["type"]
             metrics[f"error_{error_type}"] = 1.0
-        logger.log_scalars(metrics, step=ep)
+        logger.log_scalars(metrics, step=step)
 
         # Update the progress bar
         if is_eval:
-            ep += 1
+            step += 1
         else:
-            ep_training += 1
-            ep += 1
+            step_training += 1
+            step += 1
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@ import numpy as np
 from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller
 from agent.llm_hcg.graph_viz import ControllerVisualizer
-from core.task import TaskRepresentation
+from core.task import TaskDescription
 from core.utils import get_error_info
 from env.base_meta_env import BaseMetaEnv, Observation, ActionType, InfoDict
 from abc import ABC, abstractmethod

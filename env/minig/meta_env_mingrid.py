@@ -10,7 +10,8 @@ from gymnasium import spaces
 import imageio
 from matplotlib import pyplot as plt
 import numpy as np
-from typing import Callable, Tuple, Type, Union, Dict, Any, List, Optional
+from typing import Callable, Set, Tuple, Type, Union, Dict, Any, List, Optional
+
 # Minigrid imports
 from minigrid.minigrid_env import MiniGridEnv
 from minigrid.core.grid import Grid
@@ -20,6 +21,7 @@ from minigrid.manual_control import ManualControl
 from minigrid.wrappers import ObservationWrapper, ImgObsWrapper, FullyObsWrapper
 from minigrid.core.constants import IDX_TO_OBJECT, IDX_TO_COLOR, STATE_TO_IDX
 from minigrid.core.world_object import Goal, Lava, Wall, Key, Door
+
 # Env from minigrid
 from minigrid.envs.empty import EmptyEnv
 from minigrid.envs.gotoobject import GoToObjectEnv
@@ -44,6 +46,7 @@ from minigrid.envs.putnear import PutNearEnv
 from minigrid.envs.redbluedoors import RedBlueDoorEnv
 from minigrid.envs.unlock import UnlockEnv
 from minigrid.envs.unlockpickup import UnlockPickupEnv
+
 # Env from BabyAI
 from minigrid.envs.babyai.goto import GoToObj
 
@@ -63,41 +66,252 @@ from env.minig.utils import (
 
 # Project imports
 from env.base_meta_env import BaseMetaEnv, Observation, InfoDict
-from core.task import Task, TaskRepresentation
+from core.task import Task, TaskDescription
 from core.spaces import FiniteSpace
 from core.curriculums import CurriculumByLevels
 from core.types import ActionType
 
 
+def extract_sections(docstring: str, sections_docstring: list) -> Dict[str, str]:
+    """
+    Extract specified sections from a docstring formatted with Markdown-style headers (## Section Name).
 
+    Args:
+        docstring (str): The full docstring to parse.
+        sections_to_extract (list): List of section titles to extract, e.g. ["Description", "Mission Space", "Termination"].
+
+    Returns:
+        Dict[str, str]: Dictionary mapping section names to their extracted text.
+    """
+    if docstring is None:
+        return
+
+    # Remove uniform indentation
+    docstring = textwrap.dedent(docstring)
+
+    # Match sections with headers like ## Description
+    pattern = r"^##\s+(.+?)\n(.*?)(?=^##\s+|\Z)"  # Matches section title and content
+    matches = re.findall(pattern, docstring, re.DOTALL | re.MULTILINE)
+
+    if matches == []:
+        print("[WARNING] No section found in the docstring")
+
+    list_sections = []
+    for title, content in matches:
+        title_clean = title.strip()
+        if title_clean in sections_docstring:
+            list_sections.append(f"## {title_clean} \n{content.strip()}\n")
+    # Join the sections with new lines
+    return "\n".join(list_sections)
 
 
 class TaskMinigrid(Task):
     """Task class for the Minigrid environment.
-    This is used to represent a task that can be performed in the Minigrid environment.
+
+    A task is specific to a goal : two instances of the same task must have the same goal.
+
+    However some caracteristics (as the env size, the agent position, the goal position, etc.) can be different between two instances of the same task.
+
+    This can be specified through the creator_env_mg_func :
+    ```python
+    creator_env_mg_func = lambda : SomeEnv(
+        goal = <goal>,  # well defined goal
+        agent_start_pos = np.random.randint(1, size - 2, size=2),  # varying-through-task agent start position
+        )
+    ```
     """
 
-    def __init__(self, creator_env_mg_func: Callable[..., MiniGridEnv]) -> None:
+    def __init__(
+        self,
+        creator_env_mg_func: Callable[..., MiniGridEnv],
+        sections_docstring: List[str],
+        timestep: int,
+        list_log_dirs_global: Optional[List[str]] = [],
+        assert_task_identity_constancy: Optional[bool] = True,
+        kwargs_env_mg: Optional[Dict[str, Any]] = {},
+        render_mode_train: Optional[str] = None,
+        render_mode_eval: Optional[str] = None,
+    ) -> None:
         self.creator_env_mg_func = creator_env_mg_func
+        self.sections_docstring = sections_docstring
+        self.timestep = timestep
+        self.list_log_dirs_global = list_log_dirs_global
+        self.assert_task_identity_constancy = assert_task_identity_constancy
+        self.kwargs_env_mg = kwargs_env_mg
+        self.render_mode_train = render_mode_train
+        self.render_mode_eval = render_mode_eval
+        self.was_never_reset = True
+
+        # Get the task name from the creator_env_mg_func
+        self.func_str = inspect.getsource(self.creator_env_mg_func).strip()
+        match = re.match(r"\s*lambda\s+[^\:]*\:\s*(.+)", self.func_str)
+        assert (
+            match is not None
+        ), f"Could not extract the task name from the function string: {self.func_str}"
+        self.func_str = match.group(1)
+
+        # Instantiate the environment for the first time and do some wrapping
+        env_mg = self.create_new_env_mg(render_mode=None)
+        env_mg.reset()
+
+        # Build the task description
+        self.name = f"{self.func_str} - Mission : {env_mg.unwrapped.mission}"
+        self.task_description = self.extract_task_description_from_env(env_mg)
+
+        # Other variables
+        self.n_times_timestep_logged = 0
+        
+    # ===== Helper methods ===
+
+    def extract_task_description_from_env(self, env_mg: MiniGridEnv) -> TaskDescription:
+        """Extract the task description from the environment.
+
+        Args:
+            env_mg (MiniGridEnv): The environment to extract the task description from.
+
+        Returns:
+            TaskDescription: The task description.
+        """
+        return TaskDescription(
+            name=f"{self.func_str} - Mission : {env_mg.unwrapped.mission}",
+            description=extract_sections(
+                docstring=env_mg.unwrapped.__doc__,
+                sections_docstring=self.sections_docstring,
+            ),
+            observation_space=env_mg.observation_space,
+            action_space=env_mg.action_space,
+        )
+
+    def create_new_env_mg(self, **kwargs) -> MiniGridEnv:
+        env_mg = self.creator_env_mg_func(**kwargs)
+        env_mg = FullyObsWrapper(env_mg)
+        if hasattr(env_mg, "get_new_action_space"):
+            env_mg.action_space = env_mg.unwrapped.get_new_action_space()
+        else:
+            env_mg.action_space = FiniteSpace(
+                elems=sorted(
+                    list(dict_actions.keys()), key=lambda x: dict_actions[x][0]
+                )
+            )
+        return env_mg
+
+    # ===== Mandatory interface methods ======
+
+    def get_description(self) -> TaskDescription:
+        return self.task_description
+
+    def reset(self, is_eval: str) -> Tuple[Observation, InfoDict]:
+        """Reset the task to its initial state.
+
+        Returns:
+            Tuple[Observation, InfoDict]: The observation and info dictionary.
+        """
+
+        # Initialize rendering
+        if is_eval:
+            self.render_mode = self.render_mode_eval
+        else:
+            self.render_mode = self.render_mode_train
+
+        if self.render_mode == "rgb_array":
+            self.video_frames = []
+
+        # Reset the environment
+        self.env_mg = self.create_new_env_mg(render_mode=self.render_mode)
+        obs, info = self.env_mg.reset()
+
+        # Build info
+        info = {"task_name": self.name, **info}
+
+        # Check if the task description is the same as the first one
+        if self.assert_task_identity_constancy:
+            new_task_description = self.extract_task_description_from_env(self.env_mg)
+            if new_task_description != self.task_description:
+                raise ValueError(
+                    f"Task identity constancy check failed: {self.task_description} != {new_task_description}"
+                )
+
+        # Return the observation and info
+        return obs, info
+
+    def step(
+        self,
+        action: ActionType,
+    ) -> Tuple[
+        Observation,
+        float,
+        bool,
+        bool,
+        InfoDict,
+    ]:
+        """Take a step in the task.
+
+        Args:
+            action (ActionType): The action to take.
+
+        Returns:
+            Tuple[Observation, float, bool, bool, InfoDict]: The observation, reward, done, truncated and info.
+        """
+        # Unsure the action is in the action space
+        if not action in self.env_mg.action_space:
+            return (
+                None,
+                0,
+                True,
+                False,
+                {
+                    "error": {
+                        "type": "action_error",
+                        "message": f"Action '{action}' of type {type(action)} is not in the env action space {self.env_mg.action_space}",
+                    }
+                },
+            )
+        # Convert the action (e.g. "forward") to the action index (e.g. 2 (int))
+        if not hasattr(self.env_mg.unwrapped, "get_new_action_space"):
+            action = dict_actions[action][0]
+        # Take the action in the environment
+        obs, reward, terminated, truncated, info = self.env_mg.step(action)
+        # Return step feedback
+        info = {"task_name": self.name, **info}
+        return obs, reward, terminated, truncated, info
+
+    # ===== Other methods ======
+
+    def render(self) -> None:
+        if self.render_mode == "human":
+            pass  # already rendered in self.env_mg.step/reset
+        elif self.render_mode == "rgb_array":
+            img = self.env_mg.render()
+            self.video_frames.append(img)
+        elif self.render_mode == None:
+            pass
+        else:
+            raise ValueError(f"Unknown render mode: {self.render_mode}")
+
+    def close(self) -> None:
+        # Close the environment
+        self.env_mg.close()
+        # Save the video if any
+        if self.render_mode == "rgb_array":
+            self.n_times_timestep_logged += 1
+            if self.n_times_timestep_logged > 1:
+                dir_task = f"task_{self.timestep}_{self.n_times_timestep_logged}"
+            else:
+                dir_task = f"task_{self.timestep}"
+            for log_dir_global in self.list_log_dirs_global:
+                path_task_t = os.path.join(log_dir_global, dir_task)
+                os.makedirs(path_task_t, exist_ok=True)
+                path_task_t_video = os.path.join(path_task_t, "video.mp4")
+                imageio.mimwrite(path_task_t_video, self.video_frames, fps=10)
+
+    def get_feedback(self) -> Dict[str, Any]:
+        if hasattr(self.env_mg.unwrapped, "get_feedback"):
+            return self.env_mg.unwrapped.get_feedback()
+        else:
+            return {}
 
     def __repr__(self) -> str:
-        try:
-            # Get the source code of the lambda function
-            lambda_str = inspect.getsource(self.creator_env_mg_func).strip()
-
-            # Extract the class name using regex (looking for ClassName(...) inside the lambda)
-            match = re.match(r"\s*lambda\s+[^\:]*\:\s*(.+)", lambda_str)
-            assert match is not None
-            
-            return match.group(1)
-        except Exception:
-            raise ValueError(
-                f"Error while trying to get the representation of the task {self}"
-            )
-            return "TaskMinigrid(<unknown>)"
-
-    def __call__(self, *args, **kwargs):
-        return self.creator_env_mg_func(*args, **kwargs)
+        return self.name
 
 
 class MinigridMetaEnv(BaseMetaEnv):
@@ -111,25 +325,25 @@ class MinigridMetaEnv(BaseMetaEnv):
         self.sections_docstring = config.get("sections_docstring")
         # Logging and render
         self.log_dir = config["config_logs"]["log_dir"]
-        self.render_mode = config.get("render_mode", None)
+        self.render_mode_train = config.get("render_mode_train", None)
         self.render_mode_eval = config.get("render_mode_eval", None)
-        
+
         # Define variables
-        self.t = 0
+        self.timestep = 0
         # Define the curriculum
-        levels = [
-            
-            {
-                # For testing envs
-                lambda **kwargs: GoToObj(room_size=self.size, **kwargs),
-            },
-            
+        levels: List[Set[Callable[..., MiniGridEnv]]] = [
+            # {
+            #     # For testing envs
+            #     lambda **kwargs: GoToObj(room_size=self.size, **kwargs),
+            # },
             {
                 # Observation structure comprehension and navigation comprehension tasks
-                lambda **kwargs: GoTowardsDirection(size=self.size, direction = "up", **kwargs),
-                lambda **kwargs: GoTowardsDirection(size=self.size, direction = "random", **kwargs),
-                lambda **kwargs: MoveToPosition(size=self.size, position = (3, 3), **kwargs),
-                lambda **kwargs: MoveToPosition(size=self.size, position = "random", **kwargs),
+                lambda **kwargs: GoTowardsDirection(
+                    size=self.size, direction="up", **kwargs
+                ),
+                lambda **kwargs: MoveToPosition(
+                    size=self.size, position=(3, 3), **kwargs
+                ),
             },
             {
                 # Navigation tasks (minimalistic)
@@ -182,11 +396,9 @@ class MinigridMetaEnv(BaseMetaEnv):
                 lambda **kwargs: ObstructedMaze_Full_V1(**kwargs),
             },
         ]
-        levels = [
-            {TaskMinigrid(creator_env_mg_func) for creator_env_mg_func in level}
-            for level in levels
-        ]
-        self.curriculum: CurriculumByLevels[TaskMinigrid] = CurriculumByLevels(levels)
+        self.curriculum: CurriculumByLevels[Callable[..., MiniGridEnv]] = (
+            CurriculumByLevels(levels=levels)
+        )
 
         # Call the parent class constructor
         super().__init__(config)
@@ -223,15 +435,10 @@ The mapping from state integer to state string is as follows: {IDX_TO_STATE}. On
 For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,j) is a key (object type 5) of color blue (color 2) in the open state (state 0).
 """
 
-    def reset(
+    def get_task(
         self,
-        seed: Union[int, None] = None,
-        is_eval: bool = False,
-    ) -> Tuple[Observation, Task, TaskRepresentation, Dict[str, Any]]:
+    ) -> TaskMinigrid:
         # Rendering and logging
-        self.render_mode = self.render_mode_eval if is_eval else self.render_mode
-        if self.render_mode == "rgb_array":
-            self.video_frames: List[np.ndarray] = []
         config_logs = self.config["config_logs"]
         self.list_log_dirs_global = []
         if config_logs["do_log_on_new"]:
@@ -239,150 +446,21 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
                 os.path.join(self.log_dir, self.config["run_name"])
             )
         if config_logs["do_log_on_last"]:
-            self.list_log_dirs_global.append(
-                os.path.join(self.log_dir, "last")
-            )
+            self.list_log_dirs_global.append(os.path.join(self.log_dir, "last"))
         # Select a task
-        task = self.curriculum.sample()
+        creator_env_mg_func = self.curriculum.sample()
+        task = TaskMinigrid(
+            creator_env_mg_func=creator_env_mg_func,
+            sections_docstring=self.sections_docstring,
+            list_log_dirs_global=self.list_log_dirs_global,
+            assert_task_identity_constancy=True,  # true for now
+            render_mode_train=self.render_mode_train,
+            render_mode_eval=self.render_mode_eval,
+            timestep=self.timestep,
+        )
         # Instancialize the minigrid environment
-        self.env_mg = task(
-            render_mode=self.render_mode,
-        )
-        # Wrap the environment to get the observation (for now we set the obs to be fully observable)
-        self.env_mg = FullyObsWrapper(self.env_mg)
-        # Modify the action space
-        if hasattr(self.env_mg.unwrapped, "get_new_action_space"):
-            self.env_mg.action_space = self.env_mg.unwrapped.get_new_action_space()
-        else:
-            self.env_mg.action_space = FiniteSpace(
-                elems=sorted(
-                    list(dict_actions.keys()), key=lambda x: dict_actions[x][0]
-                )
-            )
-        # Reset the environment
-        obs, info = self.env_mg.reset()
-        # Create the task representation
-        task_representation = TaskRepresentation(
-            name=f"{task} - Mission : {self.env_mg.unwrapped.mission}",  # GoToObj() - Mission : go to the green ball
-            description=self.extract_sections(self.env_mg.unwrapped.__doc__, self.sections_docstring),  # ## Description \t Go to an object
-            observation_space=self.env_mg.observation_space,  # gym.space object
-            action_space=self.env_mg.action_space,  # gym.space object
-        )
-        # Return reset elements
-        info = {"task": task, **info}
-        return obs, task, task_representation, info
+        return task
 
-    def step(self, action: ActionType) -> Tuple[Observation, float, bool, InfoDict]:
-        # Unsure the action is in the action space
-        if not action in self.env_mg.action_space:
-            return (
-                None,
-                0,
-                True,
-                False,
-                {
-                    "error": {
-                        "type": "action_error",
-                        "message": f"Action '{action}' of type {type(action)} is not in the env action space {self.env_mg.action_space}",
-                    }
-                },
-            )
-        # Convert the action (e.g. "forward") to the action index (e.g. 2 (int))
-        if not hasattr(
-            self.env_mg.unwrapped, "get_new_action_space"
-        ):  # if the action space is not modified, perform "forward" -> 2
-            action = dict_actions[action][0]
-        # Take the action in the environment
-        obs, reward, terminated, truncated, info = self.env_mg.step(action)
-        # Return step feedback
-        return obs, reward, terminated, truncated, info
-
-    def update(self, task: Task, feedback: Dict[str, Any]) -> None:
+    def update(self, task: TaskMinigrid, feedback: Dict[str, Any]) -> None:
         self.curriculum.update(objective=task, feedback=feedback)
-
-    # ======= Optional interface methods =======
-
-    def render(self):
-        if self.render_mode == "human":
-            pass  # already rendered in self.env.step/reset
-        elif self.render_mode == "rgb_array":
-            img = self.env_mg.render()
-            self.video_frames.append(img)
-        elif self.render_mode == None:
-            pass
-        else:
-            raise ValueError(f"Unknown render mode: {self.render_mode}")
-
-    def close(self):
-        # Close the environment
-        self.env_mg.close()
-        # Save the video if any
-        if self.render_mode == "rgb_array":
-            for log_dir_global in self.list_log_dirs_global:
-                path_task_t = os.path.join(log_dir_global, f"task_{self.t}")
-                os.makedirs(path_task_t, exist_ok=True)
-                path_task_t_video = os.path.join(path_task_t, "video.mp4")
-                imageio.mimwrite(path_task_t_video, self.video_frames, fps=10)
-
-        # Move forward time
-        self.t += 1
-
-    # ======= Helper methods =======
-
-    def extract_sections(self, docstring: str, sections_docstring: list) -> Dict[str, str]:
-        """
-        Extract specified sections from a docstring formatted with Markdown-style headers (## Section Name).
-        
-        Args:
-            docstring (str): The full docstring to parse.
-            sections_to_extract (list): List of section titles to extract, e.g. ["Description", "Mission Space", "Termination"].
-
-        Returns:
-            Dict[str, str]: Dictionary mapping section names to their extracted text.
-        """
-        if docstring is None:
-            return 
-
-        # Remove uniform indentation
-        docstring = textwrap.dedent(docstring)
-        
-        # Match sections with headers like ## Description
-        pattern = r"^##\s+(.+?)\n(.*?)(?=^##\s+|\Z)"  # Matches section title and content
-        matches = re.findall(pattern, docstring, re.DOTALL | re.MULTILINE)
-        
-        if matches == []:
-            print("[WARNING] No section found in the docstring")
-            
-        list_sections = []
-        for title, content in matches:
-            title_clean = title.strip()
-            if title_clean in sections_docstring:
-                list_sections.append(f"## {title_clean} \n{content.strip()}\n")
-        # Join the sections with new lines
-        return "\n".join(list_sections)
-    
-    def extract_kwargs(self, family_task, name, keys_kwargs):
-        # Create a regex pattern based on the family string
-        family_task_escape = re.escape(family_task)
-        pattern = family_task_escape.replace("<", "(?P<").replace(">", ">[^ ]+)")
-        # Use the regex pattern to match the name string
-        match = re.match(pattern, name)
-        if not match:
-            raise ValueError(
-                f"The name does not match the family pattern : family_task={family_task}, name={name}, pattern={pattern}"
-            )
-        # Extract the values and create the dictionary
-        return {key: match.group(key) for key in keys_kwargs}
-
-    def extract_observation_space_without_mission(
-        self, observation_space: spaces.Dict
-    ) -> spaces.Dict:
-        return spaces.Dict(
-            {k: v for k, v in observation_space.spaces.items() if k != "mission"}
-        )
-
-    def get_feedback(self):
-        if hasattr(self.env_mg.unwrapped, "get_feedback"):
-            return self.env_mg.unwrapped.get_feedback()
-        else:
-            return super().get_feedback()
+        self.timestep += 1

@@ -11,11 +11,8 @@ config:
     - Rewards
     - Termination
   # Rendering
-  render_mode: rgb_array
+  render_mode_train: rgb_array
   render_mode_eval: human
 
   # Logging
-  config_logs:
-    log_dir: ${log_dir}
-    do_log_on_new: True
-    do_log_on_last: True
+  config_logs: ${config_logs}

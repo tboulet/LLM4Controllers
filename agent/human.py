@@ -9,7 +9,8 @@ import numpy as np
 from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller
 from env.base_meta_env import BaseMetaEnv, Observation, ActionType, InfoDict
-from core.task import TaskRepresentation
+from core.task import TaskDescription
+
 
 class HumanController(Controller):
 
@@ -31,10 +32,15 @@ class HumanAgent(BaseAgent):
 
     def __init__(self, config):
         super().__init__(config)
-        
-    def get_controller(self, task_description: TaskRepresentation) -> Controller:
-        print(f"You are going to solve the following task: {task_description}")
-        return HumanController(config = self.config)
 
-    def update(self, task_description : TaskRepresentation, controller : Controller, feedback : Dict[str, Union[float, str]]):
+    def get_controller(self, task_description: TaskDescription) -> Controller:
+        print(f"You are going to solve the following task: {task_description}")
+        return HumanController(config=self.config)
+
+    def update(
+        self,
+        task_description: TaskDescription,
+        controller: Controller,
+        feedback: Dict[str, Union[float, str]],
+    ):
         print(f"Feedback received: {feedback}")

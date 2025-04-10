@@ -2,8 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Union
 from agent.base_controller import Controller
 from env.base_meta_env import Observation, ActionType
-from core.task import TaskRepresentation
-
+from core.task import TaskDescription
 
 
 class BaseAgent(ABC):
@@ -12,7 +11,7 @@ class BaseAgent(ABC):
         self.config = config
 
     @abstractmethod
-    def get_controller(self, task_description: TaskRepresentation) -> Controller:
+    def get_controller(self, task_description: TaskDescription) -> Controller:
         """Get the controller for the given task description.
 
         Args:
@@ -25,7 +24,10 @@ class BaseAgent(ABC):
 
     @abstractmethod
     def update(
-        self, task_description: TaskRepresentation, controller: Controller, feedback: Dict[str, Union[float, str]]
+        self,
+        task_description: TaskDescription,
+        controller: Controller,
+        feedback: Dict[str, Union[float, str]],
     ):
         """Update the agent's internal state (library, knowledges, etc.) based on the feedback received from the environment.
 

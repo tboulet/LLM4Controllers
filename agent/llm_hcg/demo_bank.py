@@ -6,7 +6,7 @@ from typing import Dict, List, Optional
 import numpy as np
 from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller
-from core.task import TaskRepresentation
+from core.task import TaskDescription
 from core.utils import get_error_info
 from env.base_meta_env import BaseMetaEnv, Observation, ActionType, InfoDict
 from abc import ABC, abstractmethod
@@ -16,12 +16,13 @@ from typing import Any, Dict, Tuple, Union
 
 from agent.llm_hcg.graph_viz import ControllerVisualizer
 
+
 class TransitionData:
     """Represents the data of a transition (task, controller, feedback) in the demo bank."""
 
     def __init__(
         self,
-        task_repr: TaskRepresentation,
+        task_repr: TaskDescription,
         code: str,
         feedback: Dict[str, Any],
     ):

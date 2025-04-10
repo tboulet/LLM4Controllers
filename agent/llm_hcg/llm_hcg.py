@@ -9,7 +9,7 @@ from agent.base_agent import BaseAgent, Controller
 from agent.llm_hcg.graph_viz import ControllerVisualizer
 from agent.llm_hcg.library_controller import ControllerLibrary
 from agent.llm_hcg.demo_bank import DemoBank, TransitionData
-from core.task import TaskRepresentation
+from core.task import TaskDescription
 from core.utils import get_error_info
 from env.base_meta_env import BaseMetaEnv, Observation, ActionType, InfoDict
 from abc import ABC, abstractmethod
@@ -19,6 +19,7 @@ from typing import Any, Dict, Tuple, Union
 from hydra.utils import instantiate
 from llm import llm_name_to_LLMClass
 
+
 class LLMBasedHCG(BaseAgent):
 
     def __init__(self, config: Dict):
@@ -26,7 +27,7 @@ class LLMBasedHCG(BaseAgent):
         # Initialize logging
         config_logs = self.config["config_logs"]
         log_dir = config_logs["log_dir"]
-        self.list_log_dirs_global : List[str] = []
+        self.list_log_dirs_global: List[str] = []
         if config_logs["do_log_on_new"]:
             self.list_log_dirs_global.append(os.path.join(log_dir, config["run_name"]))
         if config_logs["do_log_on_last"]:
@@ -103,7 +104,7 @@ class LLMBasedHCG(BaseAgent):
     def give_textual_description(self, description: str):
         self.description_env = description
 
-    def get_controller(self, task_description: TaskRepresentation) -> Controller:
+    def get_controller(self, task_description: TaskDescription) -> Controller:
         """Get a controller for a given task description. Does that by :
         - taking the library of controllers and the (sampled) demo bank as context
         - asking the LLM to generate a controller for the task
@@ -276,7 +277,7 @@ class LLMBasedHCG(BaseAgent):
 
     def update(
         self,
-        task_repr: TaskRepresentation,
+        task_repr: TaskDescription,
         controller: Controller,
         feedback: Dict[str, Union[float, str]],
     ):
@@ -812,7 +813,7 @@ class LLMBasedHCG(BaseAgent):
             in_task_folder (bool, optional): whether to log the files in the task folder (if not, log in the run folder). Defaults to True.
             is_update_step (bool, optional): whether we are in an update step (if so, replace task_t by task_t_update). Defaults to False.
         """
-        list_log_dirs : List[str] = []
+        list_log_dirs: List[str] = []
         for log_dir_global in self.list_log_dirs_global:
             if is_update_step:
                 assert (

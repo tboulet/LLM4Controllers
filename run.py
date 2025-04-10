@@ -100,7 +100,7 @@ def main(config: DictConfig):
         loggers.append(LoggerTQDM(n_total=n_episodes))
     logger = MultiLogger(*loggers)
 
-    # Remove logs/last/ to clean the logs
+    # Remove log_dir/last/ to clean the logs
     shutil.rmtree(f"{log_dir}/last/", ignore_errors=True)
         
     # Training loop
@@ -112,13 +112,17 @@ def main(config: DictConfig):
             is_eval = True
         else:
             is_eval = False
-        # Reset the environment
-        obs, task, task_description, info = env.reset(seed=seed, is_eval=is_eval)
-        env.render()
-        
+        # Get the task
+        task = env.get_task()
+        task_description = task.get_description()
+                
         # Ask the agent to generate a controller for the task
         controller = agent.get_controller(task_description)
 
+        # Reset the environment
+        obs, info = task.reset(is_eval=is_eval)
+        task.render()
+        
         # Loop over the episode
         done = False
         truncated = False
@@ -143,15 +147,15 @@ def main(config: DictConfig):
                 print(f"ERROR WARNING : {info['error']}")
                 break
             # Step in the environment
-            obs, reward, done, truncated, info = env.step(action)
+            obs, reward, done, truncated, info = task.step(action)
             if "error" in info:
                 print(f"ERROR WARNING : {info['error']}")
                 break
             # Render and log
-            env.render()
+            task.render()
 
         # Close the environment
-        env.close()
+        task.close()
 
         # Update the agent
         feedback = {
@@ -160,7 +164,7 @@ def main(config: DictConfig):
         }
         if "error" in info: # add error info to feedback
             feedback["error"] = info["error"]
-        feedback.update(env.get_feedback()) # add environment feedback to feedback
+        feedback.update(task.get_feedback()) # add environment feedback to feedback
         agent.update(task_description, controller, feedback)
 
         # Update the MetaEnv
@@ -170,6 +174,8 @@ def main(config: DictConfig):
         metrics = {
             "success": int(feedback["success"]),
             "reward": feedback["reward"],
+            f"success_task({task})": int(feedback["success"]),
+            f"reward_task({task})": feedback["reward"],
         }
         if "error" in feedback:
             error_type = feedback["error"]["type"]

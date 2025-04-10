@@ -40,9 +40,9 @@ class TaskRepresentation:
         if self.name is not None:
             res = f"Task name : {self.name}."
         if self.description != self.name and self.description is not None:
-            res += f"\nTask description : {self.description}."
+            res += f"\n\nTask description : \n{self.description}"
         if self.observation_space is not None:
-            res += f"\nObservation gym space : {self.observation_space}."
+            res += f"\n\nObservation gym space : \n{self.observation_space}"
         if self.action_space is not None:
-            res += f"\nAction gym space (the actions you can take MUST belong to this space) : {self.action_space}. You HAVE to take an action that belongs to this space."
+            res += f"\n\nAction gym space (the actions you can take MUST belong to this space) : {self.action_space}\nYou HAVE to take an action that belongs to this space."
         return res

@@ -5,6 +5,7 @@ import os
 import random
 import re
 import shutil
+import textwrap
 from gymnasium import spaces
 import imageio
 from matplotlib import pyplot as plt
@@ -82,21 +83,13 @@ class TaskMinigrid(Task):
     def __repr__(self) -> str:
         try:
             # Get the source code of the lambda function
-            source = inspect.getsource(self.creator_env_mg_func).strip()
+            lambda_str = inspect.getsource(self.creator_env_mg_func).strip()
 
             # Extract the class name using regex (looking for ClassName(...) inside the lambda)
-            match = re.search(r"(\w+)\s*\(", source)
-            if match:
-                class_name = match.group(1)
-            else:
-                class_name = "<unknown>"
-
-            # Extract key-value arguments if present
-            kwargs_match = re.findall(r"(\w+)\s*=\s*([\"']?[\w./]+[\"']?)", source)
-            kwargs_repr = ", ".join(
-                f"{k}={v}" for k, v in kwargs_match if k != "kwargs"
-            )  # Ignore **kwargs
-            return f"{class_name}({kwargs_repr})"
+            match = re.match(r"\s*lambda\s+[^\:]*\:\s*(.+)", lambda_str)
+            assert match is not None
+            
+            return match.group(1)
         except Exception:
             raise ValueError(
                 f"Error while trying to get the representation of the task {self}"
@@ -110,21 +103,26 @@ class TaskMinigrid(Task):
 class MinigridMetaEnv(BaseMetaEnv):
 
     def __init__(self, config: Dict) -> None:
-        # Extract parameters from the configuration
+        # --- Extract parameters from the configuration file ---
+        # Env parameters
         self.viewsize = config.get("viewsize", 7)
         self.size = config.get("size", 10)
+        # Representation parameter
+        self.sections_docstring = config.get("sections_docstring")
+        # Logging and render
+        self.log_dir = config["config_logs"]["log_dir"]
         self.render_mode = config.get("render_mode", None)
         self.render_mode_eval = config.get("render_mode_eval", None)
-        self.log_dir = config["config_logs"]["log_dir"]
-        # Define other parameters
+        
+        # Define variables
         self.t = 0
         # Define the curriculum
         levels = [
             
-            # {
-            #     # For testing envs
-            #     lambda **kwargs: GoToObj(room_size=self.size, **kwargs),
-            # },
+            {
+                # For testing envs
+                lambda **kwargs: GoToObj(room_size=self.size, **kwargs),
+            },
             
             {
                 # Observation structure comprehension and navigation comprehension tasks
@@ -266,7 +264,7 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
         # Create the task representation
         task_representation = TaskRepresentation(
             name=f"{task} - Mission : {self.env_mg.unwrapped.mission}",  # GoToObj() - Mission : go to the green ball
-            description=self.env_mg.unwrapped.__doc__,  # go to the green ball using your navigation skills
+            description=self.extract_sections(self.env_mg.unwrapped.__doc__, self.sections_docstring),  # ## Description \t Go to an object
             observation_space=self.env_mg.observation_space,  # gym.space object
             action_space=self.env_mg.action_space,  # gym.space object
         )
@@ -331,31 +329,38 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
 
     # ======= Helper methods =======
 
-    def extract_task_repr_from_env_mg(self, env: MiniGridEnv) -> TaskRepresentation:
-        """Extract the task representation from the minigrid environment of the task.
-
+    def extract_sections(self, docstring: str, sections_docstring: list) -> Dict[str, str]:
+        """
+        Extract specified sections from a docstring formatted with Markdown-style headers (## Section Name).
+        
         Args:
-            env (MiniGridEnv): the minigrid environment that will be used to extract the task description
+            docstring (str): The full docstring to parse.
+            sections_to_extract (list): List of section titles to extract, e.g. ["Description", "Mission Space", "Termination"].
 
         Returns:
-            TaskRepresentation: the task representation extracted from the minigrid environment
+            Dict[str, str]: Dictionary mapping section names to their extracted text.
         """
-        # The name of the task is the mission string
-        name = (
-            f"Env: {env.unwrapped.__class__.__name__}\n"
-            f"Mission: {env.unwrapped.mission}"
-        )
-        # The description of the task is the docstring of the env class
-        description = env.unwrapped.__doc__
-        # Create the task representation
-        task_representation = TaskRepresentation(
-            name=name,  # go to the green ball
-            description=description,  # go to the green ball using your navigation skills
-            observation_space=env.observation_space,  # gym.space object
-            action_space=env.action_space,  # gym.space object
-        )
-        return task_representation
+        if docstring is None:
+            return 
 
+        # Remove uniform indentation
+        docstring = textwrap.dedent(docstring)
+        
+        # Match sections with headers like ## Description
+        pattern = r"^##\s+(.+?)\n(.*?)(?=^##\s+|\Z)"  # Matches section title and content
+        matches = re.findall(pattern, docstring, re.DOTALL | re.MULTILINE)
+        
+        if matches == []:
+            print("[WARNING] No section found in the docstring")
+            
+        list_sections = []
+        for title, content in matches:
+            title_clean = title.strip()
+            if title_clean in sections_docstring:
+                list_sections.append(f"## {title_clean} \n{content.strip()}\n")
+        # Join the sections with new lines
+        return "\n".join(list_sections)
+    
     def extract_kwargs(self, family_task, name, keys_kwargs):
         # Create a regex pattern based on the family string
         family_task_escape = re.escape(family_task)

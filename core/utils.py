@@ -30,3 +30,8 @@ def try_get_seed(config: Dict) -> int:
     except KeyError:
         seed = np.random.randint(0, 1000)
     return seed
+
+def to_maybe_inf(n):
+    if n in ["inf", "infinity", None, "None"]:
+        return np.inf
+    return n

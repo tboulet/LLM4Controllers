@@ -30,7 +30,7 @@ from core.loggers.tqdm_logger import LoggerTQDM
 from core.utils import get_error_info
 from core.register_hydra import register_hydra_resolvers
 from core.time_measure import RuntimeMeter
-from core.utils import try_get_seed
+from core.utils import try_get_seed, to_maybe_inf
 from env import env_name_to_MetaEnvClass
 from agent import agent_name_to_AgentClass
 
@@ -45,9 +45,11 @@ def main(config: DictConfig):
     # Get the config values from the config object.
     agent_name: str = config["agent"]["name"]
     env_name: str = config["env"]["name"]
-    n_episodes: int = config["n_episodes"]
+    n_episodes: int = config.get("n_episodes", np.inf)
+    n_episodes = to_maybe_inf(n_episodes)
     n_training_episodes: int = config["n_training_episodes"]
     n_eval_episodes: int = config["n_eval_episodes"]
+    log_dir: str = config["log_dir"]
     do_cli: bool = config["do_cli"]
     do_wandb: bool = config["do_wandb"]
     do_tb: bool = config["do_tb"]
@@ -93,13 +95,13 @@ def main(config: DictConfig):
     if do_cli:
         loggers.append(LoggerCLI())
     if do_tb:
-        loggers.append(LoggerTensorboard(log_dir=f"logs/{run_name}"))
-    if do_tqdm and n_episodes != sys.maxsize:
+        loggers.append(LoggerTensorboard(log_dir=f"{log_dir}/{run_name}"))
+    if do_tqdm and n_episodes != np.inf:
         loggers.append(LoggerTQDM(n_total=n_episodes))
     logger = MultiLogger(*loggers)
 
-    # Remove logs/_last/ to clean the logs
-    shutil.rmtree("logs/_last/", ignore_errors=True)
+    # Remove logs/last/ to clean the logs
+    shutil.rmtree(f"{log_dir}/last/", ignore_errors=True)
         
     # Training loop
     ep = 0
@@ -135,8 +137,8 @@ def main(config: DictConfig):
                 obs, reward, done, truncated = (
                     None,
                     0,
-                    True,
                     False,
+                    True,
                 )
                 print(f"ERROR WARNING : {info['error']}")
                 break

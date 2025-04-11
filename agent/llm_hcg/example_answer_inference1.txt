@@ -1,0 +1,9 @@
+Reasoning :
+The task is asking me to move forward. I see there is already a controller for moving forward, so I will use that one directly (...)
+
+Controller:
+```python
+from controller_library import MoveForwardController
+
+controller = MoveForwardController()
+```

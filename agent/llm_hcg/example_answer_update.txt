@@ -28,3 +28,12 @@ class MyRefactoredController(Controller):
 
 controller = MyRefactoredController(...)
 ```
+
+Refactored controller for task 7:
+```python
+from agent.base_controller import Controller, Observation, ActionType
+from controller_library import AnOldPrimitiveController
+
+controller = AnOldPrimitiveController(...)
+```
+

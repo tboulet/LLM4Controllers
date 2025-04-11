@@ -1,0 +1,44 @@
+Reasoning :
+The task is asking me to go to the left, so I will generate a specialized controller that will turn to the left and then move forward (...)
+
+Controller:
+```python
+from controller_library import MoveForwardController, TurnToDirectionController
+
+class SpecializedController(Controller):
+    """A specialized controller for going to a specific direction.
+    """
+
+    def __init__(self, direction_target: int):
+        """A specialized controller for going to a specific direction.
+
+        Args:
+            direction_target (int): The target direction to turn to.
+        """
+        self.direction_target = direction_target
+        self.turn_to_dir = TurnToDirectionController(direction_target=direction_target)
+        self.move_forward_controller = MoveForwardController()
+
+    def act(self, observation : Observation) -> ActionType:
+        """
+        Args:
+            observation (Observation): The observation of the environment.
+        
+        Returns:
+            ActionType: The action to perform.
+        """
+        if observation["direction"] != self.direction_target:
+            return self.turn_to_dir.act(observation)
+        else:
+            return self.move_forward_controller.act(observation)
+
+    def has_finished(self) -> bool:
+        """
+        Returns:
+            bool: True if the controller has finished, False otherwise.
+        """
+        return False # the controller never finishes, it just keeps going in the same direction
+
+# Instantiate the controller here, either from imported controllers or from the class you defined if you did
+controller = SpecializedController(direction_target=3) # as 3 is the left direction
+```

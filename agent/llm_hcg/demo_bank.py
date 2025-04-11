@@ -7,7 +7,7 @@ import numpy as np
 from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller
 from core.feedback_aggregator import FeedbackAggregated
-from core.task import TaskDescription
+from core.task import Task, TaskDescription
 from core.utils import get_error_info
 from env.base_meta_env import BaseMetaEnv, Observation, ActionType, InfoDict
 from abc import ABC, abstractmethod
@@ -23,6 +23,7 @@ class TransitionData:
 
     def __init__(
         self,
+        task: Task,
         task_repr: TaskDescription,
         code: str,
         feedback: FeedbackAggregated,
@@ -30,16 +31,19 @@ class TransitionData:
         """Initialize the TransitionData object.
 
         Args:
+            task (Task): the task object
             task_repr (TaskRepresentation): the task representation
             code (str): the code used to solve the task. It should contain the instanciation of a 'controller' variable of type Controller.
             feedback (FeedbackAggregated): the feedback of the transition
         """
+        self.task = task
         self.task_repr = task_repr
         self.code = code
         self.feedback = feedback
 
     def __repr__(self):
         return (
+            f"Task: \n{self.task}\n\n"
             f"Task description: \n{self.task_repr}\n\n"
             f"Code: \n```python\n{self.code}\n```\n\n"
             f"Feedback: \n{self.feedback}"

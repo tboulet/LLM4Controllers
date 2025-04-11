@@ -42,9 +42,18 @@ class LLMBasedHCG(BaseAgent):
         config_llm = config["llm"]["config"]
         self.llm = llm_name_to_LLMClass[name_llm](config_llm)
         # Define the text templates
+        self.prompt_system = (
+            "We are in the context of solving a task-based environment. The tasks consist of interacting with the environment for several steps in order to achieve a specified goal. "
+            "The objects that operates in the environment are called controllers and are sub-classes of the class Controller. "
+            "We maintain a library of (primitive) controllers that are relatively low-level controllers that can be composed by the actually deployed (specialized) controllers. "
+            "We also maintain a demo bank of examples (task description, code, feedback) that happened during the agent's training. "
+        )
         self.text_base_controller = open("agent/base_controller.py").read()
-        self.text_example_answer_inference = open(
-            "agent/llm_hcg/example_answer_inference.txt"
+        self.text_example_answer_inference1 = open(
+            "agent/llm_hcg/example_answer_inference1.txt"
+        ).read()
+        self.text_example_answer_inference2 = open(
+            "agent/llm_hcg/example_answer_inference2.txt"
         ).read()
         self.text_example_answer_update = open(
             "agent/llm_hcg/example_answer_update.txt"
@@ -137,7 +146,9 @@ class LLMBasedHCG(BaseAgent):
         # Create the prompt for the assistant
         prompt_inference = (
             # Purpose prompt
-            "You will be asked to generate the code for a Controller and instanciate this controller for a given task in a RL-like environment. "
+            f"{self.prompt_system}\n\n"
+            "In this step, you are asked to generate a specialized controller for that task, based on the library you have access to and using "
+            "the demo bank as in-context examples. "
             "\n\n"
             # Environment prompt
             "[General description of the environment]\n"
@@ -166,7 +177,7 @@ class LLMBasedHCG(BaseAgent):
             # Demo bank prompt
             "[Examples]\n"
             "Here are some examples of code used to solve similar tasks in the past. "
-            "For each example, you are given the task description, the code used to solve it and the feedback given to the agent after the execution of the controller (performance of the agent, error detected, etc.). "
+            "For each example, you are given the task description, the code used to solve it and the feedback given to the agent after the execution of the code (performance of the agent, error detected, etc.). "
             "You can see these good/bad examples (depending on feedback) as a source of inspiration to solve the task. "
             "\n\n"
             f"{examples_demobank}"
@@ -183,10 +194,17 @@ class LLMBasedHCG(BaseAgent):
             "Please reason step-by-step and think about the best way to solve the task before answering. "
             "\n\n"
             # Example of answer prompt (in-context learning)
-            "[Example of answer]\n"
-            "Your answer should be returned following that example:\n"
-            f"{self.text_example_answer_inference}"
-            "\n\n"
+            "[Examples of answer]\n"
+            "If a controller from the library seems already suitable for the task, you can use it directly, as in the example below:\n"
+            "=== Example 1 of answer ===\n"
+            f"{self.text_example_answer_inference1}\n"
+            "===========================\n\n"
+            "If the task is more complicated, new, or requires some combinations of primitive controllers, you can define a new controller class "
+            "before instanciating it as in the example below. But in that case, you MUST name it as 'SpecializedController' and make sure it inherits from the class Controller. \n"
+            "=== Example 2 of answer ===\n"
+            f"{self.text_example_answer_inference2}\n"
+            "===========================\n\n"
+            "\n"
             # Task prompt
             "[Task to solve]\n"
             f"You will have to implement a controller (under the variable 'controller') to solve the following task : \n{task_description}."
@@ -235,7 +253,7 @@ class LLMBasedHCG(BaseAgent):
                 continue
             # Extract the controller
             try:
-                super_controller = self.exec_code_and_get_controller(code)
+                specialized_controller = self.exec_code_and_get_controller(code)
             except Exception as e:
                 full_error_info = get_error_info(e)
                 print(
@@ -264,10 +282,10 @@ class LLMBasedHCG(BaseAgent):
             self.log_texts(
                 {
                     "answer.txt": answer,
-                    "super_controller.py": code,
+                    "specialized_controller.py": code,
                 }
             )
-            return super_controller
+            return specialized_controller
 
         else:
             raise ValueError(
@@ -286,7 +304,7 @@ class LLMBasedHCG(BaseAgent):
         # Add the transition to the demo bank
         self.demo_bank.add_transition(
             transition=TransitionData(
-                task_repr=task_repr, code=self.sc_code_last, feedback=feedback
+                task=task, task_repr=task_repr, code=self.sc_code_last, feedback=feedback
             )
         )
         # Log the feedback and the task description
@@ -314,7 +332,7 @@ class LLMBasedHCG(BaseAgent):
                 (
                     f"Task no {idx_task+1} :\n"
                     f"{transition_data.task_repr}\n\n"
-                    f"Super controller code :\n```python\n{transition_data.code}\n```\n\n"
+                    f"Specialized controller code :\n```python\n{transition_data.code}\n```\n\n"
                     f"Performance : \n{transition_data.feedback}"
                 )
             )
@@ -325,12 +343,10 @@ class LLMBasedHCG(BaseAgent):
 
         # Create the prompt for the assistant
         prompt_update = (
-            # Purpose prompt
-            "We are in the context of solving a task-based environment. The tasks consist of interacting with the environment for several steps in order to achieve a specified goal. "
-            "The objects that operates in the environment are called controllers and are sub-classes of the class Controller. "
-            "We maintain a library of (primitive) controllers that are relatively low-level controllers that can be composed by the actually deployed (super) controllers. "
-            "We also maintain a demo bank of transitions (task representation, controller code, feedback) that happened during the agent's training. "
-            "You are an agent that is asked to 1) improve the library of controllers and 2) refactor if needed the super controller codes that are used in the demo bank. "
+            # System prompt
+            f"{self.prompt_system}\n\n"
+            "In this step, you are asked to 1) improve the library of controllers and 2) refactor "
+            "if needed the specialized controller codes that are used in the demo bank. "
             "\n\n"
             # Environment prompt
             "[General description of the environment]\n"
@@ -347,8 +363,8 @@ class LLMBasedHCG(BaseAgent):
             # Knowledge base prompt
             "[Controller library (to improve)]\n"
             "You have here the library of controllers that are already defined in the 'controller_library' module. "
-            "You cannot use them in the definition of other primitive controllers of the library, but you can use them in the definition of the super controllers when you refactor the demo bank. "
-            "If you wish to use them, you can import them in your super controller code using the following syntax:\n"
+            "You cannot use them in the definition of other primitive controllers of the library, but you can use them in the definition of the specialized controllers when you refactor the demo bank. "
+            "If you wish to use them, you can import them in your specialized controller code using the following syntax:\n"
             "```python\n"
             "from controller_library import Controller1, Controller2\n"
             "```\n"
@@ -356,46 +372,52 @@ class LLMBasedHCG(BaseAgent):
             "\n"
             f"{self.library_controller}"
             "\n\n"
-            "You are asked to improve the library of controllers by making it more modular and creating usefull primitive controllers that can be used in the super controllers. "
+            "You are asked to improve the library of controllers by making it more modular and creating usefull primitive controllers that can be used in the specialized controllers. "
             f"You can add up to {self.n_max_update_new_primitives} new controllers to the library. "
             "You CAN'T add a controller that is already present in the library. "
             "For adding a new primitive controller to the library, include 'New primitive controller' followed by "
             "the definition of the controller in your answer. Example:\n"
+            "=== Example of new primitive controller ===\n"
             "New primitive controller:\n"
             "```python\n"
             f"{self.text_example_pc}```"
+            "=========================\n"
             "\n\n"
             # Demo bank prompt
             "[Demo Bank (to refactor)]\n"
-            "Here are some transitions (task description, controller code, performance) that happened during the agent's training. "
-            "Based on these experiences and the controller library, you are asked to refactor the controller code to improve the agent's performance. "
-            "The performance is a scalar between 0 and 1. If the scalar is near 1, you can hardly improve the controller but you may make it more modular by using the library. "
+            "Here are some transitions (task description, code, performance) that happened during the agent's training. "
+            "Based on these experiences and the controller library, you are asked to refactor the code to improve the agent's performance. "
+            "The performance is a scalar between 0 and 1. If the scalar is near 1, you can hardly improve the code but you may make it more modular by using the library. "
             "\n\n"
             f"{examples_demobank}"
             "\n\n"
             "You can refactor the controller code by using the controllers from the library, or by defining new controllers that possibly compose the primitive controllers from the library. "
             f"You can refactor between 0 to {self.n_max_update_refactorings} controllers from the demo bank. "
             "For refactoring a controller from the demo bank, include 'Refactored controller for task <idx task>' followed by "
-            "the definition of the controller in your answer. Example:\n"
+            "the definition of the controller in your answer.\n"
+            "If a controller from the library seems already suitable for the task, you can use it directly, as in the example below:\n"
+            "=== Example 1 of refactoring ===\n"
             "Refactored controller for task 3:\n"
-            "```python\n"
-            f"{self.text_example_sc}```"
-            "\n\n"
-            # Advice prompt
-            # "[Advices]\n"
-            # "You can write a new controller class and/or use the controllers that are already implemented in the knowledge base. "
-            # "If you define a controller from scratch, you can't define functions outside the controller class, you need to define them inside the class as methods. "
-            # "Your code should create a 'controller' variable that will be extracted for performing in the environment\n"
-            # "\n" # (commented for now)
-            # "You should try as much as possible to produce controllers that are short in terms of tokens of code. "
-            # "This can be done in particular by re-using the functions and controllers that are already implemented in the knowledge base and won't cost a lot of tokens. "
+            f"{self.text_example_answer_inference1}\n"
+            "===========================\n\n"
+            "If the task is more complicated, new, or requires some combinations of primitive controllers, you can define a new controller class "
+            "before instanciating it as in the example below. But in that case, you MUST name it as 'SpecializedController' and make sure it inherits from the class Controller. \n"
+            "=== Example 2 of refactoring ===\n"
+            "Refactored controller for task 3:\n"
+            f"{self.text_example_answer_inference2}\n"
+            "===========================\n\n"
+            "\n"
+            "[Advices]\n"
+            "If you define a controller from scratch, you can't define functions outside the controller class, you need to define them inside the class as methods. "
             "\n"
             "Please reason step-by-step and think about the best way to solve the task before answering. "
             "\n\n"
             # Example of answer prompt (in-context learning)
             "[Example of answer]\n"
             "Your answer should be returned following that example:\n"
-            f"{self.text_example_answer_update}"
+            "=== Example of answer ===\n"
+            f"{self.text_example_answer_update}\n"
+            "===========================\n\n"
         )
         self.log_texts(
             {
@@ -657,7 +679,7 @@ class LLMBasedHCG(BaseAgent):
         from controller_library import Controller1, Controller2 # optional, and if authorize_imports is True
         import numpy as np
 
-        class MyController(Controller1):
+        class SpecializedController(Controller1):
             ... # code for the controller
 
         controller = MyController()
@@ -678,6 +700,21 @@ class LLMBasedHCG(BaseAgent):
         Returns:
             Controller: the controller instance.
         """
+        match = re.search(r"class\s+(\w+)\s*\(", code)
+        if match:
+            # If there is a class definition in the code, assert that it is named 'SpecializedController'
+            assert match.group(1) == "SpecializedController", (
+                "A class definition was found in the code but it is not named 'SpecializedController'. "
+                "If you want to define a new controller rather than only use the classes from the library, "
+                "you should name it 'SpecializedController'."
+            )
+            # Assert there is at most one class definition
+            assert len(re.findall(r"class\s+\w+\s*\(", code)) == 1, (
+                "There is more than one class definition in the code. "
+                "You can define at most one class in the code (1 or none). "
+                "And if you define one, it should be named 'SpecializedController'."
+            )
+            
         # Extract PC class names from 'from controller_library import ...' statements
         lines = code.split("\n")
         lines_without_controller_imports: List[str] = []
@@ -688,7 +725,7 @@ class LLMBasedHCG(BaseAgent):
             if match:
                 if not authorize_imports:
                     raise ValueError(
-                        "You are not allowed to import controllers from the controller_library module when creating a new primitive controller, only when creating a super controller for inference/refactoring."
+                        "You are not allowed to import controllers from the controller_library module when creating a new primitive controller, only when creating a specialized controller for inference/refactoring."
                     )
                 controller_classes_names.extend(
                     [cls.strip() for cls in match.group(1).split(",")]
@@ -722,7 +759,6 @@ class LLMBasedHCG(BaseAgent):
             scope_with_imports.update(local_scope)
             exec(code_without_controller_imports, self.base_scope, local_scope)
         except Exception as e:
-            breakpoint()
             raise ValueError(
                 f"An error occured while executing the code for instanciating a controller. Full error info : {get_error_info(e)}"
             )

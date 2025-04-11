@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 import random
 from typing import Any, Dict, Generic, TypeVar
 
+from core.feedback_aggregator import FeedbackAggregated
+
 Objective = TypeVar("Objective")
 
 
@@ -18,5 +20,5 @@ class BaseCurriculum(ABC, Generic[Objective]):
         """Sample an objective from the curriculum distribution."""
 
     @abstractmethod
-    def update(self, objective: Objective, feedback: Dict[str, Any]):
+    def update(self, objective: Objective, feedback: FeedbackAggregated):
         """Update the curriculum based on the feedback received from the agent."""

@@ -135,7 +135,7 @@ class FeedbackAggregated:
             else:
                 raise ValueError(f"Unsupported feedback type: {metric.type_value}")
         self.dict_aggregated_feedback = dict_aggregated_feedback
-        breakpoint()
+
     def get_repr(self):
         """
         Get a string representation of the feedback aggregator.
@@ -181,6 +181,15 @@ class FeedbackAggregated:
                 raise ValueError(f"Unsupported feedback type: {metric.type_value}")
         return "\n".join(list_repr)
 
+    def __repr__(self):
+        """
+        Get a string representation of the feedback aggregator.
+
+        Returns:
+            str: A string representation of the feedback aggregator.
+        """
+        return self.get_repr()
+    
     def get_metrics(self, task : TaskDescription = None) -> Dict[str, Any]:
         """
         Get the aggregated feedback as loggable metrics.

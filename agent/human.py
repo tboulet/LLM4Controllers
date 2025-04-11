@@ -8,8 +8,9 @@ import random
 import numpy as np
 from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller
+from core.feedback_aggregator import FeedbackAggregated
 from env.base_meta_env import BaseMetaEnv, Observation, ActionType, InfoDict
-from core.task import TaskDescription
+from core.task import Task, TaskDescription
 
 
 class HumanController(Controller):
@@ -39,8 +40,9 @@ class HumanAgent(BaseAgent):
 
     def update(
         self,
+        task: Task,
         task_description: TaskDescription,
         controller: Controller,
-        feedback: Dict[str, Union[float, str]],
+        feedback: FeedbackAggregated,
     ):
         print(f"Feedback received: {feedback}")

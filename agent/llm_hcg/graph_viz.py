@@ -109,7 +109,7 @@ class ControllerVisualizer:
         print(
             (
                 "[VISUALIZER] : Visualizer updated. "
-                f"\033]8;;{file_path}\033\\Click here to open the graph in your browser\033]8;;\033\\"
+                f"\033]8;;file://{file_path}\033\\Click here to open the graph in your browser\033]8;;\033\\"
             )
         )
 

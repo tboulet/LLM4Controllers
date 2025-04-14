@@ -59,11 +59,16 @@ class LLMBasedHCG(BaseAgent):
             "agent/llm_hcg/example_answer_update.txt"
         ).read()
         self.text_example_pc = open("agent/llm_hcg/initial_PCs/move_forward.py").read()
-        self.text_example_sc = (
+        self.text_example_sc1 = (
+            open("agent/llm_hcg/initial_SCs/go_forward.py")
+            .read()
+            .replace("..utils_PCs", "controller_library")
+        )
+        self.text_example_sc2 = (
             open("agent/llm_hcg/initial_SCs/go_north.py")
             .read()
             .replace("..utils_PCs", "controller_library")
-        )  # this replace the import of the PC by the import of the library
+        )
         # Extract the inference parameters
         self.n_samples_inference = self.config.get("n_samples_inference", 5)
         self.method_inference_sampling = self.config.get(
@@ -310,7 +315,7 @@ class LLMBasedHCG(BaseAgent):
         # Log the feedback and the task description
         self.log_texts(
             {
-                "feedback.txt": json.dumps(feedback, indent=4),
+                "feedback.txt": json.dumps(feedback.get_repr(), indent=4),
             }
         )
         # Skip if not in the update step
@@ -376,7 +381,7 @@ class LLMBasedHCG(BaseAgent):
             f"You can add up to {self.n_max_update_new_primitives} new controllers to the library. "
             "You CAN'T add a controller that is already present in the library. "
             "For adding a new primitive controller to the library, include 'New primitive controller' followed by "
-            "the definition of the controller in your answer. Example:\n"
+            "the python code of the controller (between python tags) in your answer. Example:\n"
             "=== Example of new primitive controller ===\n"
             "New primitive controller:\n"
             "```python\n"
@@ -398,23 +403,23 @@ class LLMBasedHCG(BaseAgent):
             "If a controller from the library seems already suitable for the task, you can use it directly, as in the example below:\n"
             "=== Example 1 of refactoring ===\n"
             "Refactored controller for task 3:\n"
-            f"{self.text_example_answer_inference1}\n"
+            f"{self.text_example_sc2}\n"
             "===========================\n\n"
             "If the task is more complicated, new, or requires some combinations of primitive controllers, you can define a new controller class "
             "before instanciating it as in the example below. But in that case, you MUST name it as 'SpecializedController' and make sure it inherits from the class Controller. \n"
             "=== Example 2 of refactoring ===\n"
             "Refactored controller for task 3:\n"
-            f"{self.text_example_answer_inference2}\n"
+            f"{self.text_example_sc2}\n"
             "===========================\n\n"
             "\n"
             "[Advices]\n"
-            "If you define a controller from scratch, you can't define functions outside the controller class, you need to define them inside the class as methods. "
-            "\n"
-            "Please reason step-by-step and think about the best way to solve the task before answering. "
+            "- If you define a controller from scratch, you can't define functions outside the controller class, you need to define them inside the class as methods.\n"
+            "- Please reason step-by-step and think about the best way to solve the task before answering.\n"
+            "- You should try as much as possible to build a modular library of controllers, with low-level and general primitive controller, and high level specialized controllers that may use them.\n"
             "\n\n"
             # Example of answer prompt (in-context learning)
             "[Example of answer]\n"
-            "Your answer should be returned following that example:\n"
+            "Here is an example of acceptable answer:\n"
             "=== Example of answer ===\n"
             f"{self.text_example_answer_update}\n"
             "===========================\n\n"
@@ -615,7 +620,7 @@ class LLMBasedHCG(BaseAgent):
                         f"The error is the following : {full_error_info}\n\n"
                         f"Please try again FOR THIS CONTROLLER ONLY. "
                         f"IMPORTANT : Note that your answer should now be composed of CODE ONLY (not in python balises) and follow the format of the example below:\n"
-                        f"{self.text_example_sc}"
+                        f"{self.text_example_sc2}"
                     )
                     self.log_texts(
                         {
@@ -737,8 +742,8 @@ class LLMBasedHCG(BaseAgent):
         # Create local scope
         local_scope = (
             {}
-        )  # Will contain the PC classes, and then the controller instance
-
+        )  # Output source for the PC classes
+        
         # Execute controller imports first
         for controller_name in controller_classes_names:
             assert (
@@ -752,12 +757,12 @@ class LLMBasedHCG(BaseAgent):
                 raise ValueError(
                     f"An error occured while executing the code of the controller {controller_name} from the library. Maybe don't import this controller anymore. Full error info : {get_error_info(e)}"
                 )
-
+        
         # Execute the remaining code
+        scope_with_imports = self.base_scope.copy()
+        scope_with_imports.update(local_scope)
         try:
-            scope_with_imports = self.base_scope.copy()
-            scope_with_imports.update(local_scope)
-            exec(code_without_controller_imports, self.base_scope, local_scope)
+            exec(code_without_controller_imports, scope_with_imports, local_scope)
         except Exception as e:
             raise ValueError(
                 f"An error occured while executing the code for instanciating a controller. Full error info : {get_error_info(e)}"
@@ -830,8 +835,8 @@ class LLMBasedHCG(BaseAgent):
         if extracted_snippet_count != len(all_python_snippets):
             raise ValueError(
                 (
-                    "Mismatch between detected Python snippets and extracted code snippets."
-                    "The only tags allowed are 'New primitive controller' and 'Refactored controller for task <idx>' where <idx> is an integer."
+                    f"Mismatch between detected Python snippets ({extracted_snippet_count}) and the total number of Python snippets ({len(all_python_snippets)}). "
+                    "The only tags allowed are 'New primitive controller:' and 'Refactored controller for task <idx>:' where <idx> is an integer."
                 )
             )
 

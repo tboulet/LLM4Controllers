@@ -39,10 +39,18 @@ class LLM_Dummy(LanguageModel):
             len(self.messages) > 0
         ), "You need to add a prompt before generating completions."
         # Load the answer from the input file
-        file_name_input = input(f"Write the name of the file with the answer: ")
-        with open(file_name_input, "r") as f:
-            answer = f.read()
-        return answer
+        file_name_input = input(f"Write answer file : inputs/")
+        # If file_name_input == 'see', show the prompt
+        if file_name_input == "see":
+            print(self.messages)
+            return self.generate()
+        elif file_name_input == "break":
+            breakpoint()
+            return self.generate()
+        else:
+            with open(f"inputs/{file_name_input}", "r") as f:
+                answer = f.read()
+            return answer
 
     def add_answer(self, answer: str):
         """Add the answer to the language model.

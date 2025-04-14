@@ -158,7 +158,9 @@ def main(config: DictConfig):
                     # Step in the environment
                     obs, reward, done, truncated, info = task.step(action)
                     if "Error" in info:
-                        print(f"ERROR WARNING : {info['Error']}")
+                        error_message = info["Error"]
+                        info["Error"] = ErrorTrace(error_message)
+                        print(f"ERROR WARNING : {error_message}")
                         break
                     # Render and log
                     task.render()

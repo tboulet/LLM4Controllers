@@ -21,7 +21,7 @@ from hydra.utils import instantiate
 from llm import llm_name_to_LLMClass
 
 
-class LLMBasedHCG(BaseAgent):
+class HCG(BaseAgent):
 
     def __init__(self, config: Dict):
         super().__init__(config)
@@ -309,7 +309,10 @@ class LLMBasedHCG(BaseAgent):
         # Add the transition to the demo bank
         self.demo_bank.add_transition(
             transition=TransitionData(
-                task=task, task_repr=task_repr, code=self.sc_code_last, feedback=feedback
+                task=task,
+                task_repr=task_repr,
+                code=self.sc_code_last,
+                feedback=feedback,
             )
         )
         # Log the feedback and the task description
@@ -719,7 +722,7 @@ class LLMBasedHCG(BaseAgent):
                 "You can define at most one class in the code (1 or none). "
                 "And if you define one, it should be named 'SpecializedController'."
             )
-            
+
         # Extract PC class names from 'from controller_library import ...' statements
         lines = code.split("\n")
         lines_without_controller_imports: List[str] = []
@@ -740,10 +743,8 @@ class LLMBasedHCG(BaseAgent):
         code_without_controller_imports = "\n".join(lines_without_controller_imports)
 
         # Create local scope
-        local_scope = (
-            {}
-        )  # Output source for the PC classes
-        
+        local_scope = {}  # Output source for the PC classes
+
         # Execute controller imports first
         for controller_name in controller_classes_names:
             assert (
@@ -757,7 +758,7 @@ class LLMBasedHCG(BaseAgent):
                 raise ValueError(
                     f"An error occured while executing the code of the controller {controller_name} from the library. Maybe don't import this controller anymore. Full error info : {get_error_info(e)}"
                 )
-        
+
         # Execute the remaining code
         scope_with_imports = self.base_scope.copy()
         scope_with_imports.update(local_scope)

@@ -1,4 +1,4 @@
-name: HCG
+name: HCG_2
 config:
 
   # The model tag to use for the LLM (in case the LLM class requires a model tag).

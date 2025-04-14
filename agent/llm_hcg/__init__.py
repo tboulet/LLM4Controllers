@@ -1,1 +1,1 @@
-from .llm_hcg import LLMBasedHCG
+from .llm_hcg import HCG

@@ -97,9 +97,6 @@ class Task(ABC):
     
     def render(self) -> None:
         """Render the task.
-
-        Args:
-            mode (str): the render mode
         """
         pass
 

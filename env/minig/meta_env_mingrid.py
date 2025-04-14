@@ -51,6 +51,7 @@ from minigrid.envs.unlockpickup import UnlockPickupEnv
 from minigrid.envs.babyai.goto import GoToObj
 
 # Env customs
+from core.feedback_aggregator import FeedbackAggregated
 from env.minig.env_minigrid_autosuccess import AutoSuccessEnv
 from env.minig.env_minigrid_give_agent_position import GiveAgentPositionEnv
 from env.minig.env_minigrid_give_goal_position import GiveGoalPositionEnv
@@ -460,6 +461,6 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
     ) -> TaskMinigrid:
         return self.curriculum.sample()
 
-    def update(self, task: TaskMinigrid, feedback: Dict[str, Any]) -> None:
+    def update(self, task: TaskMinigrid, feedback: FeedbackAggregated) -> None:
         self.curriculum.update(objective=task, feedback=feedback)
         self.timestep += 1

@@ -139,7 +139,7 @@ def main(config: DictConfig):
             feedback_agg = FeedbackAggregated()
             for k in range(n_episodes):
                 # Reset the environment
-                obs, info = task.reset(is_eval=is_eval)
+                obs, info = task.reset(is_eval=is_eval and k == 0) # eval only once per rollout for now
                 task.render()
 
                 # Loop over the episode
@@ -176,8 +176,6 @@ def main(config: DictConfig):
                     "success": reward > 0,
                     "reward": reward,
                 }
-                if "Error" in info:  # add error info to feedback
-                    feedback["Error"] = info["Error"]
 
                 feedback.update(env_feedback)  # add environment feedback to feedback
 
@@ -201,11 +199,9 @@ def main(config: DictConfig):
         logger.log_scalars(metrics, step=step)
 
         # Update the progress bar
-        if is_eval:
-            step += 1
-        else:
+        step += 1
+        if not is_eval:
             step_training += 1
-            step += 1
 
 
 if __name__ == "__main__":

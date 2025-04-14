@@ -76,7 +76,7 @@ class GiveAgentPositionEnv(MiniGridEnv):
             reward = 1
         else:
             reward = 0
-            self.failure_reason = f"The agent given position ({x}, {y}) is not the true position ({x_true}, {y_true})"
+            self.failure_reason = f"The agent given position is not the true position of the agent."
         truncated = True
         done = True
         info = {}

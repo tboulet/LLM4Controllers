@@ -10,6 +10,7 @@ from agent.llm_hcg.graph_viz import ControllerVisualizer
 from agent.llm_hcg.library_controller import ControllerLibrary
 from agent.llm_hcg.demo_bank import DemoBank, TransitionData
 from core.feedback_aggregator import FeedbackAggregated
+from core.loggers.base_logger import BaseLogger
 from core.task import Task, TaskDescription
 from core.utils import get_error_info
 from env.base_meta_env import BaseMetaEnv, Observation, ActionType, InfoDict
@@ -23,8 +24,8 @@ from llm import llm_name_to_LLMClass
 
 class HCG(BaseAgent):
 
-    def __init__(self, config: Dict):
-        super().__init__(config)
+    def __init__(self, config: Dict, logger: BaseLogger = None):
+        super().__init__(config, logger)
         # Initialize logging
         config_logs = self.config["config_logs"]
         log_dir = config_logs["log_dir"]
@@ -104,7 +105,7 @@ class HCG(BaseAgent):
             log_dirs=self.list_log_dirs_global,
             **config["config_visualizer"],
         )
-        # Initialize knowledge base
+        # Initialize knowledge base and demo bank
         self.library_controller = ControllerLibrary(
             config_agent=config,
             visualizer=self.visualizer,
@@ -182,7 +183,7 @@ class HCG(BaseAgent):
             # Demo bank prompt
             "[Examples]\n"
             "Here are some examples of code used to solve similar tasks in the past. "
-            "For each example, you are given the task description, the code used to solve it and the feedback given to the agent after the execution of the code (performance of the agent, error detected, etc.). "
+            "For each example, you are given the task, the task description, the code used to solve it and the feedback given to the agent after the execution of the code (performance of the agent, error detected, etc.). "
             "You can see these good/bad examples (depending on feedback) as a source of inspiration to solve the task. "
             "\n\n"
             f"{examples_demobank}"
@@ -318,7 +319,7 @@ class HCG(BaseAgent):
         # Log the feedback and the task description
         self.log_texts(
             {
-                "feedback.txt": json.dumps(feedback.get_repr(), indent=4),
+                "feedback.txt": feedback.get_repr(),
             }
         )
         # Skip if not in the update step
@@ -329,24 +330,14 @@ class HCG(BaseAgent):
         # Move forward the visualizer
         self.visualizer.new_step()
 
-        # Sample transitions from the demo bank
+        # Sample transitions from the demo bank        
         transitions_sampled = self.demo_bank.sample_transitions(
             n_transitions=self.n_samples_update,
             method=self.method_update_sampling,
         )
-        examples_demobank = []
-        for idx_task, transition_data in enumerate(transitions_sampled):
-            examples_demobank.append(
-                (
-                    f"Task no {idx_task+1} :\n"
-                    f"{transition_data.task_repr}\n\n"
-                    f"Specialized controller code :\n```python\n{transition_data.code}\n```\n\n"
-                    f"Performance : \n{transition_data.feedback}"
-                )
-            )
-
         examples_demobank = "\n\n".join(
-            str(transition) for transition in examples_demobank
+            f"Task no {idx_task+1} :\n\n{transition_data}"
+            for idx_task, transition_data in enumerate(transitions_sampled)
         )
 
         # Create the prompt for the assistant
@@ -388,7 +379,7 @@ class HCG(BaseAgent):
             "=== Example of new primitive controller ===\n"
             "New primitive controller:\n"
             "```python\n"
-            f"{self.text_example_pc}```"
+            f"{self.text_example_pc}```\n"
             "=========================\n"
             "\n\n"
             # Demo bank prompt
@@ -406,13 +397,17 @@ class HCG(BaseAgent):
             "If a controller from the library seems already suitable for the task, you can use it directly, as in the example below:\n"
             "=== Example 1 of refactoring ===\n"
             "Refactored controller for task 3:\n"
+            "```python\n"
             f"{self.text_example_sc2}\n"
+            "```\n"
             "===========================\n\n"
             "If the task is more complicated, new, or requires some combinations of primitive controllers, you can define a new controller class "
             "before instanciating it as in the example below. But in that case, you MUST name it as 'SpecializedController' and make sure it inherits from the class Controller. \n"
             "=== Example 2 of refactoring ===\n"
             "Refactored controller for task 3:\n"
+            "```python\n"
             f"{self.text_example_sc2}\n"
+            "```\n"
             "===========================\n\n"
             "\n"
             "[Advices]\n"
@@ -476,8 +471,9 @@ class HCG(BaseAgent):
                 self.log_texts(
                     {
                         f"failure_code_extraction_attempt_{no_attempt}_answer.txt": answer,
+                        f"failure_code_extraction_attempt_{no_attempt}_error.txt": full_error_info,
                     },
-                    in_task_folder=True,
+                    is_update_step=True,
                 )
                 if self.config["config_debug"][
                     "breakpoint_update_on_failure_code_extraction"

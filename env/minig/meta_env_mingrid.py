@@ -52,6 +52,7 @@ from minigrid.envs.babyai.goto import GoToObj
 
 # Env customs
 from core.feedback_aggregator import FeedbackAggregated
+from core.loggers.base_logger import BaseLogger
 from env.minig.env_minigrid_autosuccess import AutoSuccessEnv
 from env.minig.env_minigrid_give_agent_position import GiveAgentPositionEnv
 from env.minig.env_minigrid_give_goal_position import GiveGoalPositionEnv
@@ -315,7 +316,9 @@ class TaskMinigrid(Task):
 
 class MinigridMetaEnv(BaseMetaEnv):
 
-    def __init__(self, config: Dict) -> None:
+    def __init__(self, config: Dict, logger: BaseLogger = None):
+        self.config = config
+        self.logger = logger
         # --- Extract parameters from the configuration file ---
         self.config = config
         # Env parameters

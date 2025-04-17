@@ -1,7 +1,8 @@
 # Hyperparameters
-n_episodes : 100
-n_training_episodes: 10
-n_eval_episodes: 0
+n_steps_max : 100
+n_training_steps: 10
+n_eval_steps: 0
+n_episodes_per_step: 10
 
 # Logging
 log_dir : logs
@@ -12,7 +13,13 @@ wandb_config:
 do_tb : True
 do_cli : True
 do_tqdm : True
-
+config_logs:
+    # The directory to save logs to.
+    log_dir: ${log_dir}
+    # Whether to log the run on log_dir/<run name>
+    do_log_on_new: False
+    # Whether to log the run on log_dir/_last
+    do_log_on_last: True
 
 
 # Defaults sub-configs and other Hydra config.

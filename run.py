@@ -79,22 +79,8 @@ def main(config: DictConfig):
     config["env"]["config"]["run_name"] = run_name
     config["llm"]["run_name"] = run_name
 
-    # Create the env
-    print("Creating the dataset...")
-    MetaEnvClass = env_name_to_MetaEnvClass[env_name]
-    env = MetaEnvClass(config["env"]["config"])
-    textual_description_env = env.get_textual_description()
-
-    # Give LLM config to the agent
-    config["agent"]["config"]["llm"] = config["llm"]
-
-    # Create the agent
-    print("Creating the agent...")
-    AgentClass = agent_name_to_AgentClass[agent_name]
-    agent = AgentClass(config=config["agent"]["config"])
-    agent.give_textual_description(textual_description_env)
-
     # Initialize loggers
+    shutil.rmtree(f"{log_dir}/last/", ignore_errors=True) # Remove log_dir/last/ to clean the logs
     run_name = config.get(
         "run_name", run_name
     )  # do "python run.py +run_name=<your_run_name>" to change the run name
@@ -107,9 +93,21 @@ def main(config: DictConfig):
     if do_tqdm and n_steps_max != np.inf:
         loggers.append(LoggerTQDM(n_total=n_steps_max))
     logger = MultiLogger(*loggers)
+    
+    # Create the env
+    print("Creating the dataset...")
+    MetaEnvClass = env_name_to_MetaEnvClass[env_name]
+    env = MetaEnvClass(config["env"]["config"], logger=logger)
+    textual_description_env = env.get_textual_description()
 
-    # Remove log_dir/last/ to clean the logs
-    shutil.rmtree(f"{log_dir}/last/", ignore_errors=True)
+    # Give LLM config to the agent
+    config["agent"]["config"]["llm"] = config["llm"]
+
+    # Create the agent
+    print("Creating the agent...")
+    AgentClass = agent_name_to_AgentClass[agent_name]
+    agent = AgentClass(config=config["agent"]["config"], logger=logger)
+    agent.give_textual_description(textual_description_env)
 
     # Training loop
     step = 0

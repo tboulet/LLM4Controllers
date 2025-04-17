@@ -2,7 +2,7 @@ from agent.base_controller import Controller, Observation, ActionType
 from ..utils_PCs import MoveForwardController, TurnToDirectionController
 
 
-class GoNorthController(Controller):
+class SpecializedController(Controller):
     """A controller that will turn to north (0: up) and then move forward."""
 
     def __init__(self):
@@ -23,4 +23,4 @@ class GoNorthController(Controller):
         """
         return False
 
-controller = GoNorthController()
+controller = SpecializedController()

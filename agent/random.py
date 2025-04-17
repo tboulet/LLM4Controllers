@@ -6,6 +6,7 @@ from gymnasium import Space
 import numpy as np
 from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller
+from core.loggers.base_logger import BaseLogger
 from core.task import Task, TaskDescription
 from env.base_meta_env import BaseMetaEnv, Observation, ActionType, InfoDict
 from abc import ABC, abstractmethod
@@ -29,8 +30,9 @@ class RandomController(Controller):
 
 class RandomAgent(BaseAgent):
 
-    def __init__(self, config):
-        super().__init__(config)
+    def __init__(self, config: Dict, logger: BaseLogger = None):
+        self.config = config
+        self.logger = logger
 
     def get_controller(self, task_description: TaskDescription) -> Controller:
         return RandomController(action_space=task_description.action_space)

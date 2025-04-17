@@ -9,6 +9,7 @@ import numpy as np
 from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller
 from core.feedback_aggregator import FeedbackAggregated
+from core.loggers.base_logger import BaseLogger
 from env.base_meta_env import BaseMetaEnv, Observation, ActionType, InfoDict
 from core.task import Task, TaskDescription
 
@@ -30,9 +31,6 @@ class HumanController(Controller):
 
 
 class HumanAgent(BaseAgent):
-
-    def __init__(self, config):
-        super().__init__(config)
 
     def get_controller(self, task_description: TaskDescription) -> Controller:
         print(f"You are going to solve the following task: {task_description}")

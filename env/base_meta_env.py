@@ -3,14 +3,16 @@ from typing import Tuple, Union, Dict, Any, List, Optional
 from gymnasium import Space
 import numpy as np
 
+from core.loggers.base_logger import BaseLogger
 from core.task import Task, TaskDescription
 from core.types import Observation, ActionType, InfoDict
 from core.spaces import FiniteSpace
 
 
 class BaseMetaEnv(ABC):
-    def __init__(self, config: Dict) -> None:
+    def __init__(self, config: Dict, logger: BaseLogger):
         self.config = config
+        self.logger = logger
 
     @abstractmethod
     def get_task(self) -> Task:

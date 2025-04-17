@@ -2,14 +2,16 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Union
 from agent.base_controller import Controller
 from core.feedback_aggregator import FeedbackAggregated
+from core.loggers.base_logger import BaseLogger
 from env.base_meta_env import Observation, ActionType
 from core.task import Task, TaskDescription
 
 
 class BaseAgent(ABC):
 
-    def __init__(self, config: Dict):
+    def __init__(self, config: Dict, logger : BaseLogger):
         self.config = config
+        self.logger = logger
 
     @abstractmethod
     def get_controller(self, task_description: TaskDescription) -> Controller:

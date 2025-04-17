@@ -96,6 +96,10 @@ class ControllerLibrary:
             raise ValueError(
                 f"Controller {class_name} was attempted to be added to the controller library but is already present."
             )
+        if "from controller_library" in code:
+            raise ValueError(
+                "You are not allowed to import controllers from the controller_library module when creating a new primitive controller, only when creating a specialized controller for inference/refactoring."
+            )
         # Create a DataController object to store information about the controller
         data = ControllerData(
             code=code,
@@ -107,7 +111,7 @@ class ControllerLibrary:
 
     def __repr__(self):
         if len(self.controllers) == 0:
-            res = "The controller library is empty.\n"
+            res = "The controller library is empty for now.\n"
         else:
             res = "The controller library contains the following controllers:\n\n"
             for name_controller, data_controller in self.controllers.items():

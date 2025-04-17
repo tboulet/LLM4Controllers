@@ -100,4 +100,6 @@ class DemoBank:
             raise NotImplementedError(f"Sampling method {method} not implemented.")
 
     def __repr__(self):
+        if len(self.transitions) == 0:
+            return "The Demo bank is empty for now.\n"
         return f"Demo bank :\n\n" + "\n\n".join(str(t) for t in self.transitions)

@@ -1,3 +1,4 @@
+from collections import defaultdict
 import json
 import os
 import re
@@ -34,6 +35,7 @@ class HCG(BaseAgent):
             self.list_log_dirs_global.append(os.path.join(log_dir, config["run_name"]))
         if config_logs["do_log_on_last"]:
             self.list_log_dirs_global.append(os.path.join(log_dir, "last"))
+        self.metrics_memory_aware = defaultdict(int)
         # Log the config
         self.log_texts(
             {"config.yaml": json.dumps(self.config, indent=4)}, in_task_folder=False
@@ -137,17 +139,27 @@ class HCG(BaseAgent):
         Returns:
             Controller: the controller instance.
         """
+        # Reset the metrics at 0
+        for key in self.metrics_memory_aware.keys():
+            self.metrics_memory_aware[key] = 0
+
         # Extract demo bank examples to be given as in-context examples
         transitions_datas_sampled = self.demo_bank.sample_transitions(
             n_transitions=self.n_samples_inference,
             method=self.method_inference_sampling,
             task_description=task_description,
         )
-
-        examples_demobank = "\n\n".join(
-            f"Example no {idx_example+1} :\n\n{transition_data}"
-            for idx_example, transition_data in enumerate(transitions_datas_sampled)
+        self.metrics_memory_aware["n_transitions_sampled_inference"] = len(
+            transitions_datas_sampled
         )
+
+        if len(transitions_datas_sampled) == 0:
+            examples_demobank = "The demo bank is empty for now. "
+        else:
+            examples_demobank = "\n\n".join(
+                f"Example no {idx_example+1} :\n\n{transition_data}"
+                for idx_example, transition_data in enumerate(transitions_datas_sampled)
+            )
 
         # Create the prompt for the assistant
         prompt_inference = (
@@ -235,6 +247,7 @@ class HCG(BaseAgent):
         self.llm.reset()
         self.llm.add_prompt(prompt_inference)
         for no_attempt in range(self.num_attempts_inference):
+            self.metrics_memory_aware["n_attempts_inference"] += 1
             # Ask the assistant
             answer = self.llm.generate()
             self.llm.add_answer(answer)
@@ -251,6 +264,7 @@ class HCG(BaseAgent):
                 self.log_texts(
                     {f"failure_sc_code_extraction_{no_attempt}_answer.txt": answer}
                 )
+                self.metrics_memory_aware["n_failure_sc_code_extraction"] += 1
                 if self.config["config_debug"][
                     "breakpoint_inference_on_failure_code_extraction"
                 ]:
@@ -274,6 +288,7 @@ class HCG(BaseAgent):
                         f"failure_sc_code_execution_{no_attempt}_error.txt": full_error_info,
                     }
                 )
+                self.metrics_memory_aware["n_failure_sc_code_execution"] += 1
                 if self.config["config_debug"][
                     "breakpoint_inference_on_failure_code_execution"
                 ]:
@@ -283,6 +298,8 @@ class HCG(BaseAgent):
             self.sc_code_last = code
             is_controller_instance_generated = True
             break
+
+        self.logger.log_scalars(metrics=self.metrics_memory_aware, step=self.t)
 
         if is_controller_instance_generated:
             self.log_texts(
@@ -307,6 +324,11 @@ class HCG(BaseAgent):
         controller: Controller,
         feedback: FeedbackAggregated,
     ):
+        # Reset the metrics at 0
+        for key in self.metrics_memory_aware.keys():
+            self.metrics_memory_aware[key] = 0
+        self.metrics_memory_aware["timestamp"] = self.t
+        
         # Add the transition to the demo bank
         self.demo_bank.add_transition(
             transition=TransitionData(
@@ -330,11 +352,15 @@ class HCG(BaseAgent):
         # Move forward the visualizer
         self.visualizer.new_step()
 
-        # Sample transitions from the demo bank        
+        # Sample transitions from the demo bank
         transitions_sampled = self.demo_bank.sample_transitions(
             n_transitions=self.n_samples_update,
             method=self.method_update_sampling,
         )
+        self.metrics_memory_aware["n_transitions_sampled_update"] = len(
+            transitions_sampled
+        )
+
         examples_demobank = "\n\n".join(
             f"Task no {idx_task+1} :\n\n{transition_data}"
             for idx_task, transition_data in enumerate(transitions_sampled)
@@ -445,23 +471,35 @@ class HCG(BaseAgent):
                 code_primitives, dict_code_refactorings = self.extract_update_code(
                     answer
                 )
-                assert len(code_primitives) <= self.n_max_update_new_primitives, (
-                    f"You can only add up to {self.n_max_update_new_primitives} new controllers to the library. "
-                    f"Here, you tried to add {len(code_primitives)}."
-                )
-                assert len(dict_code_refactorings) <= self.n_max_update_refactorings, (
-                    f"You can only refactor up to {self.n_max_update_refactorings} controllers from the demo bank. "
-                    f"Here, you tried to refactor {len(dict_code_refactorings)}."
-                )
-                assert all(
+                if not len(code_primitives) <= self.n_max_update_new_primitives:
+                    self.metrics_memory_aware[
+                        "n_failure_update_code_extraction_n_new_primitive_exceeded"
+                    ] += 1
+                    raise ValueError(
+                        f"You can only add up to {self.n_max_update_new_primitives} new controllers to the library. "
+                        f"Here, you tried to add {len(code_primitives)}."
+                    )
+                if not len(dict_code_refactorings) <= self.n_max_update_refactorings:
+                    self.metrics_memory_aware[
+                        "n_failure_update_code_extraction_n_refactoring_exceeded"
+                    ] += 1
+                    raise ValueError(
+                        f"You can only refactor up to {self.n_max_update_refactorings} controllers from the demo bank. "
+                        f"Here, you tried to refactor {len(dict_code_refactorings)}."
+                    )
+                if not all(
                     [
                         idx_task in range(self.n_samples_update)
                         for idx_task in dict_code_refactorings.keys()
                     ]
-                ), (
-                    f"Task index in refactored controllers should be in [0, {self.n_samples_update-1}]."
-                    f"But here, you tried to refactor tasks with indexes {dict_code_refactorings.keys()}."
-                )
+                ):
+                    self.metrics_memory_aware[
+                        "n_failure_update_code_extraction_task_index_out_of_bound"
+                    ] += 1
+                    raise ValueError(
+                        f"Task index in refactored controllers should be in [0, {self.n_samples_update-1}]."
+                        f"But here, you tried to refactor tasks with indexes {dict_code_refactorings.keys()}."
+                    )
                 break
             except Exception as e:
                 full_error_info = get_error_info(e)
@@ -475,6 +513,9 @@ class HCG(BaseAgent):
                     },
                     is_update_step=True,
                 )
+                self.metrics_memory_aware[
+                    "n_failure_update_code_extraction"
+                ] += 1
                 if self.config["config_debug"][
                     "breakpoint_update_on_failure_code_extraction"
                 ]:
@@ -499,6 +540,8 @@ class HCG(BaseAgent):
             },
             is_update_step=True,
         )
+        self.metrics_memory_aware["n_new_primitives"] = len(code_primitives)
+        self.metrics_memory_aware["n_refactorings"] = len(dict_code_refactorings)
 
         # Warning if nothing was generated but extract_code_update did not raise an error
         if len(code_primitives) == 0 and len(dict_code_refactorings) == 0:
@@ -526,11 +569,14 @@ class HCG(BaseAgent):
                     )
                     self.log_texts(
                         {
-                            f"failing_pc_code_saving_{i}_attempt_{no_attempt}_controller.py": code_pc,
+                            f"failure_pc_code_saving_{i}_attempt_{no_attempt}_controller.py": code_pc,
                             f"failure_pc_code_saving_{i}_attempt_{no_attempt}_error.txt": full_error_info,
                         },
                         is_update_step=True,
                     )
+                    self.metrics_memory_aware[
+                        "n_failure_pc_code_saving"
+                    ] += 1
                     if self.config["config_debug"][
                         "breakpoint_update_on_failure_pc_code_saving"
                     ]:
@@ -596,11 +642,14 @@ class HCG(BaseAgent):
                     )
                     self.log_texts(
                         {
-                            f"failing_sc_code_execution_{idx_task}_attempt_{no_attempt}_controller.py": code_sc,
-                            f"failure_sc_code_execution_{idx_task}_attempt_{no_attempt}_error.txt": full_error_info,
+                            f"failure_update_sc_code_execution_{idx_task}_attempt_{no_attempt}_controller.py": code_sc,
+                            f"failure_update_sc_code_execution_{idx_task}_attempt_{no_attempt}_error.txt": full_error_info,
                         },
                         is_update_step=True,
                     )
+                    self.metrics_memory_aware[
+                        "n_failure_update_sc_code_execution"
+                    ] += 1
                     if self.config["config_debug"][
                         "breakpoint_update_on_failure_sc_code_execution"
                     ]:
@@ -639,6 +688,9 @@ class HCG(BaseAgent):
                         is_update_step=True,
                     )
 
+        # Log the metrics
+        self.logger.log_scalars(metrics=self.metrics_memory_aware, step=self.t)
+        
         # Update the visualizer
         self.visualizer.update_vis()
 
@@ -674,7 +726,9 @@ class HCG(BaseAgent):
         return sc_code
 
     def exec_code_and_get_controller(
-        self, code: str, authorize_imports: bool = True
+        self,
+        code: str,
+        authorize_imports: bool = True,
     ) -> Controller:
         """Execute the inference code given by the LLM and return the SC instance.
 
@@ -707,17 +761,25 @@ class HCG(BaseAgent):
         match = re.search(r"class\s+(\w+)\s*\(", code)
         if match:
             # If there is a class definition in the code, assert that it is named 'SpecializedController'
-            assert match.group(1) == "SpecializedController", (
-                "A class definition was found in the code but it is not named 'SpecializedController'. "
-                "If you want to define a new controller rather than only use the classes from the library, "
-                "you should name it 'SpecializedController'."
-            )
+            if match.group(1) != "SpecializedController":
+                self.metrics_memory_aware[
+                    "n_failure_sc_code_execution_name_is_not_SpecializedController"
+                ] += 1
+                raise ValueError(
+                    "A class definition was found in the code but it is not named 'SpecializedController'. "
+                    "If you want to define a new controller rather than only use the classes from the library, "
+                    "you should name it 'SpecializedController'."
+                )
             # Assert there is at most one class definition
-            assert len(re.findall(r"class\s+\w+\s*\(", code)) == 1, (
-                "There is more than one class definition in the code. "
-                "You can define at most one class in the code (1 or none). "
-                "And if you define one, it should be named 'SpecializedController'."
-            )
+            if len(re.findall(r"class\s+\w+\s*\(", code)) != 1:
+                self.metrics_memory_aware[
+                    "n_failure_sc_code_execution_more_than_one_class_definition"
+                ] += 1
+                raise ValueError(
+                    "There is more than one class definition in the code. "
+                    "You can define at most one class in the code (1 or none). "
+                    "And if you define one, it should be named 'SpecializedController'."
+                )
 
         # Extract PC class names from 'from controller_library import ...' statements
         lines = code.split("\n")
@@ -728,6 +790,9 @@ class HCG(BaseAgent):
             match = re.match(r"^\s*from\s+controller_library\s+import\s+(.+)$", line)
             if match:
                 if not authorize_imports:
+                    self.metrics_memory_aware[
+                        "n_failure_sc_code_execution_unauthorized_import"
+                    ] += 1
                     raise ValueError(
                         "You are not allowed to import controllers from the controller_library module when creating a new primitive controller, only when creating a specialized controller for inference/refactoring."
                     )
@@ -743,14 +808,21 @@ class HCG(BaseAgent):
 
         # Execute controller imports first
         for controller_name in controller_classes_names:
-            assert (
-                controller_name in self.library_controller.controllers
-            ), f"Controller {controller_name} not found in the library."
+            if not (controller_name in self.library_controller.controllers):
+                self.metrics_memory_aware[
+                    "n_failure_sc_code_execution_controller_not_found"
+                ] += 1
+                raise ValueError(
+                    f"Controller {controller_name} not found in the library."
+                )
             controller_code = self.library_controller.controllers[controller_name].code
             try:
                 exec(controller_code, self.base_scope, local_scope)
             except Exception as e:
                 print(f"[ERROR] : Could not import the controller {controller_name}.")
+                self.metrics_memory_aware[
+                    "n_failure_sc_code_execution_controller_import_error"
+                ] += 1
                 raise ValueError(
                     f"An error occured while executing the code of the controller {controller_name} from the library. Maybe don't import this controller anymore. Full error info : {get_error_info(e)}"
                 )
@@ -761,6 +833,10 @@ class HCG(BaseAgent):
         try:
             exec(code_without_controller_imports, scope_with_imports, local_scope)
         except Exception as e:
+            print("[ERROR] : Could not execute the code.")
+            self.metrics_memory_aware[
+                "n_failure_sc_code_execution_code_execution_error"
+            ] += 1
             raise ValueError(
                 f"An error occured while executing the code for instanciating a controller. Full error info : {get_error_info(e)}"
             )
@@ -771,6 +847,10 @@ class HCG(BaseAgent):
         ):
             return local_scope["controller"]
         else:
+            print("[ERROR] : Could not retrieve the controller instance.")
+            self.metrics_memory_aware[
+                "n_failure_sc_code_execution_controller_not_created"
+            ] += 1
             raise ValueError(
                 "No object named 'controller' of the class Controller found in the provided code."
             )
@@ -802,34 +882,48 @@ class HCG(BaseAgent):
             List[str]: the primitive controllers code snippets.
             Dict[int, str]: the refactoring code snippets, indexed by the task index.
         """
+        try:
+            code_primitives: List[str] = []
+            dict_code_refactorings: Dict[int, str] = {}
 
-        code_primitives: List[str] = []
-        dict_code_refactorings: Dict[int, str] = {}
+            # Regex patterns
+            primitive_pattern = re.compile(
+                r"New primitive controller:\n```python\n(.*?)```", re.DOTALL
+            )
+            refactoring_pattern = re.compile(
+                r"Refactored controller for task (\d+):\n```python\n(.*?)```", re.DOTALL
+            )
+            all_python_snippets_pattern = re.compile(r"```python\n(.*?)```", re.DOTALL)
 
-        # Regex patterns
-        primitive_pattern = re.compile(
-            r"New primitive controller:\n```python\n(.*?)```", re.DOTALL
-        )
-        refactoring_pattern = re.compile(
-            r"Refactored controller for task (\d+):\n```python\n(.*?)```", re.DOTALL
-        )
-        all_python_snippets_pattern = re.compile(r"```python\n(.*?)```", re.DOTALL)
+            # Extract all Python snippets
+            all_python_snippets = all_python_snippets_pattern.findall(answer)
 
-        # Extract all Python snippets
-        all_python_snippets = all_python_snippets_pattern.findall(answer)
+            # Extract primitives
+            code_primitives = primitive_pattern.findall(answer)
 
-        # Extract primitives
-        code_primitives = primitive_pattern.findall(answer)
-
-        # Extract refactorings
-        for match in refactoring_pattern.findall(answer):
-            task_index = int(match[0])
-            code_snippet = match[1]
-            dict_code_refactorings[task_index] = code_snippet
-
+            # Extract refactorings
+            for match in refactoring_pattern.findall(answer):
+                task_index = int(match[0])
+                code_snippet = match[1]
+                dict_code_refactorings[task_index] = code_snippet
+        except Exception as e:
+            print("[ERROR] : Could not extract the code.")
+            self.metrics_memory_aware[
+                "n_failure_update_code_extraction_code_extraction_error"
+            ] += 1
+            raise ValueError(
+                f"An error occured while extracting the code from the answer. Full error info : {get_error_info(e)}"
+            )
+            
         # Validate extraction
         extracted_snippet_count = len(code_primitives) + len(dict_code_refactorings)
         if extracted_snippet_count != len(all_python_snippets):
+            print(
+                f"[WARNING] : Mismatch between detected Python snippets ({extracted_snippet_count}) and the total number of Python snippets ({len(all_python_snippets)})."
+            )
+            self.metrics_memory_aware[
+                "n_failure_update_code_extraction_mismatch_snippets"
+            ] += 1
             raise ValueError(
                 (
                     f"Mismatch between detected Python snippets ({extracted_snippet_count}) and the total number of Python snippets ({len(all_python_snippets)}). "

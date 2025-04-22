@@ -13,6 +13,7 @@ config:
   # Rendering
   render_mode_train: rgb_array
   render_mode_eval: human
+  n_videos_logged: 4
 
   # Logging
   config_logs: ${config_logs}

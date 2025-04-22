@@ -293,15 +293,19 @@ class TaskMinigrid(Task):
         del self.env_mg
         # Save the video if any
         if self.render_mode == "rgb_array":
+            dir_task = f"task_{self.meta_env.timestep}"
             self.n_times_task_logged_this_timestep += 1
             if self.n_times_task_logged_this_timestep > 1:
-                dir_task = f"task_{self.meta_env.timestep}_{self.n_times_task_logged_this_timestep}"
+                filename_video = f"video_{self.n_times_task_logged_this_timestep}.mp4"
             else:
-                dir_task = f"task_{self.meta_env.timestep}"
+                filename_video = "video.mp4"
+            # Leave if video already logged n_videos_logged times
+            if self.n_times_task_logged_this_timestep > self.meta_env.n_videos_logged:
+                return                
             for log_dir_global in self.meta_env.list_log_dirs_global:
                 path_task_t = os.path.join(log_dir_global, dir_task)
                 os.makedirs(path_task_t, exist_ok=True)
-                path_task_t_video = os.path.join(path_task_t, "video.mp4")
+                path_task_t_video = os.path.join(path_task_t, filename_video)
                 imageio.mimwrite(path_task_t_video, self.video_frames, fps=10)
 
     def get_feedback(self) -> Dict[str, Any]:
@@ -329,6 +333,7 @@ class MinigridMetaEnv(BaseMetaEnv):
         # Logging and render
         self.render_mode_train = config.get("render_mode_train", None)
         self.render_mode_eval = config.get("render_mode_eval", None)
+        self.n_videos_logged = config.get("n_videos_logged", 1)
         config_logs = self.config["config_logs"]
         self.log_dir = config_logs["log_dir"]
         self.list_log_dirs_global = []

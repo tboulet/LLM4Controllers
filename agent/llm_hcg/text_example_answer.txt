@@ -14,5 +14,5 @@ class MyController(Controller):
 [set code to task 2]
 ```python
 controller = MyController()
-perform_test(controller, 2)
+perform_test(controller)
 ```

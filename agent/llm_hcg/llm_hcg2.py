@@ -213,7 +213,7 @@ class HCG_2(BaseAgent2):
             "   - [delete <name>] : this will delete the objects named <name> from the library. In this case you won't add any python code obviously. \n"
             "   - [change <name>] : this will change the code of the object named <name> in the library. \n"
             "   - [set code to task <task_idx>] : this will set the code of the task <task_idx> to the code. \n"
-            "       You will do that by defining the controller used and then using the 'perform_test(controller : Controller, idx : int) function."
+            "       You will do that by defining the controller used and then using the 'perform_test(controller : Controller) function."
             "   - [terminate] : this will terminate the process and move to the test step. \n"
             "\n\n"
             

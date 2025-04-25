@@ -1,0 +1,94 @@
+# Logging
+import os
+import shutil
+import sys
+import wandb
+from tensorboardX import SummaryWriter
+
+# Config system
+import hydra
+from omegaconf import OmegaConf, DictConfig
+
+# Utils
+from tqdm import tqdm
+import datetime
+from time import time, sleep
+from typing import Any, Dict, Type
+import cProfile
+
+# ML libraries
+import random
+import numpy as np
+import torch
+import transformers
+
+# Project imports
+from agent.base_controller import Controller
+from core.error_trace import ErrorTrace
+from core.feedback_aggregator import FeedbackAggregated
+
+from core.task import Task
+from core.utils import get_error_info
+from core.register_hydra import register_hydra_resolvers
+
+
+
+
+# Play the controller in the task
+def play_controller_in_task(
+    controller: Controller,
+    task: Task,
+    n_episodes: int,
+    is_eval: bool,
+) -> FeedbackAggregated:
+    """Play the controller in the task for n_episodes episodes and return the feedback."""
+    # Initialize the feedback
+    feedback_agg = FeedbackAggregated()
+    for k in range(n_episodes):
+        # Reset the environment
+        obs, info = task.reset(
+            is_eval=is_eval and k == 0
+        )  # eval only once per rollout for now
+        task.render()
+
+        # Loop over the episode
+        done = False
+        truncated = False
+        while not done and not truncated:
+            # Act in the environment
+            try:
+                action = controller.act(obs)
+            except Exception as e:
+                full_error_info = get_error_info(e)
+                error_message = f"An error occured during the act method of the controller. Full error info : {full_error_info}"
+                info = {"Error": ErrorTrace(error_message)}
+                obs, reward, done, truncated = None, 0, False, True
+                break
+            # Step in the environment
+            obs, reward, done, truncated, info = task.step(action)
+            if "Error" in info:
+                error_message = info["Error"]
+                info["Error"] = ErrorTrace(error_message)
+                print(f"ERROR WARNING : {error_message}")
+                break
+            # Render and log
+            task.render()
+
+        # Env feedback
+        env_feedback = task.get_feedback()
+
+        # Close the environment
+        task.close()
+
+        # Update the agent
+        feedback = {
+            "success": reward > 0,
+            "reward": reward,
+        }
+
+        feedback.update(env_feedback)  # add environment feedback to feedback
+
+        # Add feedback to the feedback aggregator
+        feedback_agg.add_feedback(feedback)
+
+    return feedback_agg

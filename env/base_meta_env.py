@@ -24,6 +24,15 @@ class BaseMetaEnv(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def get_current_tasks(self) -> List[Task]:
+        """Get all the tasks currently available in the environment.
+
+        Returns:
+            List[Task]: the list of all tasks available in the environment
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     def update(self, task: Task, feedback: Dict[str, Any]) -> None:
         """Update the environment based on the feedback received from the agent.
 
@@ -42,7 +51,7 @@ class BaseMetaEnv(ABC):
         to help it getting a general idea of the environment and the tasks it will be facing.
 
         It should include the general principle of the environment, the actions available, the structure of the observations, the reward system, etc.
-        
+
         Returns:
             str: the textual description of the environment
         """

@@ -6,6 +6,7 @@ from gymnasium import Space
 import numpy as np
 from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller
+from agent.base_agent2 import BaseAgent2
 from core.loggers.base_logger import BaseLogger
 from core.task import Task, TaskDescription
 from env.base_meta_env import BaseMetaEnv, Observation, ActionType, InfoDict
@@ -44,4 +45,20 @@ class RandomAgent(BaseAgent):
         controller: Controller,
         feedback: Dict[str, Union[float, str]],
     ):
+        pass
+
+class RandomAgent2(BaseAgent2):
+    
+    def __init__(self, config, logger : BaseLogger, env : BaseMetaEnv):
+        pass
+            
+    def get_list_controllers(self, list_tasks : List[Task]) -> List[Controller]:
+        list_controllers = []
+        for task in list_tasks:
+            description = task.get_description()
+            controller = RandomController(action_space=description.action_space)
+            list_controllers.append(controller)
+        return list_controllers
+    
+    def step(self):
         pass

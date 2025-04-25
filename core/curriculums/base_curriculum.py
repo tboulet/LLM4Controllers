@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import random
-from typing import Any, Dict, Generic, TypeVar
+from typing import Any, Dict, Generic, List, TypeVar
 
 from core.feedback_aggregator import FeedbackAggregated
 
@@ -19,6 +19,12 @@ class BaseCurriculum(ABC, Generic[Objective]):
     def sample(self) -> Objective:
         """Sample an objective from the curriculum distribution."""
 
+    @abstractmethod
+    def get_current_objectives(self) -> List[Objective]:
+        """Get all the objectives that are currently available to the agent.
+        """
+        raise NotImplementedError
+    
     @abstractmethod
     def update(self, objective: Objective, feedback: FeedbackAggregated):
         """Update the curriculum based on the feedback received from the agent."""

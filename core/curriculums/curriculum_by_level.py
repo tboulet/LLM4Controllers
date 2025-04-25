@@ -38,6 +38,19 @@ class CurriculumByLevels(BaseCurriculum[Objective]):
         print(f"\n[CURRICULUM] Sampled objective: {objective}")
         return objective
 
+    def get_current_objectives(self) -> List[Objective]:
+        """Get all the objective that are currently available to the agent.
+        This corresponds to all completed levels and the current level.
+
+        Returns:
+            List[Objective]: the list of all objectives available to the agent
+        """
+        objectives = []
+        for idx_level, level in enumerate(self.levels):
+            if idx_level <= self.idx_max_level:
+                objectives.extend(level.keys())
+        return objectives
+    
     def update(self, objective: Objective, feedback: FeedbackAggregated):
 
         if self.idx_max_level == self.n_levels:

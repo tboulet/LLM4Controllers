@@ -180,6 +180,9 @@ class TaskMinigrid(Task):
 
     # ===== Mandatory interface methods ======
 
+    def get_name(self) -> str:
+        return self.func_str
+    
     def get_description(self) -> TaskDescription:
         if self.task_description is None:
             if self.env_mg is None:
@@ -301,7 +304,7 @@ class TaskMinigrid(Task):
                 filename_video = "video.mp4"
             # Leave if video already logged n_videos_logged times
             if self.n_times_task_logged_this_timestep > self.meta_env.n_videos_logged:
-                return                
+                return
             for log_dir_global in self.meta_env.list_log_dirs_global:
                 path_task_t = os.path.join(log_dir_global, dir_task)
                 os.makedirs(path_task_t, exist_ok=True)
@@ -315,7 +318,7 @@ class TaskMinigrid(Task):
             return {}
 
     def __repr__(self) -> str:
-        return self.func_str
+        return self.get_name()
 
 
 class MinigridMetaEnv(BaseMetaEnv):
@@ -348,11 +351,11 @@ class MinigridMetaEnv(BaseMetaEnv):
         self.timestep = 0
         # Define the curriculum
         levels = [
-            {
-                # For testing envs
-                # lambda **kwargs: GoToObj(room_size=self.size, **kwargs),
-                lambda **kwargs: GiveAgentPositionEnv(size=self.size, **kwargs),
-            },
+            # {
+            #     # For testing envs
+            #     # lambda **kwargs: GoToObj(room_size=self.size, **kwargs),
+            #     # lambda **kwargs: GiveAgentPositionEnv(size=self.size, **kwargs),
+            # },
             {
                 # Observation structure comprehension and navigation comprehension tasks
                 lambda **kwargs: GiveAgentPositionEnv(size=self.size, **kwargs),
@@ -468,6 +471,14 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
         self,
     ) -> TaskMinigrid:
         return self.curriculum.sample()
+
+    def get_current_tasks(self) -> List[TaskMinigrid]:
+        """Get all the tasks currently available in the environment.
+
+        Returns:
+            List[TaskMinigrid]: the list of all tasks available in the environment
+        """
+        return self.curriculum.get_current_objectives()
 
     def update(self, task: TaskMinigrid, feedback: FeedbackAggregated) -> None:
         self.curriculum.update(objective=task, feedback=feedback)

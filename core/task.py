@@ -58,6 +58,14 @@ class Task(ABC):
     """A task is a specific instance of a problem that the agent must solve."""
 
     @abstractmethod
+    def get_name(self) -> str:
+        """Get the name of the task.
+
+        Returns:
+            str: the name of the task
+        """
+    
+    @abstractmethod
     def get_description(self) -> TaskDescription:
         """Get the task representation.
 

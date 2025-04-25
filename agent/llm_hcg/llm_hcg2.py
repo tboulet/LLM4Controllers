@@ -1,3 +1,4 @@
+from collections import defaultdict
 import json
 import os
 import re
@@ -6,11 +7,12 @@ from typing import Dict, List, Optional
 import numpy as np
 from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller
+from agent.base_agent2 import BaseAgent2
 from agent.llm_hcg.graph_viz import ControllerVisualizer
 from agent.llm_hcg.library_controller import ControllerLibrary
 from agent.llm_hcg.demo_bank import DemoBank, TransitionData
-from agent.llm_hcg.llm_hcg import HCG
 from core.feedback_aggregator import FeedbackAggregated
+from core.loggers.base_logger import BaseLogger
 from core.task import Task, TaskDescription
 from core.utils import get_error_info
 from env.base_meta_env import BaseMetaEnv, Observation, ActionType, InfoDict
@@ -22,9 +24,469 @@ from hydra.utils import instantiate
 from llm import llm_name_to_LLMClass
 
 
-class HCG_2(HCG):
-    """A temp version of HCG where the update is improved."""
+class TaskInformation:
+    def __init__(
+        self,
+        task: Task,
+        code: str,
+        feedback: FeedbackAggregated,
+    ):
+        self.task = task
+        self.code = code
+        self.feedback = feedback
+        
+        
+class HCG_2(BaseAgent2):
+
+    def __init__(self, config: Dict, logger: BaseLogger, env: BaseMetaEnv):
+        super().__init__(config, logger, env)
+        # Initialize logging
+        config_logs = self.config["config_logs"]
+        log_dir = config_logs["log_dir"]
+        self.list_log_dirs_global: List[str] = []
+        if config_logs["do_log_on_new"]:
+            self.list_log_dirs_global.append(os.path.join(log_dir, config["run_name"]))
+        if config_logs["do_log_on_last"]:
+            self.list_log_dirs_global.append(os.path.join(log_dir, "last"))
+        self.metrics_memory_aware = defaultdict(int)
+        # Log the config
+        self.log_texts(
+            {"config.yaml": json.dumps(self.config, indent=4)}, in_task_folder=False
+        )
+        # Initialize LLM
+        name_llm = config["llm"]["name"]
+        config_llm = config["llm"]["config"]
+        self.llm = llm_name_to_LLMClass[name_llm](config_llm)
+        # Initialize the env description
+        self.description_env = env.get_textual_description()
+        # Initialize the task mapping
+        self.mapping_task : Dict[str, TaskInformation] = {}
+        
+        
+        # Define the text templates
+        self.text_base_controller = open("agent/llm_hcg/text_base_controller.txt").read()
+        self.text_example_answer_inference1 = open(
+            "agent/llm_hcg/example_answer_inference1.txt"
+        ).read()
+        self.text_example_answer_inference2 = open(
+            "agent/llm_hcg/example_answer_inference2.txt"
+        ).read()
+        self.text_example_answer = open(
+            "agent/llm_hcg/text_example_answer.txt"
+        ).read()
+        self.text_example_pc = open("agent/llm_hcg/initial_PCs/move_forward.py").read()
+        self.text_example_sc1 = (
+            open("agent/llm_hcg/initial_SCs/go_forward.py")
+            .read()
+            .replace("..utils_PCs", "controller_library")
+        )
+        self.text_example_sc2 = (
+            open("agent/llm_hcg/initial_SCs/go_north.py")
+            .read()
+            .replace("..utils_PCs", "controller_library")
+        )
+        # Extract the inference parameters
+        self.n_samples_inference = self.config.get("n_samples_inference", 5)
+        self.method_inference_sampling = self.config.get(
+            "method_inference_sampling", "uniform"
+        )
+        self.num_attempts_inference = config.get("num_attempts_inference", 5)
+        # Extract the update parameters
+        self.n_samples_update = self.config.get("n_samples_update", 20)
+        self.method_update_sampling = self.config.get(
+            "method_update_sampling", "uniform"
+        )
+        self.n_max_update_new_primitives = self.config.get(
+            "n_max_update_new_primitives", 5
+        )
+        self.n_max_update_refactorings = self.config.get("n_max_update_refactorings", 3)
+        self.num_attempts_update_code_extraction = self.config.get(
+            "num_attempts_update_code_extraction", 5
+        )
+        self.num_attempts_update_pc_code_saving = self.config.get(
+            "num_attempts_update_pc_code_saving", 5
+        )
+        self.num_attempts_update_sc_code_execution = self.config.get(
+            "num_attempts_update_sc_code_execution", 5
+        )
+        # Initialize agent's variables
+        self.t = 0  # Time step
+        self.base_scope = {}  # Define the base scope that can be used by the assistant
+        exec(open("agent/llm_hcg/base_scope.py").read(), self.base_scope)
+        self.sc_code_last: Optional[str] = None
+        # Initialize HCG visualizer
+        self.visualizer = ControllerVisualizer(
+            agent=self,
+            log_dirs=self.list_log_dirs_global,
+            **config["config_visualizer"],
+        )
+        # Initialize knowledge base and demo bank
+        self.library_controller = ControllerLibrary(
+            config_agent=config,
+            visualizer=self.visualizer,
+        )
+        self.demo_bank = DemoBank(
+            config_agent=config,
+            visualizer=self.visualizer,
+        )
+        # Update the visualizer
+        self.visualizer.update_vis()
+
+    def step(self):
+        """Perform one step of HCG using the meta environment. For this :
+        - Get the current tasks
+        - Add them in its task set if not already present
+        - Show the current (T, SC, F) triplets to the prompt
+        - Eventually go iterative mode
+        - Ask the assistant to do refactoring operations on the library of controllers
+            - The assistant can add/change/delete controllers
+            - The assistant can set a code to a current task
+        - The assistant has to go step by step !
+        - The assistant in case of fail can go step by step even more
+        - The assistant can assign not all tasks a code if its unsure about it
+        - After one operation, the codes are tested on the task the following way :
+            For each task that has an associated code, the code is executed
+            If the feedback increases or does not decreases by more than 10%, the update is kept
+            Else, the feedback is given to the agent and it can retry the refactoring
+        This process continues on and on.
+        """
+        
+        # Get the current tasks and eventually update the mapping with it
+        list_tasks = self.env.get_current_tasks()
+        for task in list_tasks:
+            task_name = task.get_name()
+            if task_name not in self.mapping_task:
+                self.mapping_task[task_name] = TaskInformation(
+                    task=task,
+                    code="Empty (no code yet)",
+                    feedback="None (no feedback yet)",
+                )
+        
+        
+        # Define the representation of the task set
+        list_task_set_repr = []
+        for idx, (task_name, task_info) in enumerate(self.mapping_task.items()):
+            task_description = task_info.task.get_description()
+            task_code = task_info.code
+            task_feedback = task_info.feedback
+            if isinstance(task_feedback, FeedbackAggregated):
+                task_feedback = task_feedback.get_repr()
+            task_info_repr = (
+                f"Task {idx+1} : {task_name}"
+                "\n\n"
+                f"Task description : {task_description}"
+                "\n\n"
+                f"Task code : {self.code_tag(task_code)}"
+                "\n\n"
+                f"Task feedback : {task_feedback}"
+            )
+            list_task_set_repr.append(task_info_repr)
+        task_set_repr = "\n\n".join(list_task_set_repr)
+        
+            
+        # Generate the prompt
+        prompt_system = (
+            "You are an AI agent that is used in order to solve a task-based environment. "
+            "You are maintaining a python library that are used to solve the tasks. "
+            "This library is composed of functions and of sub-classes of the class Controller. "
+            "A controller is a class that implements the method 'act(observation: Observation) -> ActionType' "
+            "and that inherits from the class Controller. A function can be of any signature. "
+            "Controller and functions can call other controller/functions from the library, the goal being "
+            "to create a modular and reusable library. "
+            "Of course the dependency graph should be acyclic to avoid circular dependencies. "
+            "You will also be asked to write the code used to solve the tasks, using the library. "
+            "These 'task-solving codes' will be both a measure of your performance and "
+            "a way to test the refactorings you will do. "
+            "\n\n"
+            
+            "Every step, you will have access to the library L, and to {(task, code, feedback)} the current set "
+            "of tasks accompanied by the current code used to solve them and the performance of this code on the task. "
+            "The library is a succession of controller class/function. "
+            "The task-solving codes are python codes that are using objects from the library. "
+            "\n\n"
+            
+            "At each step, you will be asked to 1) refactor the library and 2) update (or initialize) the task-solving codes. "
+            "For this, you will interact through the use of textual commands in the form of a tag followed by the code "
+            "between python tags. "
+            "The operation you can do and their corresponding tags are the following:\n"
+            "   - [add code] : this adds new code to the library (function(s) or controller(s)). \n" 
+            "   - [delete <name>] : this will delete the objects named <name> from the library. In this case you won't add any python code obviously. \n"
+            "   - [change <name>] : this will change the code of the object named <name> in the library. \n"
+            "   - [set code to task <task_idx>] : this will set the code of the task <task_idx> to the code. \n"
+            "       You will do that by defining the controller used and then using the 'perform_test(controller : Controller, idx : int) function."
+            "   - [terminate] : this will terminate the process and move to the test step. \n"
+            "\n\n"
+            
+            "Once you finished the refactoring operation, we will run your code on the tasks. "
+            "If the performance of the code on the task is better than before, we will keep the refactoring. "
+            "Else, we will revert the refactoring and ask you to retry the refactoring operation. "
+            "In this case you will have to re-write the whole refactoring operation because nothing was applied. "
+            "We will also provide you the feedback of the code on the tasks. "
+            "\n\n"
+            
+            "Advice 1: go step by step. "
+            "This is an iterative process so you are encouraged to process step by step. "
+            "However, we do not force you to perform only one minimal change at a time, because some refactoring "
+            "operations may require to change a large part of the library to be meaningful. "
+            "However, you should try to go one step at a time and not try to solve 2 problems during the same operation. "
+            "\n\n"
+            
+            "Advice 2: reduce your refactoring if it fails. "
+            "If you are not sure about the refactoring you are doing, or if it failed (i.e. the performance of the code on the tasks decreased), "
+            "you can try to reduce the refactoring you are doing. The smaller your refactoring is, the easier it will be to identify the problem. "
+            "\n\n"
+            
+            # Environment prompt
+            "=== General description of the environment ===\n"
+            f"{self.description_env}"
+            "\n\n"
+            
+            # Controller structure prompt
+            "=== Controller interface ===\n"
+            "A controller obeys the following interface:\n"
+            f"{self.code_tag(self.text_base_controller)}"
+            "\n\n"
+            
+            # Library
+            "=== Library ===\n"
+            "This is the current state of the code of the library:\n"
+            f"{self.code_tag(str(self.library_controller))}"
+            "\n\n"
+            
+            # Task set
+            "=== Set of (task, code, feedback) ===\n"
+            "This is the current set of tasks and their associated code and feedback:\n"
+            f"{task_set_repr}"
+            "\n\n"
+            
+            # Example of answer
+            "=== Example of answer ===\n"
+            "Here is an example of acceptable answer:\n"
+            f"{self.text_example_answer}\n"
+            "==========================="
+            "\n\n"
+        )
+        
+        
+        self.llm.reset()
+        self.llm.add_prompt(prompt_system)
+        self.log_texts(
+            {
+                "prompt_system.txt": prompt_system,
+                "task_set_repr.txt": task_set_repr,
+                "library_controller.py": str(self.library_controller),
+            },
+        )
+        
+        raise
+        answer = self.llm.generate()
+        self.llm.add_answer(answer)
+        
+        # Extract the code blocks from the answer
+        
+        # Increment the time step
+        self.t += 1
+        
     
+    def code_tag(self, code: str) -> str:
+        """Add the code tag to the code."""
+        return f"```python\n{code}\n```"
+    
+    def get_controller(self, task_description: TaskDescription) -> Controller:
+        """Get a controller for a given task description. Does that by :
+        - taking the library of controllers and the (sampled) demo bank as context
+        - asking the LLM to generate a controller for the task
+        - extracting the code from the answer
+        - executing the code to get the controller instance
+        - repeat the LLM call if the code extraction or execution failed
+
+        Args:
+            task_description (TaskRepresentation): the task description.
+
+        Raises:
+            ValueError: if the LLM failed to generate a controller too many times in a row.
+
+        Returns:
+            Controller: the controller instance.
+        """
+        # Reset the metrics at 0
+        for key in self.metrics_memory_aware.keys():
+            self.metrics_memory_aware[key] = 0
+
+        # Extract demo bank examples to be given as in-context examples
+        transitions_datas_sampled = self.demo_bank.sample_transitions(
+            n_transitions=self.n_samples_inference,
+            method=self.method_inference_sampling,
+            task_description=task_description,
+        )
+        self.metrics_memory_aware["n_transitions_sampled_inference"] = len(
+            transitions_datas_sampled
+        )
+
+        if len(transitions_datas_sampled) == 0:
+            examples_demobank = "The demo bank is empty for now. "
+        else:
+            examples_demobank = "\n\n".join(
+                f"Example no {idx_example+1} :\n\n{transition_data}"
+                for idx_example, transition_data in enumerate(transitions_datas_sampled)
+            )
+
+        # Create the prompt for the assistant
+        prompt_inference = (
+            # Purpose prompt
+            f"{self.prompt_system}\n\n"
+            "In this step, you are asked to generate a specialized controller for that task, based on the library you have access to and using "
+            "the demo bank as in-context examples. "
+            "\n\n"
+            # Environment prompt
+            "[General description of the environment]\n"
+            f"{self.description_env}\n"
+            "\n\n"
+            # Controller structure prompt
+            "[Controller interface]\n"
+            "A controller obeys the following interface:\n"
+            "Note : you MUST import the objects Controller, Observation, ActionType from the 'agent.base_agent' module.\n"
+            "Also, you shall import any other python module you need (numpy as np, math, etc.).\n"
+            "```python\n"
+            f"{self.text_base_controller}```"
+            "\n\n"
+            # Knowledge base prompt
+            "[Controller library]\n"
+            "You have here controllers that are already defined in the 'controller_library' module. "
+            "You are not forced to use them (you can define your own controller class and then instanciate it) but you can use them. \n"
+            "If you wish to use them, you can import them in your code using the following syntax:\n"
+            "```python\n"
+            "from controller_library import Controller1, Controller2\n"
+            "```\n"
+            "If you use them, take care of the signatures of the methods of the controllers you use. \n"
+            "\n"
+            f"{self.library_controller}"
+            "\n\n"
+            # Demo bank prompt
+            "[Examples]\n"
+            "Here are some examples of code used to solve similar tasks in the past. "
+            "For each example, you are given the task, the task description, the code used to solve it and the feedback given to the agent after the execution of the code (performance of the agent, error detected, etc.). "
+            "You can see these good/bad examples (depending on feedback) as a source of inspiration to solve the task. "
+            "\n\n"
+            f"{examples_demobank}"
+            "\n\n"
+            # Advice prompt
+            "[Advices]\n"
+            "You can write a new controller class and/or use the controllers that are already implemented in the knowledge base. "
+            "If you define a controller from scratch, you can't define functions outside the controller class, you need to define them inside the class as methods. "
+            "Your code should create a 'controller' variable that will be extracted for performing in the environment\n"
+            # "\n" # (commented for now)
+            # "You should try as much as possible to produce controllers that are short in terms of tokens of code. "
+            # "This can be done in particular by re-using the functions and controllers that are already implemented in the knowledge base and won't cost a lot of tokens. "
+            "\n"
+            "Please reason step-by-step and think about the best way to solve the task before answering. "
+            "\n\n"
+            # Example of answer prompt (in-context learning)
+            "[Examples of answer]\n"
+            "If a controller from the library seems already suitable for the task, you can use it directly, as in the example below:\n"
+            "=== Example 1 of answer ===\n"
+            f"{self.text_example_answer_inference1}\n"
+            "===========================\n\n"
+            "If the task is more complicated, new, or requires some combinations of primitive controllers, you can define a new controller class "
+            "before instanciating it as in the example below. But in that case, you MUST name it as 'SpecializedController' and make sure it inherits from the class Controller. \n"
+            "=== Example 2 of answer ===\n"
+            f"{self.text_example_answer_inference2}\n"
+            "===========================\n\n"
+            "\n"
+            # Task prompt
+            "[Task to solve]\n"
+            f"You will have to implement a controller (under the variable 'controller') to solve the following task : \n{task_description}."
+        )
+
+        # Log the prompt and the task description
+        self.log_texts(
+            {
+                "prompt_inference.txt": prompt_inference,
+                "demo_bank_examples.txt": examples_demobank,
+                "task_description.txt": str(task_description),
+            },
+        )
+
+        # Breakpoint-pause at each task if the debug mode is activated
+        if self.config["config_debug"]["breakpoint_inference"]:
+            print(f"Task {self.t}. Press 'c' to continue.")
+            breakpoint()
+
+        # Iterate until the controller is generated. If error, log it in the message and ask the assistant to try again.
+        is_controller_instance_generated = False
+        self.llm.reset()
+        self.llm.add_prompt(prompt_inference)
+        for no_attempt in range(self.num_attempts_inference):
+            self.metrics_memory_aware["n_attempts_inference"] += 1
+            # Ask the assistant
+            answer = self.llm.generate()
+            self.llm.add_answer(answer)
+            # Extract the code block from the answer
+            code = self.extract_controller_code(answer)
+            if code is None:
+                # Retry if the code could not be extracted
+                print(
+                    f"[WARNING] : Could not extract the code from the answer. Asking the assistant to try again. (Attempt {no_attempt+1}/{self.num_attempts_inference})"
+                )
+                self.llm.add_prompt(
+                    "I'm sorry, extracting the code from your answer failed. Please try again and make sure the code obeys the following format:\n```python\n<your code here>\n```"
+                )
+                self.log_texts(
+                    {f"failure_sc_code_extraction_{no_attempt}_answer.txt": answer}
+                )
+                self.metrics_memory_aware["n_failure_sc_code_extraction"] += 1
+                if self.config["config_debug"][
+                    "breakpoint_inference_on_failure_code_extraction"
+                ]:
+                    print("controller code extraction failed. Press 'c' to continue.")
+                    breakpoint()
+                continue
+            # Extract the controller
+            try:
+                specialized_controller = self.exec_code_and_get_controller(code)
+            except Exception as e:
+                full_error_info = get_error_info(e)
+                print(
+                    f"[WARNING] : Could not execute the code from the answer. Asking the assistant to try again (Attempt {no_attempt+1}/{self.num_attempts_inference}). Full error info : {full_error_info}"
+                )
+                self.llm.add_prompt(
+                    f"I'm sorry, an error occured while executing your code. Please try again and make sure the code is correct. Full error info : {full_error_info}"
+                )
+                self.log_texts(
+                    {
+                        f"failure_sc_code_execution_{no_attempt}_answer.txt": answer,
+                        f"failure_sc_code_execution_{no_attempt}_error.txt": full_error_info,
+                    }
+                )
+                self.metrics_memory_aware["n_failure_sc_code_execution"] += 1
+                if self.config["config_debug"][
+                    "breakpoint_inference_on_failure_code_execution"
+                ]:
+                    print("controller code execution failed. Press 'c' to continue.")
+                    breakpoint()
+                continue
+            self.sc_code_last = code
+            is_controller_instance_generated = True
+            break
+
+        self.logger.log_scalars(metrics=self.metrics_memory_aware, step=self.t)
+
+        if is_controller_instance_generated:
+            self.log_texts(
+                {
+                    "answer.txt": answer,
+                    "specialized_controller.py": code,
+                }
+            )
+            return specialized_controller
+
+        else:
+            raise ValueError(
+                f"Could not generate a controller after {self.num_attempts_inference} attempts. Stopping the process."
+            )
+
+    # ================ Update step ================
+
     def update(
         self,
         task: Task,
@@ -32,16 +494,24 @@ class HCG_2(HCG):
         controller: Controller,
         feedback: FeedbackAggregated,
     ):
+        # Reset the metrics at 0
+        for key in self.metrics_memory_aware.keys():
+            self.metrics_memory_aware[key] = 0
+        self.metrics_memory_aware["timestamp"] = self.t
+        
         # Add the transition to the demo bank
         self.demo_bank.add_transition(
             transition=TransitionData(
-                task=task, task_repr=task_repr, code=self.sc_code_last, feedback=feedback
+                task=task,
+                task_repr=task_repr,
+                code=self.sc_code_last,
+                feedback=feedback,
             )
         )
         # Log the feedback and the task description
         self.log_texts(
             {
-                "feedback.txt": json.dumps(feedback.get_repr(), indent=4),
+                "feedback.txt": feedback.get_repr(),
             }
         )
         # Skip if not in the update step
@@ -57,19 +527,13 @@ class HCG_2(HCG):
             n_transitions=self.n_samples_update,
             method=self.method_update_sampling,
         )
-        examples_demobank = []
-        for idx_task, transition_data in enumerate(transitions_sampled):
-            examples_demobank.append(
-                (
-                    f"Task no {idx_task+1} :\n"
-                    f"{transition_data.task_repr}\n\n"
-                    f"Specialized controller code :\n```python\n{transition_data.code}\n```\n\n"
-                    f"Performance : \n{transition_data.feedback}"
-                )
-            )
+        self.metrics_memory_aware["n_transitions_sampled_update"] = len(
+            transitions_sampled
+        )
 
         examples_demobank = "\n\n".join(
-            str(transition) for transition in examples_demobank
+            f"Task no {idx_task+1} :\n\n{transition_data}"
+            for idx_task, transition_data in enumerate(transitions_sampled)
         )
 
         # Create the prompt for the assistant
@@ -111,7 +575,7 @@ class HCG_2(HCG):
             "=== Example of new primitive controller ===\n"
             "New primitive controller:\n"
             "```python\n"
-            f"{self.text_example_pc}```"
+            f"{self.text_example_pc}```\n"
             "=========================\n"
             "\n\n"
             # Demo bank prompt
@@ -129,13 +593,17 @@ class HCG_2(HCG):
             "If a controller from the library seems already suitable for the task, you can use it directly, as in the example below:\n"
             "=== Example 1 of refactoring ===\n"
             "Refactored controller for task 3:\n"
+            "```python\n"
             f"{self.text_example_sc2}\n"
+            "```\n"
             "===========================\n\n"
             "If the task is more complicated, new, or requires some combinations of primitive controllers, you can define a new controller class "
             "before instanciating it as in the example below. But in that case, you MUST name it as 'SpecializedController' and make sure it inherits from the class Controller. \n"
             "=== Example 2 of refactoring ===\n"
             "Refactored controller for task 3:\n"
+            "```python\n"
             f"{self.text_example_sc2}\n"
+            "```\n"
             "===========================\n\n"
             "\n"
             "[Advices]\n"
@@ -147,7 +615,7 @@ class HCG_2(HCG):
             "[Example of answer]\n"
             "Here is an example of acceptable answer:\n"
             "=== Example of answer ===\n"
-            f"{self.text_example_answer_update}\n"
+            f"{self.text_example_answer}\n"
             "===========================\n\n"
         )
         self.log_texts(
@@ -173,23 +641,35 @@ class HCG_2(HCG):
                 code_primitives, dict_code_refactorings = self.extract_update_code(
                     answer
                 )
-                assert len(code_primitives) <= self.n_max_update_new_primitives, (
-                    f"You can only add up to {self.n_max_update_new_primitives} new controllers to the library. "
-                    f"Here, you tried to add {len(code_primitives)}."
-                )
-                assert len(dict_code_refactorings) <= self.n_max_update_refactorings, (
-                    f"You can only refactor up to {self.n_max_update_refactorings} controllers from the demo bank. "
-                    f"Here, you tried to refactor {len(dict_code_refactorings)}."
-                )
-                assert all(
+                if not len(code_primitives) <= self.n_max_update_new_primitives:
+                    self.metrics_memory_aware[
+                        "n_failure_update_code_extraction_n_new_primitive_exceeded"
+                    ] += 1
+                    raise ValueError(
+                        f"You can only add up to {self.n_max_update_new_primitives} new controllers to the library. "
+                        f"Here, you tried to add {len(code_primitives)}."
+                    )
+                if not len(dict_code_refactorings) <= self.n_max_update_refactorings:
+                    self.metrics_memory_aware[
+                        "n_failure_update_code_extraction_n_refactoring_exceeded"
+                    ] += 1
+                    raise ValueError(
+                        f"You can only refactor up to {self.n_max_update_refactorings} controllers from the demo bank. "
+                        f"Here, you tried to refactor {len(dict_code_refactorings)}."
+                    )
+                if not all(
                     [
                         idx_task in range(self.n_samples_update)
                         for idx_task in dict_code_refactorings.keys()
                     ]
-                ), (
-                    f"Task index in refactored controllers should be in [0, {self.n_samples_update-1}]."
-                    f"But here, you tried to refactor tasks with indexes {dict_code_refactorings.keys()}."
-                )
+                ):
+                    self.metrics_memory_aware[
+                        "n_failure_update_code_extraction_task_index_out_of_bound"
+                    ] += 1
+                    raise ValueError(
+                        f"Task index in refactored controllers should be in [0, {self.n_samples_update-1}]."
+                        f"But here, you tried to refactor tasks with indexes {dict_code_refactorings.keys()}."
+                    )
                 break
             except Exception as e:
                 full_error_info = get_error_info(e)
@@ -199,9 +679,13 @@ class HCG_2(HCG):
                 self.log_texts(
                     {
                         f"failure_code_extraction_attempt_{no_attempt}_answer.txt": answer,
+                        f"failure_code_extraction_attempt_{no_attempt}_error.txt": full_error_info,
                     },
-                    in_task_folder=True,
+                    is_update_step=True,
                 )
+                self.metrics_memory_aware[
+                    "n_failure_update_code_extraction"
+                ] += 1
                 if self.config["config_debug"][
                     "breakpoint_update_on_failure_code_extraction"
                 ]:
@@ -213,7 +697,7 @@ class HCG_2(HCG):
                     )
                 self.llm.add_prompt(
                     (
-                        f"I'm sorry, extracting the code from your answer failed. Please try again and make sure the code obeys the format following that example:\n{self.text_example_answer_update}\n"
+                        f"I'm sorry, extracting the code from your answer failed. Please try again and make sure the code obeys the format following that example:\n{self.text_example_answer}\n"
                         f"Full error info : {full_error_info}"
                     )
                 )
@@ -226,6 +710,8 @@ class HCG_2(HCG):
             },
             is_update_step=True,
         )
+        self.metrics_memory_aware["n_new_primitives"] = len(code_primitives)
+        self.metrics_memory_aware["n_refactorings"] = len(dict_code_refactorings)
 
         # Warning if nothing was generated but extract_code_update did not raise an error
         if len(code_primitives) == 0 and len(dict_code_refactorings) == 0:
@@ -253,11 +739,14 @@ class HCG_2(HCG):
                     )
                     self.log_texts(
                         {
-                            f"failing_pc_code_saving_{i}_attempt_{no_attempt}_controller.py": code_pc,
+                            f"failure_pc_code_saving_{i}_attempt_{no_attempt}_controller.py": code_pc,
                             f"failure_pc_code_saving_{i}_attempt_{no_attempt}_error.txt": full_error_info,
                         },
                         is_update_step=True,
                     )
+                    self.metrics_memory_aware[
+                        "n_failure_pc_code_saving"
+                    ] += 1
                     if self.config["config_debug"][
                         "breakpoint_update_on_failure_pc_code_saving"
                     ]:
@@ -323,11 +812,14 @@ class HCG_2(HCG):
                     )
                     self.log_texts(
                         {
-                            f"failing_sc_code_execution_{idx_task}_attempt_{no_attempt}_controller.py": code_sc,
-                            f"failure_sc_code_execution_{idx_task}_attempt_{no_attempt}_error.txt": full_error_info,
+                            f"failure_update_sc_code_execution_{idx_task}_attempt_{no_attempt}_controller.py": code_sc,
+                            f"failure_update_sc_code_execution_{idx_task}_attempt_{no_attempt}_error.txt": full_error_info,
                         },
                         is_update_step=True,
                     )
+                    self.metrics_memory_aware[
+                        "n_failure_update_sc_code_execution"
+                    ] += 1
                     if self.config["config_debug"][
                         "breakpoint_update_on_failure_sc_code_execution"
                     ]:
@@ -366,10 +858,286 @@ class HCG_2(HCG):
                         is_update_step=True,
                     )
 
+        # Log the metrics
+        self.logger.log_scalars(metrics=self.metrics_memory_aware, step=self.t)
+        
         # Update the visualizer
         self.visualizer.update_vis()
 
         # Increment the time step
         self.t += 1
 
- 
+    # ================ Helper functions ================
+
+    def extract_controller_code(self, answer: str) -> str:
+        """From a code corresponding to an inference, extracts the controller definition and
+        instantiation code.
+        The answer should contain one python code block with the controller code and instanciate a Controller variable named 'controller'.
+
+        Answer is expected to be structured as follows:
+            Reasoning:
+            <reasoning>
+
+            Controller:
+            ```python
+            <code>
+            ```
+
+        What will be extracted is <code>.
+
+        Args:
+            answer (str): the answer from the LLM.
+
+        Returns:
+            str: the controller code.
+        """
+        sc_match = re.search(r"```python\n(.*?)\n```", answer, re.DOTALL)
+        sc_code = sc_match.group(1).strip() if sc_match else None
+        return sc_code
+
+    def exec_code_and_get_controller(
+        self,
+        code: str,
+        authorize_imports: bool = True,
+    ) -> Controller:
+        """Execute the inference code given by the LLM and return the SC instance.
+
+        Code is expected to be structured as follows:
+        ```python
+        from controller_library import Controller1, Controller2 # optional, and if authorize_imports is True
+        import numpy as np
+
+        class SpecializedController(Controller1):
+            ... # code for the controller
+
+        controller = MyController()
+        ```
+
+        Because some imports may be fictional imports from the 'controller_library' module, we first extract those and execute them.
+
+        Args:
+            code (str): a string containing the code.
+            The code should be structured as :
+            - import statements from the (fictional) controller_library module (optional)
+            - import statements from other standard modules (optional)
+            - class definition (optional)
+            - controller instantiation (mandatory)
+            authorize_imports (bool, optional): whether to authorize imports from the controller_library module. Defaults to True.
+                If False, this will raise an error in case of such imports.
+
+        Returns:
+            Controller: the controller instance.
+        """
+        match = re.search(r"class\s+(\w+)\s*\(", code)
+        if match:
+            # If there is a class definition in the code, assert that it is named 'SpecializedController'
+            if match.group(1) != "SpecializedController":
+                self.metrics_memory_aware[
+                    "n_failure_sc_code_execution_name_is_not_SpecializedController"
+                ] += 1
+                raise ValueError(
+                    "A class definition was found in the code but it is not named 'SpecializedController'. "
+                    "If you want to define a new controller rather than only use the classes from the library, "
+                    "you should name it 'SpecializedController'."
+                )
+            # Assert there is at most one class definition
+            if len(re.findall(r"class\s+\w+\s*\(", code)) != 1:
+                self.metrics_memory_aware[
+                    "n_failure_sc_code_execution_more_than_one_class_definition"
+                ] += 1
+                raise ValueError(
+                    "There is more than one class definition in the code. "
+                    "You can define at most one class in the code (1 or none). "
+                    "And if you define one, it should be named 'SpecializedController'."
+                )
+
+        # Extract PC class names from 'from controller_library import ...' statements
+        lines = code.split("\n")
+        lines_without_controller_imports: List[str] = []
+        controller_classes_names: List[str] = []
+
+        for line in lines:
+            match = re.match(r"^\s*from\s+controller_library\s+import\s+(.+)$", line)
+            if match:
+                if not authorize_imports:
+                    self.metrics_memory_aware[
+                        "n_failure_sc_code_execution_unauthorized_import"
+                    ] += 1
+                    raise ValueError(
+                        "You are not allowed to import controllers from the controller_library module when creating a new primitive controller, only when creating a specialized controller for inference/refactoring."
+                    )
+                controller_classes_names.extend(
+                    [cls.strip() for cls in match.group(1).split(",")]
+                )
+            else:
+                lines_without_controller_imports.append(line)
+        code_without_controller_imports = "\n".join(lines_without_controller_imports)
+
+        # Create local scope
+        local_scope = {}  # Output source for the PC classes
+
+        # Execute controller imports first
+        for controller_name in controller_classes_names:
+            if not (controller_name in self.library_controller.controllers):
+                self.metrics_memory_aware[
+                    "n_failure_sc_code_execution_controller_not_found"
+                ] += 1
+                raise ValueError(
+                    f"Controller {controller_name} not found in the library."
+                )
+            controller_code = self.library_controller.controllers[controller_name].code
+            try:
+                exec(controller_code, self.base_scope, local_scope)
+            except Exception as e:
+                print(f"[ERROR] : Could not import the controller {controller_name}.")
+                self.metrics_memory_aware[
+                    "n_failure_sc_code_execution_controller_import_error"
+                ] += 1
+                raise ValueError(
+                    f"An error occured while executing the code of the controller {controller_name} from the library. Maybe don't import this controller anymore. Full error info : {get_error_info(e)}"
+                )
+
+        # Execute the remaining code
+        scope_with_imports = self.base_scope.copy()
+        scope_with_imports.update(local_scope)
+        try:
+            exec(code_without_controller_imports, scope_with_imports, local_scope)
+        except Exception as e:
+            print("[ERROR] : Could not execute the code.")
+            self.metrics_memory_aware[
+                "n_failure_sc_code_execution_code_execution_error"
+            ] += 1
+            raise ValueError(
+                f"An error occured while executing the code for instanciating a controller. Full error info : {get_error_info(e)}"
+            )
+
+        # Retrieve the controller instance specifically from 'controller' variable
+        if "controller" in local_scope and isinstance(
+            local_scope["controller"], Controller
+        ):
+            return local_scope["controller"]
+        else:
+            print("[ERROR] : Could not retrieve the controller instance.")
+            self.metrics_memory_aware[
+                "n_failure_sc_code_execution_controller_not_created"
+            ] += 1
+            raise ValueError(
+                "No object named 'controller' of the class Controller found in the provided code."
+            )
+
+    def extract_update_code(self, answer: str) -> Tuple[List[str], Dict[int, str]]:
+        """From a code corresponding to an update, extracts the primitive controllers and
+        refactoring code snippets.
+
+        Answer is expected to be structured as follows:
+            Reasoning:
+            <reasoning>
+
+            New primitive controller: (possibly multiple)
+            ```python
+            <code>
+            ```
+
+            Refactored controller for task <idx>: (possibly multiple)
+            ```python
+            <code>
+            ```
+
+        What will be extracted is [<code>, ...] and {<idx>: <code>, ...}.
+
+        Args:
+            answer (str): the answer from the LLM.
+
+        Returns:
+            List[str]: the primitive controllers code snippets.
+            Dict[int, str]: the refactoring code snippets, indexed by the task index.
+        """
+        try:
+            code_primitives: List[str] = []
+            dict_code_refactorings: Dict[int, str] = {}
+
+            # Regex patterns
+            primitive_pattern = re.compile(
+                r"New primitive controller:\n```python\n(.*?)```", re.DOTALL
+            )
+            refactoring_pattern = re.compile(
+                r"Refactored controller for task (\d+):\n```python\n(.*?)```", re.DOTALL
+            )
+            all_python_snippets_pattern = re.compile(r"```python\n(.*?)```", re.DOTALL)
+
+            # Extract all Python snippets
+            all_python_snippets = all_python_snippets_pattern.findall(answer)
+
+            # Extract primitives
+            code_primitives = primitive_pattern.findall(answer)
+
+            # Extract refactorings
+            for match in refactoring_pattern.findall(answer):
+                task_index = int(match[0])
+                code_snippet = match[1]
+                dict_code_refactorings[task_index] = code_snippet
+        except Exception as e:
+            print("[ERROR] : Could not extract the code.")
+            self.metrics_memory_aware[
+                "n_failure_update_code_extraction_code_extraction_error"
+            ] += 1
+            raise ValueError(
+                f"An error occured while extracting the code from the answer. Full error info : {get_error_info(e)}"
+            )
+            
+        # Validate extraction
+        extracted_snippet_count = len(code_primitives) + len(dict_code_refactorings)
+        if extracted_snippet_count != len(all_python_snippets):
+            print(
+                f"[WARNING] : Mismatch between detected Python snippets ({extracted_snippet_count}) and the total number of Python snippets ({len(all_python_snippets)})."
+            )
+            self.metrics_memory_aware[
+                "n_failure_update_code_extraction_mismatch_snippets"
+            ] += 1
+            raise ValueError(
+                (
+                    f"Mismatch between detected Python snippets ({extracted_snippet_count}) and the total number of Python snippets ({len(all_python_snippets)}). "
+                    "The only tags allowed are 'New primitive controller:' and 'Refactored controller for task <idx>:' where <idx> is an integer."
+                )
+            )
+
+        return code_primitives, dict_code_refactorings
+
+    def log_texts(
+        self,
+        dict_name_to_text: Dict[str, str],
+        in_task_folder: bool = True,
+        is_update_step: bool = False,
+    ):
+        """Log texts in a directory. For each (key, value) in the directory, the file <log_dir>/task_<t>/<key> will contain the value.
+        It will do that for all <log_dir> in self.list_run_names.
+
+        Args:
+            dict_name_to_text (Dict[str, str]): a mapping from the name of the file to create to the text to write in it.
+            in_task_folder (bool, optional): whether to log the files in the task folder (if not, log in the run folder). Defaults to True.
+            is_update_step (bool, optional): whether we are in an update step (if so, replace task_t by task_t_update). Defaults to False.
+        """
+        list_log_dirs: List[str] = []
+        for log_dir_global in self.list_log_dirs_global:
+            if is_update_step:
+                assert (
+                    in_task_folder
+                ), "is_update_step should be True if in_task_folder is True."
+                log_dir = os.path.join(log_dir_global, f"task_{self.t}_update")
+            elif in_task_folder:
+                log_dir = os.path.join(log_dir_global, f"task_{self.t}")
+            else:
+                log_dir = log_dir_global
+            list_log_dirs.append(log_dir)
+
+        for log_dir in list_log_dirs:
+            os.makedirs(log_dir, exist_ok=True)
+            for name, text in dict_name_to_text.items():
+                assert isinstance(name, str) and isinstance(
+                    text, str
+                ), "Keys and values of dict_name_to_text should be strings."
+                log_file = os.path.join(log_dir, name)
+                with open(log_file, "w") as f:
+                    f.write(text)
+                f.close()
+                print(f"[LOGGING] : Logged {log_file}")

@@ -24,6 +24,35 @@ from hydra.utils import instantiate
 from llm import llm_name_to_LLMClass
 
 
+class TextualCommand(enum.Enum):
+    """Enum for command patterns."""
+
+    ADD = "add code"
+    DELETE = "delete <name>"
+    CHANGE = "change <name>"
+    TEST = "solve task <task_idx> with code"
+    TERMINATE = "terminate"
+    
+    def extract_kwargs(self, string : str) -> Optional[Dict[str, str]]:
+        """Extract the kwargs corresponding to the command self, from a string given as input
+
+        Args:
+            string (str): the string to extract the kwargs from
+
+        Returns:
+            Optional[Dict[str, str]]: the kwargs extracted from the string, or None if no match is found
+        """
+        # Replace <name> with regex named groups using a function
+        def replace(match):
+            name = match.group(1)
+            return f"(?P<{name}>\\S+)"  # \S+ matches non-whitespace
+
+        regex_pattern = re.sub(r"<(\w+)>", replace, self.value)
+        regex = re.compile(f"^{regex_pattern}$")
+        match = regex.match(string)
+        return match.groupdict() if match else None 
+    
+    
 class TaskInformation:
     def __init__(
         self,
@@ -206,14 +235,19 @@ class HCG_2(BaseAgent2):
             "\n\n"
             
             "At each step, you will be asked to 1) refactor the library and 2) update (or initialize) the task-solving codes. "
-            "For this, you will interact through the use of textual commands in the form of a tag followed by the code "
+            "For this, you will interact through the use of textual commands in the form of an operation name followed by the code "
             "between python tags. "
-            "The operation you can do and their corresponding tags are the following:\n"
+            "Any operation should be written in the following format:\n"
+            "[operation_name]\n"
+            "```python\n"
+            "<your code here>\n"
+            "```"
+            "The operation you can do and their corresponding name are the following:\n"
             "   - [add code] : this adds new code to the library (function(s) or controller(s)). \n" 
-            "   - [delete <name>] : this will delete the objects named <name> from the library. In this case you won't add any python code obviously. \n"
+            "   - [delete <name>] : this will delete the objects named <name> from the library. In this case you won't add any python code of course. \n"
             "   - [change <name>] : this will change the code of the object named <name> in the library. \n"
-            "   - [set code to task <task_idx>] : this will set the code of the task <task_idx> to the code. \n"
-            "       You will do that by defining the controller used and then using the 'perform_test(controller : Controller) function."
+            "   - [solve task <task_idx> with code] : this will use and test the specified code on the task <task_idx>. \n"
+            "       You will do that by defining the controller used and then using the 'perform_test(controller : Controller) function. \n"
             "   - [terminate] : this will terminate the process and move to the test step. \n"
             "\n\n"
             
@@ -249,13 +283,13 @@ class HCG_2(BaseAgent2):
             
             # Library
             "=== Library ===\n"
-            "This is the current state of the code of the library:\n"
-            f"{self.code_tag(str(self.library_controller))}"
+            "This is the current state of the code of the library:\n\n"
+            f"{str(self.library_controller)}"
             "\n\n"
             
             # Task set
             "=== Set of (task, code, feedback) ===\n"
-            "This is the current set of tasks and their associated code and feedback:\n"
+            "This is the current set of tasks and their associated code and feedback:\n\n"
             f"{task_set_repr}"
             "\n\n"
             
@@ -267,9 +301,6 @@ class HCG_2(BaseAgent2):
             "\n\n"
         )
         
-        
-        self.llm.reset()
-        self.llm.add_prompt(prompt_system)
         self.log_texts(
             {
                 "prompt_system.txt": prompt_system,
@@ -278,20 +309,68 @@ class HCG_2(BaseAgent2):
             },
         )
         
-        raise
+        # LLM inference
+        self.llm.reset()
+        self.llm.add_prompt(prompt_system)
         answer = self.llm.generate()
         self.llm.add_answer(answer)
+        self.log_texts(
+            {
+                "answer.txt": answer,
+            }
+        )
         
         # Extract the code blocks from the answer
+        commands_to_code = self.extract_commands_and_code(answer)
+        self.log_texts(
+            {
+                "commands_to_code.txt": str(commands_to_code),
+            }
+        )
+        
+        # Execute the commands
+        for command, code in commands_to_code.items():
+            if (kwargs := TextualCommand.ADD.extract_kwargs(command)) is not None:
+                print(f"Command: {command} with code {code}. Kwargs: {kwargs}")
+            elif (kwargs := TextualCommand.DELETE.extract_kwargs(command)) is not None:
+                print(f"Command: {command}. Kwargs: {kwargs}")
+            elif (kwargs := TextualCommand.CHANGE.extract_kwargs(command)) is not None:
+                print(f"Command: {command}. Kwargs: {kwargs}")
+            elif (kwargs := TextualCommand.TEST.extract_kwargs(command)) is not None:
+                print(f"Command: {command}. Kwargs: {kwargs}")
+            elif (kwargs := TextualCommand.TERMINATE.extract_kwargs(command)) is not None:
+                print(f"Command: {command}. Kwargs: {kwargs}")
+            else:
+                raise ValueError(
+                    f"Unknown command: {command}. Please check the command and try again."
+                )
         
         # Increment the time step
         self.t += 1
+        raise
         
     
     def code_tag(self, code: str) -> str:
         """Add the code tag to the code."""
         return f"```python\n{code}\n```"
     
+    def extract_commands_and_code(self, text: str) -> Dict[str, Optional[str]]:
+        pattern = re.compile(
+            r'\[(?P<command>[^\]]+)\]\s*(?P<code>```python\n.*?\n```)?',
+            re.DOTALL
+        )
+        result = {}
+        for match in pattern.finditer(text):
+            command = match.group("command")  # No brackets
+            code_block = match.group("code")
+            if code_block:
+                # Strip ```python and ```
+                code = re.sub(r'^```python\n|\n```$', '', code_block.strip())
+            else:
+                code = None
+            result[command] = code
+        return result
+
     def get_controller(self, task_description: TaskDescription) -> Controller:
         """Get a controller for a given task description. Does that by :
         - taking the library of controllers and the (sampled) demo bank as context

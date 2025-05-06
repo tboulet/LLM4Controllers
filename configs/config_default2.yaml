@@ -1,6 +1,9 @@
 # Hyperparameters
 n_steps_max : 100
 
+# Secondary settings
+do_curriculum: False
+
 # Logging
 log_dir : logs
 do_wandb : False

@@ -28,13 +28,6 @@ class HCG(BaseAgent):
     def __init__(self, config: Dict, logger: BaseLogger = None):
         super().__init__(config, logger)
         # Initialize logging
-        config_logs = self.config["config_logs"]
-        log_dir = config_logs["log_dir"]
-        self.list_log_dirs_global: List[str] = []
-        if config_logs["do_log_on_new"]:
-            self.list_log_dirs_global.append(os.path.join(log_dir, config["run_name"]))
-        if config_logs["do_log_on_last"]:
-            self.list_log_dirs_global.append(os.path.join(log_dir, "last"))
         self.metrics_memory_aware = defaultdict(int)
         # Log the config
         self.log_texts(
@@ -338,7 +331,7 @@ class HCG(BaseAgent):
                 feedback=feedback,
             )
         )
-        # Log the feedback and the task description
+        # Log the feedback
         self.log_texts(
             {
                 "feedback.txt": feedback.get_repr(),
@@ -933,41 +926,4 @@ class HCG(BaseAgent):
 
         return code_primitives, dict_code_refactorings
 
-    def log_texts(
-        self,
-        dict_name_to_text: Dict[str, str],
-        in_task_folder: bool = True,
-        is_update_step: bool = False,
-    ):
-        """Log texts in a directory. For each (key, value) in the directory, the file <log_dir>/task_<t>/<key> will contain the value.
-        It will do that for all <log_dir> in self.list_run_names.
-
-        Args:
-            dict_name_to_text (Dict[str, str]): a mapping from the name of the file to create to the text to write in it.
-            in_task_folder (bool, optional): whether to log the files in the task folder (if not, log in the run folder). Defaults to True.
-            is_update_step (bool, optional): whether we are in an update step (if so, replace task_t by task_t_update). Defaults to False.
-        """
-        list_log_dirs: List[str] = []
-        for log_dir_global in self.list_log_dirs_global:
-            if is_update_step:
-                assert (
-                    in_task_folder
-                ), "is_update_step should be True if in_task_folder is True."
-                log_dir = os.path.join(log_dir_global, f"task_{self.t}_update")
-            elif in_task_folder:
-                log_dir = os.path.join(log_dir_global, f"task_{self.t}")
-            else:
-                log_dir = log_dir_global
-            list_log_dirs.append(log_dir)
-
-        for log_dir in list_log_dirs:
-            os.makedirs(log_dir, exist_ok=True)
-            for name, text in dict_name_to_text.items():
-                assert isinstance(name, str) and isinstance(
-                    text, str
-                ), "Keys and values of dict_name_to_text should be strings."
-                log_file = os.path.join(log_dir, name)
-                with open(log_file, "w") as f:
-                    f.write(text)
-                f.close()
-                print(f"[LOGGING] : Logged {log_file}")
+    

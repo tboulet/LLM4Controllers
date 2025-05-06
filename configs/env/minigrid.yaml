@@ -1,5 +1,7 @@
 name: Minigrid
 config:
+  # Global
+  do_curriculum: ${do_curriculum}
   # Environment
   viewsize: 7
   # Representation

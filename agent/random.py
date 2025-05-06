@@ -8,6 +8,7 @@ from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller
 from agent.base_agent2 import BaseAgent2
 from core.loggers.base_logger import BaseLogger
+from core.play import play_controller_in_task
 from core.task import Task, TaskDescription
 from env.base_meta_env import BaseMetaEnv, Observation, ActionType, InfoDict
 from abc import ABC, abstractmethod
@@ -50,15 +51,21 @@ class RandomAgent(BaseAgent):
 class RandomAgent2(BaseAgent2):
     
     def __init__(self, config, logger : BaseLogger, env : BaseMetaEnv):
-        pass
-            
-    def get_list_controllers(self, list_tasks : List[Task]) -> List[Controller]:
-        list_controllers = []
-        for task in list_tasks:
-            description = task.get_description()
-            controller = RandomController(action_space=description.action_space)
-            list_controllers.append(controller)
-        return list_controllers
-    
+        self.config = config
+        self.logger = logger
+        self.env = env
+        self.tasks = self.env.get_current_tasks()
+        self.idx = 0
+        
     def step(self):
-        pass
+        task = self.tasks[self.idx]        
+        print(f"Task: {task}")
+        task_description = task.get_description()
+        controller = RandomController(action_space=task_description.action_space)
+        feedback = play_controller_in_task(controller, task, n_episodes=10, is_eval=False)
+        feedback.aggregate()
+        print(f"Feedback: {feedback}")
+        self.idx += 1
+    
+    def is_done(self):
+        return self.idx >= len(self.tasks)

@@ -379,7 +379,7 @@ class MinigridMetaEnv(BaseMetaEnv):
             },
             {
                 # Navigation tasks (medium)
-                lambda **kwargs: GoToDoorEnv(size=self.size, **kwargs),
+                # lambda **kwargs: GoToDoorEnv(size=self.size, **kwargs),
                 lambda **kwargs: CrossingEnv(size=11, obstacle_type=Wall, **kwargs),
                 lambda **kwargs: GoToObjectEnv(size=self.size, numObjs=2, **kwargs),
                 lambda **kwargs: FourRoomsEnv(**kwargs),
@@ -478,8 +478,11 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
         Returns:
             List[TaskMinigrid]: the list of all tasks available in the environment
         """
-        return self.curriculum.get_current_objectives()
-
+        if self.config["do_curriculum"]:
+            return self.curriculum.get_current_objectives()
+        else:
+            return [obj for level in self.curriculum.levels for obj in level.keys()]
+        
     def update(self, task: TaskMinigrid, feedback: FeedbackAggregated) -> None:
         self.curriculum.update(objective=task, feedback=feedback)
         self.timestep += 1

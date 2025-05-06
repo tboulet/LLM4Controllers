@@ -241,7 +241,7 @@ class HCG_2(BaseAgent2):
             "[operation_name]\n"
             "```python\n"
             "<your code here>\n"
-            "```"
+            "```\n"
             "The operation you can do and their corresponding name are the following:\n"
             "   - [add code] : this adds new code to the library (function(s) or controller(s)). \n" 
             "   - [delete <name>] : this will delete the objects named <name> from the library. In this case you won't add any python code of course. \n"

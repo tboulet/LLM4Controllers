@@ -4,49 +4,27 @@ config:
   # The model tag to use for the LLM (in case the LLM class requires a model tag).
   model: gpt-4o-mini
 
-  # === Inference hyperparameters ===
-  # The number of examples to sample from the demo bank during inference
-  n_samples_inference: 5
-  # The method for sampling
-  method_inference_sampling: uniform
+  # Which prompt to use
+  list_prompt_keys:
+    - system
+    - env
+    - controller_structure
+    - example_answer
+    - task
+    - task_description
+    - advice
+
   # The number of attemps to get a correct answer from the LLM before crashing
   num_attempts_inference: 5
 
-  # === Update hyperparameters ===
-  # The number of examples to sample from the demo bank during update
-  n_samples_update: 10
-  # The method for sampling
-  method_update_sampling: uniform
-  # The maximal number of new primitives that can be added to the demo bank
-  n_max_update_new_primitives: 3
-  # The maximal number of new refactorings that can be applied to the demo bank
-  n_max_update_refactorings: 3
-  # The number of attempts to get a correct answer from the LLM before crashing/giving up the step (for various steps)
-  num_attempts_update_code_extraction: 5
-  num_attempts_update_pc_code_saving: 5
-  num_attempts_update_sc_code_execution: 5
+  # The number of inference calls to make
+  n_inferences: 3
 
-  
+  # The number of episodes on which a controller will be evaluated on a task
+  n_episodes_eval: 10
 
-  # The config for the controller library.
-  config_controllers:
-    which_initial_controllers: specific  # none, specific (those in the initial_controllers field), all (all available in agent/llm_hcg/initial_controllers)
-    initial_controllers:
-      - move_forward.py
-      - turn_to_direction.py
-
-  config_functions: # unused for now
-    do_use: False
-
-  config_knowledges:
-    do_use: False
-
-  config_hypotheses:
-    do_use: False
-
-  config_visualizer:
-    # Whether to automatically open the browser to visualize the library evolving
-    auto_open_browser: False
+  # The parameter for the pass@k metric
+  k_pass: 2
 
   config_debug:
     # Whether to breakpoint on inference events

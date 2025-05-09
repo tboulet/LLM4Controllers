@@ -43,7 +43,7 @@ def play_controller_in_task(
 ) -> FeedbackAggregated:
     """Play the controller in the task for n_episodes episodes and return the feedback."""
     # Initialize the feedback
-    feedback_agg = FeedbackAggregated()
+    feedback_agg_over_episodes = FeedbackAggregated()
     for k in range(n_episodes):
         # Reset the environment
         obs, info = task.reset(
@@ -54,21 +54,20 @@ def play_controller_in_task(
         # Loop over the episode
         done = False
         truncated = False
+        error_message = None
         while not done and not truncated:
             # Act in the environment
             try:
                 action = controller.act(obs)
-            except Exception as e:
+            except Exception as e: # Deal with error happening in the act method
                 full_error_info = get_error_info(e)
                 error_message = f"An error occured during the act method of the controller. Full error info : {full_error_info}"
-                info = {"Error": ErrorTrace(error_message)}
                 obs, reward, done, truncated = None, 0, False, True
                 break
             # Step in the environment
             obs, reward, done, truncated, info = task.step(action)
-            if "Error" in info:
+            if "Error" in info: # Deal with error happening in the step method and logged in the info dict
                 error_message = info["Error"]
-                info["Error"] = ErrorTrace(error_message)
                 print(f"ERROR WARNING : {error_message}")
                 break
             # Render and log
@@ -80,15 +79,16 @@ def play_controller_in_task(
         # Close the environment
         task.close()
 
-        # Update the agent
+        # Create the feedback
         feedback = {
             "success": reward > 0,
             "reward": reward,
         }
-
         feedback.update(env_feedback)  # add environment feedback to feedback
-
+        if error_message is not None:
+            feedback["error"] = ErrorTrace(error_message)
+            
         # Add feedback to the feedback aggregator
-        feedback_agg.add_feedback(feedback)
+        feedback_agg_over_episodes.add_feedback(feedback)
 
-    return feedback_agg
+    return feedback_agg_over_episodes

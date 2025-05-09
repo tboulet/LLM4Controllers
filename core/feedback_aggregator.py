@@ -30,13 +30,25 @@ from core.task import TaskDescription
 
 
 class FeedbackType(Enum):
-    NUMERICAL = "numerical"
     BOOLEAN = "boolean"
+    NUMERICAL = "numerical"
     ERROR = "error"
 
 
 class MetricData:
-    """A class to store a certain metric over time."""
+    """A class to store a certain metric over time.
+    
+    It can either be :
+        - a boolean (True/False), in this case the metric is storing the number of True and False values
+            metric.n_true : int
+            metric.n_false : int
+            The sum = n_episodes
+        - a numerical value (int/float), in this case the metric is storing the values in a list
+            metric.values : List[float]
+            The length of the list = n_episodes
+        - an error message (ErrorTrace), in this case the metric is storing the error messages in a dictionary mapping error messages to their count
+            metric.dictionary : Dict[str, int]        
+    """
 
     def __init__(self):
         # Parameters
@@ -76,7 +88,12 @@ class MetricData:
             )
 
     def check_type_value(self, type_value: FeedbackType):
-        # Check if the type_value matches the current value
+        """Check if the type_value is already set and matches the current value.
+        If no type_value is set, set it to the current value.
+        
+        Args:
+            type_value (FeedbackType): The type of the value to check.
+        """
         if self.type_value is None:
             self.type_value = type_value
         else:
@@ -96,7 +113,7 @@ class FeedbackAggregated:
     def __init__(self):
         self.metrics: Dict[str, MetricData] = defaultdict(MetricData)
         self.n_episodes = 0
-        self.dict_aggregated_feedback = None
+        self.dict_aggregated_feedback = None  # None while feedback is not aggregated
 
     def add_feedback(self, feedback: Dict[str, Any]):
         """
@@ -163,7 +180,7 @@ class FeedbackAggregated:
                     self.dict_aggregated_feedback[key] * 100
                 )
                 list_repr.append(
-                    f"{key} rate : {percentage:.2f}% of episodes were successful (aggregated over {self.n_episodes} episodes)"
+                    f"{key} rate : {percentage:.2f}% (aggregated over {self.n_episodes} episodes)"
                 )
             # Error : percentage of each error
             elif metric.type_value == FeedbackType.ERROR:
@@ -180,15 +197,6 @@ class FeedbackAggregated:
             else:
                 raise ValueError(f"Unsupported feedback type: {metric.type_value}")
         return "\n".join(list_repr)
-
-    def __repr__(self):
-        """
-        Get a string representation of the feedback aggregator.
-
-        Returns:
-            str: A string representation of the feedback aggregator.
-        """
-        return self.get_repr()
     
     def get_metrics(self, task : TaskDescription = None) -> Dict[str, Any]:
         """
@@ -213,19 +221,19 @@ class FeedbackAggregated:
                 # metrics[f"{key}_std"] = d["std"]
                 # metrics[f"{key}_min"] = d["min"]
                 # metrics[f"{key}_max"] = d["max"]
-            # Boolean : percentage
+            # Boolean : rate
             elif metric.type_value == FeedbackType.BOOLEAN:
                 metrics[f"{key}_rate"] = (
-                    self.dict_aggregated_feedback[key] * 100
+                    self.dict_aggregated_feedback[key]
                 )
-            # Error : percentage of each error
+            # Error : rate of each error
             elif metric.type_value == FeedbackType.ERROR:
                 if task is not None:
                     continue # skip the error metrics if task is provided
                 d : Dict[str, int] = self.dict_aggregated_feedback[key]
                 for error_message, count in d.items():
-                    percentage = (count / self.n_episodes) * 100
-                    metrics[f"{key}_{error_message}"] = percentage
+                    error_rate = count / self.n_episodes
+                    metrics[f"{key}_{error_message}_rate"] = error_rate
             else:
                 raise ValueError(f"Unsupported feedback type: {metric.type_value}")
         # Add task specific metrics
@@ -238,3 +246,12 @@ class FeedbackAggregated:
         metrics["n_episodes"] = self.n_episodes
         # Return the metrics
         return metrics
+
+    def __repr__(self):
+        """
+        Get a string representation of the feedback aggregator.
+
+        Returns:
+            str: A string representation of the feedback aggregator.
+        """
+        return self.get_repr()

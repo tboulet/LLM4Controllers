@@ -8,6 +8,7 @@ import numpy as np
 from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller
 from agent.base_agent2 import BaseAgent2
+from core.feedback_aggregator import FeedbackAggregated
 from core.loggers.base_logger import BaseLogger
 from core.play import play_controller_in_task
 from core.task import Task, TaskDescription
@@ -73,6 +74,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         # Get the task and generate the controller
         task = self.tasks[self.t]        
         print(f"Step {self.t}, task received:\n{task}")
+        list_feedback : List[FeedbackAggregated] = []
         controller = self.generate_controller(task)
         # Play the controller in the task
         feedback = play_controller_in_task(controller, task, n_episodes=10, is_eval=False)

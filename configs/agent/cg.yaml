@@ -12,19 +12,19 @@ config:
     - example_answer
     - task
     - task_description
-    - advice
+    - instructions
 
   # The number of attemps to get a correct answer from the LLM before crashing
   num_attempts_inference: 5
 
   # The number of inference calls to make
-  n_inferences: 3
+  n_inferences: 10
 
   # The number of episodes on which a controller will be evaluated on a task
-  n_episodes_eval: 10
+  n_episodes_eval: 5
 
   # The parameter for the pass@k metric
-  k_pass: 2
+  k_pass: 5
 
   config_debug:
     # Whether to breakpoint on inference events

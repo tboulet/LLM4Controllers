@@ -14,6 +14,7 @@ Here’s how the implementation looks:
 
 ```python
 from agent.base_agent import Controller, Observation, ActionType
+from abc import ABC, abstractmethod
 
 class SpecializedController(Controller):
     """A specialized controller to give the position of the agent in the grid."""
@@ -22,7 +23,8 @@ class SpecializedController(Controller):
         """Initialize the controller with the starting position of the agent."""
         self.position = (0, 0)  # Starting position
         self.has_given_position = False
-
+        testing = abstractmethod
+        
     def act(self, observation: Observation) -> ActionType:
         """Return the position of the agent when asked.
 

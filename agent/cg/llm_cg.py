@@ -5,6 +5,7 @@ from typing import Dict, List
 
 from gymnasium import Space
 import numpy as np
+from omegaconf import OmegaConf
 from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller
 from agent.base_agent2 import BaseAgent2
@@ -25,6 +26,12 @@ class LLM_BasedControllerGenerator(BaseAgent2):
 
     def __init__(self, config, logger: BaseLogger, env: BaseMetaEnv):
         super().__init__(config, logger, env)
+        self.log_texts(
+            {
+                "config.yaml": OmegaConf.to_yaml(config),
+            },
+            log_dir="",
+        )
         # Get tasks here
         self.tasks = self.env.get_current_tasks()
         # Get hyperparameters
@@ -58,8 +65,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         # Env prompt
         description_env = env.get_textual_description()
         prompt_env = (
-            "=== General description of the environment ===\n"
-            f"{description_env}"
+            "=== General description of the environment ===\n" f"{description_env}"
         )
 
         # Controller structure prompt
@@ -78,9 +84,9 @@ class LLM_BasedControllerGenerator(BaseAgent2):
             f"{text_example_answer}\n"
             "==========================="
         )
-        
+
         # TODO : add doc and env code prompt
-        
+
         # Prompts dict
         self.prompts: Dict[str, str] = {
             "system": prompt_system,
@@ -92,54 +98,64 @@ class LLM_BasedControllerGenerator(BaseAgent2):
     def step(self):
         # Get the task
         task = self.tasks[self.t]
-        print(f"Step {self.t}, task received:\n{task}")
-        # Play N controllers in the task
+        print(f"Step {self.t}, task received: {task}")
+        # Reset metrics
+        for key in self.metrics_memory_aware.keys():
+            self.metrics_memory_aware[key] = 0
         feedback_agg_over_controllers = FeedbackAggregated(
-        agg_methods=["mean", f"best@{self.k_pass}"]
+            agg_methods=["mean", f"best@{self.k_pass}", f"worst@{self.k_pass}"]
         )
-        for _ in range(self.n_inferences):
-            controller = self.generate_controller(task)
+        # Play n controllers in the task
+        for i in range(self.n_inferences):
+            print(f"Step {self.t}, controller {i} generation...")
+            controller = self.generate_controller(
+                task, log_dir=f"task_{self.t}/controller_{i}"
+            )
             # Play the controller in the task
             feedback_agg = play_controller_in_task(
-                controller, task, n_episodes=self.n_episodes_eval, is_eval=False
+                controller,
+                task,
+                n_episodes=self.n_episodes_eval,
+                is_eval=False,
+                log_dir=f"task_{self.t}/controller_{i}",
             )
             feedback_agg.aggregate()
+            self.log_texts(
+                {
+                    f"feedback.txt": feedback_agg.get_repr(),
+                },
+                log_dir=f"task_{self.t}/controller_{i}",
+            )
             metrics_agg_over_episodes = feedback_agg.get_metrics()
             feedback_agg_over_controllers.add_feedback(metrics_agg_over_episodes)
         feedback_agg_over_controllers.aggregate()
-        # Log the feedback
-        print(f"Feedback obtained:\n{feedback_agg_over_controllers}")
-        self.log_texts(
-            {
-                "feedback.txt": feedback_agg_over_controllers.get_repr(),
-            }
+        # Log the metrics
+        self.logger.log_scalars(
+            feedback_agg_over_controllers.get_metrics(prefix=task), step=self.t
         )
-        self.logger.log_scalars(feedback_agg_over_controllers.get_metrics(), step=self.t)
+
+        # Move forward t
         self.t += 1
 
     def is_done(self):
         return self.t >= len(self.tasks)
 
-    def generate_controller(self, task: Task) -> Controller:
+    def generate_controller(self, task: Task, log_dir: str = None) -> Controller:
         """Generate a controller for the given task using the LLM."""
-        # Reset the metrics at 0
-        for key in self.metrics_memory_aware.keys():
-            self.metrics_memory_aware[key] = 0
         # Generate the prompt
         task_description = task.get_description()
-        prompt_task = (
-            "=== Task ===\n"
-            f"Task : {task}"
+        prompt_task = "=== Task ===\n" f"Task : {task}"
+        prompt_task_description = f"Description : \n{task_description}"
+        prompt_instructions = (
+            "=== Instructions ===\n"
+            "Your answer should include a python code (inside a code block) that implements a class "
+            "inheriting from 'Controller' and instantiate it under a variable named 'controller'. "
         )
-        prompt_task_description = (
-            f"Description : \n{task_description}"
-        )
-        prompt_advice = "Your answer should include a python code (inside a code block) that defines a controller class and instantiate it under a variable named 'controller'. "
 
         prompts = self.prompts.copy()
         prompts["task"] = prompt_task
         prompts["task_description"] = prompt_task_description
-        prompts["advice"] = prompt_advice
+        prompts["instructions"] = prompt_instructions
 
         list_prompt = []
         for prompt_key in self.list_prompt_keys:
@@ -155,6 +171,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
                 "prompt.txt": prompt,
                 "task_description.txt": str(task_description),
             },
+            log_dir=log_dir,
         )
 
         # Breakpoint-pause at each task if the debug mode is activated
@@ -186,7 +203,8 @@ class LLM_BasedControllerGenerator(BaseAgent2):
                     {
                         f"failure_sc_code_extraction_{no_attempt}_answer.txt": answer,
                         f"failure_sc_code_extraction_{no_attempt}_error.txt": str(e),
-                    }
+                    },
+                    log_dir=log_dir,
                 )
                 self.metrics_memory_aware["n_failure_sc_code_extraction"] += 1
                 if self.config["config_debug"][
@@ -210,7 +228,8 @@ class LLM_BasedControllerGenerator(BaseAgent2):
                     {
                         f"failure_sc_code_execution_{no_attempt}_answer.txt": answer,
                         f"failure_sc_code_execution_{no_attempt}_error.txt": full_error_info,
-                    }
+                    },
+                    log_dir=log_dir,
                 )
                 self.metrics_memory_aware["n_failure_sc_code_execution"] += 1
                 if self.config["config_debug"][
@@ -222,14 +241,13 @@ class LLM_BasedControllerGenerator(BaseAgent2):
             is_controller_instance_generated = True
             break
 
-        self.logger.log_scalars(metrics=self.metrics_memory_aware, step=self.t)
-
         if is_controller_instance_generated:
             self.log_texts(
                 {
                     "answer.txt": answer,
                     "specialized_controller.py": code,
-                }
+                },
+                log_dir=log_dir,
             )
             return specialized_controller
 
@@ -248,7 +266,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
 
         Raises:
             ValueError: if the answer does not contain exactly one detected python code block
-            
+
         Returns:
             str: the code block extracted from the answer
         """
@@ -275,15 +293,12 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         Returns:
             Controller: the controller instance
         """
-
         # Create local scope
-        local_scope = {}  # Output source for the PC classes
-
-        # Execute the remaining code
-        scope_with_imports = self.base_scope.copy()
+        local_scope = self.base_scope.copy()
         try:
-            exec(code, scope_with_imports, local_scope)
+            exec(code, local_scope)
         except Exception as e:
+            breakpoint()
             print("[ERROR] : Could not execute the code.")
             self.metrics_memory_aware[
                 "n_failure_sc_code_execution_code_execution_error"

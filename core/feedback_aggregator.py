@@ -67,8 +67,11 @@ def best_at_k(values: List[float], k: int, num_samples: int = 1000) -> float:
     """
     assert 0 < k <= len(values), "k must be between 1 and the number of samples"
     
-    n = len(values)
+    # If values only contains 0 and 1, go back to pass_at_k
+    if all(v in [0, 1] for v in values):
+        return pass_at_k([bool(v) for v in values], k)
     
+    n = len(values)
     # Use full enumeration if tractable
     total_combinations = comb(n, k)
     if total_combinations <= num_samples:
@@ -98,6 +101,9 @@ def function_names_to_agg_functions(agg_name : str):
     elif re.match(r"best@(\d+)", agg_name):
         k = int(re.match(r"best@(\d+)", agg_name).group(1))
         return lambda values: best_at_k(values, k)
+    elif re.match(r"worst@(\d+)", agg_name):
+        k = int(re.match(r"worst@(\d+)", agg_name).group(1))
+        return lambda values: - best_at_k([-v for v in values], k)
     else:
         raise ValueError(
             f"Unsupported aggregation function: {agg_name}. Supported functions are: mean, median, std, min, max, pass@k, best@k."
@@ -211,11 +217,15 @@ class FeedbackAggregated:
         dict_aggregated_feedback = {}
         for key, metric in self.metrics.items():
             if metric.type_value == FeedbackType.NUMERICAL:
+                if len(metric.values) < self.n_data:
+                    metric.values += [0] * (self.n_data - len(metric.values))
                 dict_aggregated_feedback[key] = {
                     agg_name: function_names_to_agg_functions(agg_name)(metric.values)
                     for agg_name in self.agg_methods
                 }
             elif metric.type_value == FeedbackType.BOOLEAN:
+                if metric.n_true + metric.n_false < self.n_data:
+                    metric.n_false += self.n_data - metric.n_true - metric.n_false
                 assert (
                     metric.n_true + metric.n_false == self.n_data
                 ), f"Number of true and false values do not match the number of datapoints: {metric.n_true + metric.n_false} != {self.n_data}"
@@ -267,6 +277,7 @@ class FeedbackAggregated:
                 list_repr_error = []
                 for error_message, count in d.items():
                     percentage = (count / self.n_data) * 100
+                    error_message = error_message.replace("\n", "\n\t")
                     list_repr_error.append(
                         f"Happened {percentage:.2f}% of time : {error_message}"
                     )
@@ -278,21 +289,23 @@ class FeedbackAggregated:
 
     def get_metrics(
         self,
-        task: TaskDescription = None,
+        prefix: TaskDescription = None,
+        do_log_no_prefix: bool = True,
     ) -> Dict[str, Any]:
         """
         Get the aggregated feedback as loggable metrics.
 
         Args:
-            task (TaskDescription, optional): The task description. Defaults to None.
-            If provided, the metrics will be prefixed with the task name except for the error metrics.
-
+            prefix (TaskDescription, optional): The task name. Defaults to None. If provided, the metrics will be prefixed with the task name.
+            do_log_no_prefix (bool, optional): If True, the metrics will also be logged without prefix. Defaults to True.
+            
         Returns:
             Dict[str, Any]: A dictionary containing the aggregated feedback metrics.
         """
         assert (
             self.dict_aggregated_feedback is not None
         ), "Feedback has not been aggregated yet. Please call aggregate() first."
+        assert prefix is not None or do_log_no_prefix, "Either prefix or do_log_no_prefix should be provided."
         metrics = {}
         for key, metric in self.metrics.items():
             # Numerical : mean, std, min, max
@@ -317,11 +330,14 @@ class FeedbackAggregated:
                     metrics[f"{key}_{error_message}_rate"] = error_rate
             else:
                 raise ValueError(f"Unsupported feedback type: {metric.type_value}")
-        # Add task specific metrics
-        if task is not None:
-            metrics = {f"{task}_{key}": value for key, value in metrics.items()}
+        # Log what is needed
+        metrics_res = {}
+        if prefix is not None:
+            metrics_res.update({f"{prefix}_{key}": value for key, value in metrics.items()})
+        if do_log_no_prefix:
+            metrics_res.update(metrics)
         # Return the metrics
-        return metrics
+        return metrics_res
 
     def __repr__(self):
         """

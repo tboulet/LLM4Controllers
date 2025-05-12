@@ -193,12 +193,13 @@ class TaskMinigrid(Task):
             self.env_mg = None
         return self.task_description
 
-    def reset(self, is_eval: str = False) -> Tuple[Observation, InfoDict]:
+    def reset(self, is_eval: str = False, log_dir : str = None) -> Tuple[Observation, InfoDict]:
         """Reset the task to its initial state.
 
         Args:
             is_eval (bool): Whether to reset the environment in evaluation mode or not.
-
+            log_dir (str): The directory to save the logs.
+            
         Returns:
             Tuple[Observation, InfoDict]: The observation and info dictionary.
         """
@@ -208,7 +209,7 @@ class TaskMinigrid(Task):
             self.render_mode = self.meta_env.render_mode_eval
         else:
             self.render_mode = self.meta_env.render_mode_train
-
+        self.log_dir = log_dir
         if self.render_mode == "rgb_array":
             self.video_frames = []
 
@@ -296,7 +297,6 @@ class TaskMinigrid(Task):
         del self.env_mg
         # Save the video if any
         if self.render_mode == "rgb_array":
-            dir_task = f"task_{self.meta_env.timestep}"
             self.n_times_task_logged_this_timestep += 1
             if self.n_times_task_logged_this_timestep > 1:
                 filename_video = f"video_{self.n_times_task_logged_this_timestep}.mp4"
@@ -306,7 +306,7 @@ class TaskMinigrid(Task):
             if self.n_times_task_logged_this_timestep > self.meta_env.n_videos_logged:
                 return
             for log_dir_global in self.meta_env.list_log_dirs_global:
-                path_task_t = os.path.join(log_dir_global, dir_task)
+                path_task_t = os.path.join(log_dir_global, self.log_dir)
                 os.makedirs(path_task_t, exist_ok=True)
                 path_task_t_video = os.path.join(path_task_t, filename_video)
                 imageio.mimwrite(path_task_t_video, self.video_frames, fps=10)
@@ -381,7 +381,7 @@ class MinigridMetaEnv(BaseMetaEnv):
                 # Navigation tasks (medium)
                 # lambda **kwargs: GoToDoorEnv(size=self.size, **kwargs),
                 lambda **kwargs: CrossingEnv(size=11, obstacle_type=Wall, **kwargs),
-                lambda **kwargs: GoToObjectEnv(size=self.size, numObjs=2, **kwargs),
+                # lambda **kwargs: GoToObjectEnv(size=self.size, numObjs=2, **kwargs),
                 lambda **kwargs: FourRoomsEnv(**kwargs),
                 lambda **kwargs: DistShiftEnv(**kwargs),
             },
@@ -396,24 +396,24 @@ class MinigridMetaEnv(BaseMetaEnv):
             },
             {
                 # Simple manipulative tasks (1 step)
-                lambda **kwargs: FetchEnv(size=self.size, numObjs=3, **kwargs),
+                # lambda **kwargs: FetchEnv(size=self.size, numObjs=3, **kwargs),
                 lambda **kwargs: UnlockEnv(**kwargs),
             },
             {
                 # Medium manipulative tasks (2-3 steps)
-                lambda **kwargs: UnlockPickupEnv(**kwargs),
-                lambda **kwargs: PutNearEnv(size=6, numObjs=2, **kwargs),
-                lambda **kwargs: MemoryEnv(**kwargs),
+                # lambda **kwargs: UnlockPickupEnv(**kwargs),
+                # lambda **kwargs: PutNearEnv(size=6, numObjs=2, **kwargs),
+                lambda **kwargs: MemoryEnv(size=9, **kwargs),
                 lambda **kwargs: DoorKeyEnv(**kwargs),
-                lambda **kwargs: KeyCorridorEnv(**kwargs),
+                # lambda **kwargs: KeyCorridorEnv(**kwargs),
                 lambda **kwargs: ObstructedMaze_1Dlhb(**kwargs),
                 lambda **kwargs: RedBlueDoorEnv(**kwargs),
             },
             {
                 # Hard manipulative tasks (4-5 steps or more)
-                lambda **kwargs: BlockedUnlockPickupEnv(**kwargs),
-                lambda **kwargs: PutNearEnv(size=14, numObjs=6, **kwargs),
-                lambda **kwargs: LockedRoomEnv(size=19, **kwargs),
+                # lambda **kwargs: BlockedUnlockPickupEnv(**kwargs),
+                # lambda **kwargs: PutNearEnv(size=14, numObjs=6, **kwargs),
+                # lambda **kwargs: LockedRoomEnv(size=19, **kwargs),
                 lambda **kwargs: ObstructedMaze_Full(**kwargs),
                 lambda **kwargs: ObstructedMaze_Full_V1(**kwargs),
             },

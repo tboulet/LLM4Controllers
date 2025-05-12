@@ -12,6 +12,7 @@ class LLM_Dummy(LanguageModel):
 
     def __init__(self, config: Dict[str, Any]):
         self.config = config
+        self.path_answer = config["path_answer"]
 
     def reset(self):
         """Reset the language model at empty state."""
@@ -39,7 +40,10 @@ class LLM_Dummy(LanguageModel):
             len(self.messages) > 0
         ), "You need to add a prompt before generating completions."
         # Load the answer from the input file
-        file_name_input = input(f"Write answer file : inputs/")
+        if self.path_answer is None:
+            file_name_input = input(f"Write answer file : inputs/")
+        else:
+            file_name_input = self.path_answer
         # If file_name_input == 'see', show the prompt
         if file_name_input == "see":
             print(self.messages)
@@ -48,8 +52,16 @@ class LLM_Dummy(LanguageModel):
             breakpoint()
             return self.generate()
         else:
-            with open(f"inputs/{file_name_input}", "r") as f:
-                answer = f.read()
+            while True:
+                try:
+                    with open(f"inputs/{file_name_input}", "r") as f:
+                        answer = f.read()
+                    f.close()
+                    break
+                except FileNotFoundError:
+                    print(f"File inputs/{file_name_input} not found. Try again.")
+                    file_name_input = input(f"Write answer file : inputs/")
+                    continue
             return answer
 
     def add_answer(self, answer: str):

@@ -80,7 +80,9 @@ def main(config: DictConfig):
     config["llm"]["run_name"] = run_name
 
     # Initialize loggers
-    shutil.rmtree(f"{log_dir}/last/", ignore_errors=True) # Remove log_dir/last/ to clean the logs
+    shutil.rmtree(
+        f"{log_dir}/last/", ignore_errors=True
+    )  # Remove log_dir/last/ to clean the logs
     run_name = config.get(
         "run_name", run_name
     )  # do "python run.py +run_name=<your_run_name>" to change the run name
@@ -93,7 +95,7 @@ def main(config: DictConfig):
     if do_tqdm and n_steps_max != np.inf:
         loggers.append(LoggerTQDM(n_total=n_steps_max))
     logger = MultiLogger(*loggers)
-    
+
     # Create the env
     print("Creating the dataset...")
     MetaEnvClass = env_name_to_MetaEnvClass[env_name]
@@ -137,7 +139,9 @@ def main(config: DictConfig):
             feedback_agg = FeedbackAggregated()
             for k in range(n_episodes):
                 # Reset the environment
-                obs, info = task.reset(is_eval=is_eval and k == 0) # eval only once per rollout for now
+                obs, info = task.reset(
+                    is_eval=is_eval and k == 0
+                )  # eval only once per rollout for now
                 task.render()
 
                 # Loop over the episode
@@ -193,7 +197,7 @@ def main(config: DictConfig):
 
         # Log the metrics
         metrics = feedback_agg.get_metrics()
-        metrics.update(feedback_agg.get_metrics(task=task))
+        metrics.update(feedback_agg.get_metrics(prefix=task))
         logger.log_scalars(metrics, step=step)
 
         # Update the progress bar

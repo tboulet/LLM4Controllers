@@ -40,6 +40,7 @@ def play_controller_in_task(
     task: Task,
     n_episodes: int,
     is_eval: bool,
+    log_dir: str,
 ) -> FeedbackAggregated:
     """Play the controller in the task for n_episodes episodes and return the feedback."""
     # Initialize the feedback
@@ -47,7 +48,7 @@ def play_controller_in_task(
     for k in range(n_episodes):
         # Reset the environment
         obs, info = task.reset(
-            is_eval=is_eval and k == 0
+            is_eval=is_eval and k == 0, log_dir=log_dir
         )  # eval only once per rollout for now
         task.render()
 

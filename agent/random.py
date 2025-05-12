@@ -48,24 +48,35 @@ class RandomAgent(BaseAgent):
     ):
         pass
 
+
 class RandomAgent2(BaseAgent2):
-    
-    def __init__(self, config, logger : BaseLogger, env : BaseMetaEnv):
-        self.config = config
-        self.logger = logger
-        self.env = env
+
+    def __init__(self, config, logger: BaseLogger, env: BaseMetaEnv):
+        super().__init__(config, logger, env)
         self.tasks = self.env.get_current_tasks()
-        self.idx = 0
-        
+        self.t = 0
+
     def step(self):
-        task = self.tasks[self.idx]        
-        print(f"Task: {task}")
+        task = self.tasks[self.t]
+        print(f"Step {self.t}, task received: {task}")
         task_description = task.get_description()
         controller = RandomController(action_space=task_description.action_space)
-        feedback = play_controller_in_task(controller, task, n_episodes=10, is_eval=False)
-        feedback.aggregate()
-        print(f"Feedback: {feedback}")
-        self.idx += 1
-    
+        feedback_agg = play_controller_in_task(
+            controller, task, n_episodes=10, is_eval=False, log_dir=f"task_{self.t}"
+        )
+        feedback_agg.aggregate()
+        # Log the metrics
+        self.log_texts(
+            {
+                f"feedback.txt": feedback_agg.get_repr(),
+            },
+            log_dir=f"task_{self.t}",
+        )
+        self.logger.log_scalars(
+            feedback_agg.get_metrics(prefix=task),
+            step=self.t,
+        )
+        self.t += 1
+
     def is_done(self):
-        return self.idx >= len(self.tasks)
+        return self.t >= len(self.tasks)

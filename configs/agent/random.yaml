@@ -1,2 +1,3 @@
 name: Random
-config: {}
+config:
+  config_logs: ${config_logs}

@@ -53,6 +53,7 @@ from minigrid.envs.babyai.goto import GoToObj
 # Env customs
 from core.feedback_aggregator import FeedbackAggregated
 from core.loggers.base_logger import BaseLogger
+from core.utils import get_unique_path
 from env.minig.env_minigrid_autosuccess import AutoSuccessEnv
 from env.minig.env_minigrid_give_agent_position import GiveAgentPositionEnv
 from env.minig.env_minigrid_give_goal_position import GiveGoalPositionEnv
@@ -142,7 +143,6 @@ class TaskMinigrid(Task):
         # Other variables
         self.task_description = None
         self.env_mg = None
-        self.n_times_task_logged_this_timestep = 0
 
     # ===== Helper methods ===
 
@@ -297,18 +297,12 @@ class TaskMinigrid(Task):
         del self.env_mg
         # Save the video if any
         if self.render_mode == "rgb_array":
-            self.n_times_task_logged_this_timestep += 1
-            if self.n_times_task_logged_this_timestep > 1:
-                filename_video = f"video_{self.n_times_task_logged_this_timestep}.mp4"
-            else:
-                filename_video = "video.mp4"
-            # Leave if video already logged n_videos_logged times
-            if self.n_times_task_logged_this_timestep > self.meta_env.n_videos_logged:
-                return
             for log_dir_global in self.meta_env.list_log_dirs_global:
                 path_task_t = os.path.join(log_dir_global, self.log_dir)
                 os.makedirs(path_task_t, exist_ok=True)
-                path_task_t_video = os.path.join(path_task_t, filename_video)
+                path_task_t_video = os.path.join(path_task_t, "video.mp4")
+                while os.path.exists(path_task_t_video):
+                    path_task_t_video = get_unique_path(path_task_t_video)
                 imageio.mimwrite(path_task_t_video, self.video_frames, fps=10)
 
     def get_feedback(self) -> Dict[str, Any]:

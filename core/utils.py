@@ -35,3 +35,24 @@ def to_maybe_inf(n):
     if n in ["inf", "infinity", None, "None"]:
         return np.inf
     return n
+
+import os
+import re
+
+def get_unique_path(path):
+    directory, filename = os.path.split(path)
+    name, ext = os.path.splitext(filename)
+
+    # Match filename ending in _number (e.g., video_6)
+    match = re.match(r"^(.*)_(\d+)$", name)
+    if match:
+        base, num = match.groups()
+        num = int(num) + 1
+    else:
+        base = name
+        num = 2
+
+    new_filename = f"{base}_{num}{ext}"
+    new_path = os.path.join(directory, new_filename)
+
+    return new_path

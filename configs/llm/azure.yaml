@@ -9,8 +9,7 @@ config:
     api_version: 2024-02-15-preview
   model: ${llm.model}
   kwargs:
-    top_p: 0.9
-
+    temperature: 0.3
 
 
 

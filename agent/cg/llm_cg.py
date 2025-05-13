@@ -34,6 +34,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         )
         # Get tasks here
         self.tasks = self.env.get_current_tasks()
+        self.tasks = sorted(self.tasks, key=lambda task: str(task))
         # Get hyperparameters
         self.num_attempts_inference = config["num_attempts_inference"]
         self.n_inferences = config["n_inferences"]

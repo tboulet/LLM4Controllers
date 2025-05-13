@@ -54,6 +54,7 @@ class RandomAgent2(BaseAgent2):
     def __init__(self, config, logger: BaseLogger, env: BaseMetaEnv):
         super().__init__(config, logger, env)
         self.tasks = self.env.get_current_tasks()
+        self.tasks = sorted(self.tasks, key=lambda task: str(task))
         self.t = 0
 
     def step(self):

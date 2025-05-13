@@ -13,6 +13,7 @@ Here is the step-by-step reasoning for the implementation:
 Here’s how the implementation looks:
 
 ```python
+from time import sleep
 from agent.base_agent import Controller, Observation, ActionType
 from abc import ABC, abstractmethod
 
@@ -34,6 +35,7 @@ class SpecializedController(Controller):
         Returns:
             ActionType: The action to take in the environment.
         """
+        sleep(50)
         if not self.has_given_position:
             # Here we calculate the position based on the direction
             direction = observation["direction"]

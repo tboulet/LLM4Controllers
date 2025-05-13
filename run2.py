@@ -53,6 +53,7 @@ def main(config: DictConfig):
     # Get the config values from the config object.
     agent_name: str = config["agent"]["name"]
     env_name: str = config["env"]["name"]
+    model_name: str = config["llm"].get("model", "none")
 
     n_steps_max: int = config.get("n_steps_max", np.inf)
     n_steps_max = to_maybe_inf(n_steps_max)
@@ -71,7 +72,10 @@ def main(config: DictConfig):
     print(f"Using seed: {seed}")
 
     # Set the run name
-    run_name = f"{datetime.datetime.now().strftime('%mmo%dth_%Hh%Mmin%Ss')}_{agent_name}_{env_name}_seed{seed}"
+    date = datetime.datetime.now().strftime("%mmo%dth_%Hh%Mmin%Ss")
+    run_name = "_".join(
+        [date, agent_name, model_name, env_name, f"seed{seed}"]
+    )
     config["agent"]["config"]["run_name"] = run_name
     config["env"]["config"]["run_name"] = run_name
     config["llm"]["run_name"] = run_name

@@ -1,6 +1,9 @@
+import time
 import traceback
 from typing import Dict, Type, Any, Tuple, Union
 import numpy as np
+import signal
+from contextlib import contextmanager
 
 def get_error_info(e):
     stack_trace = traceback.format_exc()  # Capture the full stack trace as a string
@@ -39,7 +42,19 @@ def to_maybe_inf(n):
 import os
 import re
 
-def get_unique_path(path):
+def get_unique_path(path : str) -> str:
+    """Generate a unique filename by appending a number to the base name if it already exists.
+    Examples :
+        test.txt -> test_2.txt
+        test_6.txt -> test_7.txt
+        test_6_2.txt -> test_6_3.txt
+
+    Args:
+        path (str): the path to the file
+
+    Returns:
+        str: a different path for the file, with a number appended to the base name
+    """
     directory, filename = os.path.split(path)
     name, ext = os.path.splitext(filename)
 

@@ -15,6 +15,7 @@ import datetime
 from time import time, sleep
 from typing import Any, Dict, Type
 import cProfile
+import multiprocessing
 
 # ML libraries
 import random
@@ -28,13 +29,38 @@ from core.error_trace import ErrorTrace
 from core.feedback_aggregator import FeedbackAggregated
 
 from core.task import Task
+from core.types import ActionType
 from core.utils import get_error_info
 from core.register_hydra import register_hydra_resolvers
 
 
+def act_time_bounded(controller: Controller, obs: Any, time_limit: float) -> ActionType:
+    """Act using the controller with a time limit.
 
+    Args:
+        controller (Controller): The controller to use.
+        obs (Any): The observation to use.
+        time_limit (float, optional): The time limit for the action. Defaults to 2.0.
 
-# Play the controller in the task
+    Raises:
+        TimeoutError: If the action takes too long.
+        
+    Returns:
+        Any: The action to take.
+    """
+    # Use a multiprocessing pool with 1 worker
+    pool = multiprocessing.pool.ThreadPool(processes=1)
+    try:
+        # Submit the task and get an async result
+        async_result = pool.apply_async(controller.act, (obs,))
+        # Wait for the result, with timeout
+        return async_result.get(timeout=time_limit)
+    except multiprocessing.TimeoutError:
+        pool.terminate()  # Force-terminate the pool to stop the worker
+        raise TimeoutError(f"Controller.act() took longer than {time_limit} seconds")
+    finally:
+        pool.close()
+
 def play_controller_in_task(
     controller: Controller,
     task: Task,
@@ -42,7 +68,16 @@ def play_controller_in_task(
     is_eval: bool,
     log_dir: str,
 ) -> FeedbackAggregated:
-    """Play the controller in the task for n_episodes episodes and return the feedback."""
+    """Play the controller in the task for n_episodes episodes and return the feedback.
+    
+    Args:
+        controller (Controller): The controller to play in the task.
+        task (Task): The task to play in.
+        n_episodes (int): The number of episodes to play.
+        is_eval (bool): Whether to evaluate the controller or not.
+        log_dir (str): The subdirectory to log the results in. Results will be logged
+            in each of <log_dir_global>/<log_dir>/<name_file>.txt
+    """
     # Initialize the feedback
     feedback_agg_over_episodes = FeedbackAggregated()
     for k in range(n_episodes):
@@ -59,7 +94,7 @@ def play_controller_in_task(
         while not done and not truncated:
             # Act in the environment
             try:
-                action = controller.act(obs)
+                action = act_time_bounded(controller, obs, time_limit=4.0)
             except Exception as e: # Deal with error happening in the act method
                 full_error_info = get_error_info(e)
                 error_message = f"An error occured during the act method of the controller. Full error info : {full_error_info}"

@@ -1,12 +1,16 @@
 
 
 import argparse
+import datetime
 import os
 import subprocess
 # arg train
 parser = argparse.ArgumentParser(description="Argument parsing for experiment")
-parser.add_argument("--v100", default=True, action=argparse.BooleanOptionalAction, help="Use V100 GPUs")
+parser.add_argument("--cpu", action=argparse.BooleanOptionalAction, help="Use CPU partition")
+parser.add_argument("--v100", action=argparse.BooleanOptionalAction, help="Use V100 GPUs")
 parser.add_argument("--h100", action=argparse.BooleanOptionalAction, help="Use H100 GPUs")
+parser.add_argument("--a100", action=argparse.BooleanOptionalAction, help="Use A100 GPUs")
+parser.add_argument("--cpus-per-task", type=int, default=1, help="Number of CPUs per task")
 parser.add_argument("--dev", action=argparse.BooleanOptionalAction, help="Development mode")
 parser.add_argument("--long", action=argparse.BooleanOptionalAction, help="long mode 100h instead of 20h")
 parser.add_argument("--medium", action=argparse.BooleanOptionalAction, help="medium mode 40h instead of 20h")
@@ -16,65 +20,70 @@ parser.add_argument("--hour",  type=int, default=20)
 args = parser.parse_args()
 
 
-
-job_name ="tboulet"
+date = datetime.datetime.now().strftime("%Y-%m-%d")
+job_name = f"tboulet_{date}"
 def generate_slurm_script(args,job_name):
 
+    list_lines_script = []
+
+    # Set the time limit based on the mode    
     if args.dev:
-        if args.v100:
-            dev_script = "#SBATCH --qos=qos_gpu-dev"
-        elif args.h100:
-            dev_script = "#SBATCH --qos=qos_gpu_h100-dev"
-        
-        else:
-            dev_script = "#SBATCH --qos=qos_gpu_a100-dev"
-    else:        
-        dev_script = ""
-
-    h = '2' if args.dev else str(args.hour)
+        hour = '2'
+    elif args.medium:
+        hour = '40'
+    elif args.long:
+        hour = '99'
+    else:
+        hour = str(args.hour)
     
-    if args.long:
-        h = '99'
-        if args.hour !=20:
-            h = str(args.hour)
-            
-        if args.v100:
-            dev_script= "#SBATCH --qos=qos_gpu-t4"
-        elif args.h100:
-            dev_script = "#SBATCH --qos=qos_gpu_h100-t4"
-
-    if args.medium:
-        h = '40'
-        if args.v100:
-            dev_script= "#SBATCH --qos=qos_gpu-t4"
-        elif args.h100:
-            dev_script = "#SBATCH --qos=qos_gpu_h100-t4"
-    if args.v100:
-        account = "imi@v100"
-        c = "v100-32g"
+    # For each partition, specify account and constrains (if any), qos, and number of CPUs (if applicable)   
+    module_load = ""
+    if args.cpu:
+        list_lines_script.append("#SBATCH --account=imi@cpu")
+        if args.dev:
+            list_lines_script.append("#SBATCH --qos=qos_cpu-dev")
+        else:
+            list_lines_script.append("#SBATCH --qos=qos_cpu-t3")
+        args.n_gpu = 0
+    elif args.v100:
+        list_lines_script.append("#SBATCH --account=imi@v100")
+        list_lines_script.append("#SBATCH -C v100-32g")
+        if args.dev:
+            list_lines_script.append("#SBATCH --qos=qos_gpu-dev")
+        else:
+            list_lines_script.append("#SBATCH --qos=qos_gpu-t4")
         n_cpu = min(args.n_gpu * 10,40)
-        module_load = ""
     elif args.h100:
-        account = "imi@h100"
-        c="h100"
+        list_lines_script.append("#SBATCH --account=imi@h100")
+        list_lines_script.append("#SBATCH -C h100")
         n_cpu = min(int(args.n_gpu * 24),96)
         module_load = "module load arch/h100"
+        if args.dev:
+            list_lines_script.append("#SBATCH --qos=qos_gpu_h100-dev")
+        else:
+            list_lines_script.append("#SBATCH --qos=qos_gpu_h100-t4")
+
+    # elif args.a100:
+    #     account = "imi@a100"
+    #     c="a100"
+    #     n_cpu = min(int(args.n_gpu * 8),64)
+    #     module_load = "module load arch/a100"
     else:
-        account = "imi@a100"
-        c="a100"
-        n_cpu = min(int(args.n_gpu * 8),64)
-        module_load = "module load arch/a100"
+        raise ValueError("Please specify a GPU type: --cpu, --v100, --h100, or --a100")
+    
+    if args.cpus_per_task:
+        n_cpu = args.cpus_per_task
+    list_lines_script.append(f"#SBATCH --cpus-per-task={n_cpu}")
+    script_begin = "\n".join(list_lines_script)
     script = f"""#!/bin/bash
-#SBATCH --account={account}
-#SBATCH -C {c}
+{script_begin}
 #SBATCH --job-name={job_name}
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:{args.n_gpu}
 #SBATCH --cpus-per-task={n_cpu}
-{dev_script}
 #SBATCH --hint=nomultithread
-#SBATCH --time={h}:00:00
+#SBATCH --time={hour}:00:00
 #SBATCH --output=./out/{job_name}-%A.out
 #SBATCH --error=./out/{job_name}-%A.out
 # set -x
@@ -90,7 +99,7 @@ export CORE_PATTERN=/dev/null
 
 source $SCRATCH/venv/bin/activate
 cd $WORK/LLM4Controllers
-python run.py --config-name=jz agent=random
+python run2.py agent=cg llm=azure
 """
     return script    
 

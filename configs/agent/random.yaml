@@ -1,3 +1,4 @@
 name: Random
 config:
   config_logs: ${config_logs}
+  n_episodes_eval: 10

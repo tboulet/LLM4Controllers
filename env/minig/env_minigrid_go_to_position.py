@@ -33,27 +33,25 @@ from env.minig.utils import (
 )
 
 
-
-class MoveToPosition(MiniGridEnv):
+class AAAMoveToPosition(MiniGridEnv):
     def __init__(
         self,
-        position: Tuple[int, int],
         size=10,
         max_steps: Optional[int] = None,
         **kwargs,
     ):
         # Optional things implemented here
-        self.position_target = position
-        if self.position_target == "random":
-            self.position_target = np.random.randint(low=1, high=size - 1, size=2)
         self.size = size
+        self.possible_positions = [
+            (x, y) for x in range(1, size - 1) for y in range(1, size - 1)
+        ]
+        mission_space = MissionSpace(
+            mission_func=self._gen_mission,
+            ordered_placeholders=[self.possible_positions],
+        )
+
         if max_steps is None:
             max_steps = 4 * size**2
-
-        # MUST BE DONE : create mission space
-        mission_space = MissionSpace(
-            mission_func=lambda : f"go at position {self.position_target}",
-        )
 
         super().__init__(
             mission_space=mission_space,
@@ -63,6 +61,10 @@ class MoveToPosition(MiniGridEnv):
             max_steps=max_steps,
             **kwargs,
         )
+
+    @staticmethod
+    def _gen_mission(position: Tuple[int, int]):
+        return f"go at position {position}"
 
     def _gen_grid(self, width, height):
         # Create an empty grid
@@ -79,6 +81,10 @@ class MoveToPosition(MiniGridEnv):
         self.agent_pos = np.random.randint(1, self.size - 2, size=2)
         self.agent_dir = np.random.randint(0, 4)
 
+        # Select a random position and generate the mission
+        self.position_target = self._rand_elem(self.possible_positions)
+        self.mission = f"go at position {self.position_target}"
+
     def step(self, action):
 
         # MUST BE DONE (note : super().step() does all 4):
@@ -90,18 +96,18 @@ class MoveToPosition(MiniGridEnv):
 
         # Run normal action
         obs, reward, done, truncated, info = super().step(action)
-        
+
         # Check if the agent reached any of the direction
         x, y = self.agent_pos
         if x == self.position_target[0] and y == self.position_target[1]:
             done = True
             reward = self._reward()
-                    
+
         return obs, reward, done, truncated, info
 
 
 def main():
-    env = MoveToPosition("up", render_mode="human")
+    env = AAAMoveToPosition("up", render_mode="human")
 
     # enable manual control for testing
     manual_control = ManualControl(env, seed=42)

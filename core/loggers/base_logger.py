@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Dict, List, Tuple, Type, Union
 
-from core.utils import one_time_warning
-
+from tbutils.exec_max_n import print_once
 
 class BaseLogger(ABC):
     """Base class for all loggers"""
@@ -22,7 +21,7 @@ class BaseLogger(ABC):
         step: int,
     ):
         """Log dictionary of histograms"""
-        one_time_warning(f"WARNING : {self.__class__.__name__} does not support logging of histograms")
+        print_once(f"WARNING : {self.__class__.__name__} does not support logging of histograms")
     
     def log_images(
         self,
@@ -30,7 +29,7 @@ class BaseLogger(ABC):
         step: int,
     ):
         """Log dictionary of maps"""
-        one_time_warning(f"WARNING : {self.__class__.__name__} does not support logging of images")
+        print_once(f"WARNING : {self.__class__.__name__} does not support logging of images")
 
     def close(self):
         """Close the logger"""

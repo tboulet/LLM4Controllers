@@ -53,7 +53,7 @@ from minigrid.envs.babyai.goto import GoToObj
 # Env customs
 from core.feedback_aggregator import FeedbackAggregated
 from core.loggers.base_logger import BaseLogger
-from core.utils import get_unique_path
+from core.utils import get_name_copy
 from env.minig.env_minigrid_autosuccess import AutoSuccessEnv
 from env.minig.env_minigrid_give_agent_position import GiveAgentPositionEnv
 from env.minig.env_minigrid_give_goal_position import GiveGoalPositionEnv
@@ -182,7 +182,7 @@ class TaskMinigrid(Task):
 
     def get_name(self) -> str:
         return self.func_str
-    
+
     def get_description(self) -> TaskDescription:
         if self.task_description is None:
             if self.env_mg is None:
@@ -193,13 +193,15 @@ class TaskMinigrid(Task):
             self.env_mg = None
         return self.task_description
 
-    def reset(self, is_eval: str = False, log_dir : str = None) -> Tuple[Observation, InfoDict]:
+    def reset(
+        self, is_eval: str = False, log_dir: str = None
+    ) -> Tuple[Observation, InfoDict]:
         """Reset the task to its initial state.
 
         Args:
             is_eval (bool): Whether to reset the environment in evaluation mode or not.
             log_dir (str): The directory to save the logs.
-            
+
         Returns:
             Tuple[Observation, InfoDict]: The observation and info dictionary.
         """
@@ -302,7 +304,7 @@ class TaskMinigrid(Task):
                 os.makedirs(path_task_t, exist_ok=True)
                 path_task_t_video = os.path.join(path_task_t, "video.mp4")
                 while os.path.exists(path_task_t_video):
-                    path_task_t_video = get_unique_path(path_task_t_video)
+                    path_task_t_video = get_name_copy(path_task_t_video)
                 imageio.mimwrite(path_task_t_video, self.video_frames, fps=10)
 
     def get_feedback(self) -> Dict[str, Any]:
@@ -476,7 +478,7 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
             return self.curriculum.get_current_objectives()
         else:
             return [obj for level in self.curriculum.levels for obj in level.keys()]
-        
+
     def update(self, task: TaskMinigrid, feedback: FeedbackAggregated) -> None:
         self.curriculum.update(objective=task, feedback=feedback)
         self.timestep += 1

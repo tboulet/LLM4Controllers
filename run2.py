@@ -28,6 +28,7 @@ from agent.base_controller import Controller
 from core.error_trace import ErrorTrace
 from core.feedback_aggregator import FeedbackAggregated
 from core.loggers.cli import LoggerCLI
+from core.loggers.csv import LoggerCSV
 from core.loggers.multi_logger import MultiLogger
 from core.loggers.tensorboard import LoggerTensorboard
 from core.loggers.tqdm_logger import LoggerTQDM
@@ -62,6 +63,7 @@ def main(config: DictConfig):
     log_dir: str = config["log_dir"]
     do_cli: bool = config["do_cli"]
     do_tb: bool = config["do_tb"]
+    do_csv: bool = config["do_csv"]
     do_tqdm: bool = config["do_tqdm"]
 
     # Set the seeds
@@ -96,6 +98,8 @@ def main(config: DictConfig):
         loggers.append(LoggerCLI())
     if do_tb:
         loggers.append(LoggerTensorboard(log_dir=f"{log_dir}/{run_name}"))
+    if do_csv:
+        loggers.append(LoggerCSV(log_dir=f"{log_dir}/{run_name}"))
     if do_tqdm and n_steps_max != np.inf:
         loggers.append(LoggerTQDM(n_total=n_steps_max))
     logger = MultiLogger(*loggers)

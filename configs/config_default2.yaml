@@ -10,8 +10,9 @@ do_wandb : False
 wandb_config:
   project : wandb_project_example
   entity : wandb_entity_example
-do_tb : True
 do_cli : True
+do_tb : True
+do_csv: True
 do_tqdm : True
 config_logs:
     # The directory to save logs to.

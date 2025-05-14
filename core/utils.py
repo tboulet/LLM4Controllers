@@ -5,17 +5,24 @@ import numpy as np
 import signal
 from contextlib import contextmanager
 
+
 def get_error_info(e):
     stack_trace = traceback.format_exc()  # Capture the full stack trace as a string
-    relevant_stack_trace = "\n".join(line for line in stack_trace.splitlines() if "<string>" in line)
+    relevant_stack_trace = "\n".join(
+        line for line in stack_trace.splitlines() if "<string>" in line
+    )
     error_info = f"Stack Trace:\n{relevant_stack_trace} \nError Output:\n{e}"
     return error_info
 
+
 dict_warning_messages = set()
+
+
 def one_time_warning(warning_message):
     if warning_message not in dict_warning_messages:
         print(f"WARNING : {warning_message}")
         dict_warning_messages.add(warning_message)
+
 
 def try_get_seed(config: Dict) -> int:
     """Will try to extract the seed from the config, or return a random one if not found
@@ -34,15 +41,18 @@ def try_get_seed(config: Dict) -> int:
         seed = np.random.randint(0, 1000)
     return seed
 
+
 def to_maybe_inf(n):
     if n in ["inf", "infinity", None, "None"]:
         return np.inf
     return n
 
+
 import os
 import re
 
-def get_unique_path(path : str) -> str:
+
+def get_name_copy(path: str) -> str:
     """Generate a unique filename by appending a number to the base name if it already exists.
     Examples :
         test.txt -> test_2.txt
@@ -71,3 +81,7 @@ def get_unique_path(path : str) -> str:
     new_path = os.path.join(directory, new_filename)
 
     return new_path
+
+
+def sanitize_name(name: str) -> str:
+    return name.replace('/', ' div ')

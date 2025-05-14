@@ -141,7 +141,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
                 },
                 log_dir=f"task_{self.t}",
             )
-            metrics_final = feedback_agg_over_controllers.get_metrics()
+            metrics_final = feedback_agg_over_controllers.get_metrics(prefix=str(task))
             metrics_final.update(self.metrics_storer)
             self.logger.log_scalars(metrics_final, step=self.t)
         self.logger.log_scalars(get_runtime_metrics(), step=self.t)

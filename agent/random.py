@@ -79,7 +79,7 @@ class RandomAgent2(BaseAgent2):
         feedback_agg_over_controllers.add_feedback(metrics_agg_over_episodes)
         feedback_agg_over_controllers.aggregate()
         self.logger.log_scalars(
-            feedback_agg_over_controllers.get_metrics(prefix=task), step=self.t
+            feedback_agg_over_controllers.get_metrics(prefix=str(task)), step=self.t
         )
         # Move forward t
         self.t += 1

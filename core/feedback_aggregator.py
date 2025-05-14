@@ -29,6 +29,7 @@ from itertools import combinations
 
 from core.error_trace import ErrorTrace
 from core.task import TaskDescription
+from core.utils import sanitize_name
 
 
 def pass_at_k(values: List[bool], k: int) -> float:
@@ -333,6 +334,7 @@ class FeedbackAggregated:
         # Log what is needed
         metrics_res = {}
         if prefix is not None:
+            prefix = sanitize_name(prefix)
             metrics_res.update({f"{prefix}_{key}": value for key, value in metrics.items()})
         if do_log_no_prefix:
             metrics_res.update(metrics)

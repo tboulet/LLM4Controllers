@@ -16,6 +16,7 @@ from time import time, sleep
 from typing import Any, Dict, Type
 import cProfile
 import multiprocessing
+from tbutils.tmeasure import RuntimeMeter
 
 # ML libraries
 import random
@@ -82,9 +83,10 @@ def play_controller_in_task(
     feedback_agg_over_episodes = FeedbackAggregated()
     for k in range(n_episodes):
         # Reset the environment
-        obs, info = task.reset(
-            is_eval=is_eval and k == 0, log_dir=log_dir
-        )  # eval only once per rollout for now
+        with RuntimeMeter("env_reset"):
+            obs, info = task.reset(
+                is_eval=is_eval and k == 0, log_dir=log_dir
+            )  # eval only once per rollout for now
         task.render()
 
         # Loop over the episode
@@ -94,7 +96,9 @@ def play_controller_in_task(
         while not done and not truncated:
             # Act in the environment
             try:
-                action = act_time_bounded(controller, obs, time_limit=4.0)
+                with RuntimeMeter("controller_act"):
+                    # Use the time-bounded action method
+                    action = act_time_bounded(controller, obs, time_limit=4.0)
             except Exception as e: # Deal with error happening in the act method
                 full_error_info = get_error_info(e)
                 error_message = f"An error occured during the act method of the controller. Full error info : {full_error_info}"
@@ -107,13 +111,16 @@ def play_controller_in_task(
                 print(f"ERROR WARNING : {error_message}")
                 break
             # Render and log
-            task.render()
+            with RuntimeMeter("env_render"):
+                task.render()
 
         # Env feedback
-        env_feedback = task.get_feedback()
+        with RuntimeMeter("env_feedback"):
+            env_feedback = task.get_feedback()
 
         # Close the environment
-        task.close()
+        with RuntimeMeter("env_close"):
+            task.close()
 
         # Create the feedback
         feedback = {

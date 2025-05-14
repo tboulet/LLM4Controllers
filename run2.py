@@ -54,7 +54,7 @@ def main(config: DictConfig):
     # Get the config values from the config object.
     agent_name: str = config["agent"]["name"]
     env_name: str = config["env"]["name"]
-    model_name: str = try_get(config["agent"], "config.config_llm.model", default="")
+    model_name: str = try_get(config["agent"], "config.llm.model", default="")
 
     n_steps_max: int = config.get("n_steps_max", np.inf)
     n_steps_max = to_maybe_inf(n_steps_max)
@@ -80,8 +80,8 @@ def main(config: DictConfig):
     config["agent"]["config"]["run_name"] = run_name
     config["env"]["config"]["run_name"] = run_name
     config["llm"]["run_name"] = run_name
-    if "config_llm" in config["agent"]["config"]:
-        config["agent"]["config"]["config_llm"]["run_name"] = run_name
+    if "llm" in config["agent"]["config"]:
+        config["agent"]["config"]["llm"]["run_name"] = run_name
 
     # Initialize loggers
     shutil.rmtree(

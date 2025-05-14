@@ -2,6 +2,8 @@ from collections import defaultdict
 import os
 import re
 from typing import Dict, List
+from tbutils.tmeasure import RuntimeMeter, get_runtime_metrics
+import tiktoken
 
 from gymnasium import Space
 import numpy as np
@@ -47,13 +49,14 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         exec(open("agent/llm_hcg/base_scope.py").read(), self.base_scope)
 
         # Initialize logging
-        self.metrics_memory_aware = defaultdict(int)
+        self.metrics_storer = defaultdict(int)
 
         # Initialize LLM
-        config_llm = config["config_llm"]
-        name_llm = config_llm["name"]
+        name_llm = config["llm"]["name"]
+        config_llm = config["llm"]["config"]
         self.llm = llm_name_to_LLMClass[name_llm](config_llm)
-
+        self.language_encoding  = tiktoken.encoding_for_model("gpt-4") # encodings are roughly similar for any LLM
+        
         # === Generate the different parts of the prompt ===
 
         # Prompt system
@@ -97,50 +100,51 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         }
 
     def step(self):
-        # Get the task
-        task = self.tasks[self.t]
-        print(f"Step {self.t}, task received: {task}")
-        # Reset metrics
-        for key in self.metrics_memory_aware.keys():
-            self.metrics_memory_aware[key] = 0
-        feedback_agg_over_controllers = FeedbackAggregated(
-            agg_methods=["mean", f"best@{self.k_pass}", f"worst@{self.k_pass}"]
-        )
-        # Play n controllers in the task
-        for i in range(self.n_inferences):
-            print(f"Step {self.t}, controller {i} generation...")
-            controller = self.generate_controller(
-                task, log_dir=f"task_{self.t}/controller_{i}"
+        with RuntimeMeter("step"):
+            # Get the task
+            task = self.tasks[self.t]
+            print(f"Step {self.t}, task received: {task}")
+            # Reset metrics
+            for key in self.metrics_storer.keys():
+                self.metrics_storer[key] = 0
+            feedback_agg_over_controllers = FeedbackAggregated(
+                agg_methods=["mean", f"best@{self.k_pass}", f"worst@{self.k_pass}"]
             )
-            # Play the controller in the task
-            feedback_agg = play_controller_in_task(
-                controller,
-                task,
-                n_episodes=self.n_episodes_eval,
-                is_eval=False,
-                log_dir=f"task_{self.t}/controller_{i}",
-            )
-            feedback_agg.aggregate()
+            # Play n controllers in the task
+            for i in range(self.n_inferences):
+                print(f"Step {self.t}, controller {i} generation...")
+                controller = self.generate_controller(
+                    task, log_dir=f"task_{self.t}/controller_{i}"
+                )
+                # Play the controller in the task
+                feedback_agg = play_controller_in_task(
+                    controller,
+                    task,
+                    n_episodes=self.n_episodes_eval,
+                    is_eval=False,
+                    log_dir=f"task_{self.t}/controller_{i}",
+                )
+                feedback_agg.aggregate()
+                self.log_texts(
+                    {
+                        f"feedback.txt": feedback_agg.get_repr(),
+                    },
+                    log_dir=f"task_{self.t}/controller_{i}",
+                )
+                metrics_agg_over_episodes = feedback_agg.get_metrics()
+                feedback_agg_over_controllers.add_feedback(metrics_agg_over_episodes)
+            feedback_agg_over_controllers.aggregate()
+            # Log the metrics
             self.log_texts(
                 {
-                    f"feedback.txt": feedback_agg.get_repr(),
+                    f"feedback.txt": feedback_agg_over_controllers.get_repr(),
                 },
-                log_dir=f"task_{self.t}/controller_{i}",
+                log_dir=f"task_{self.t}",
             )
-            metrics_agg_over_episodes = feedback_agg.get_metrics()
-            feedback_agg_over_controllers.add_feedback(metrics_agg_over_episodes)
-        feedback_agg_over_controllers.aggregate()
-        # Log the metrics
-        self.log_texts(
-            {
-                f"feedback.txt": feedback_agg_over_controllers.get_repr(),
-            },
-            log_dir=f"task_{self.t}",
-        )
-        self.logger.log_scalars(
-            feedback_agg_over_controllers.get_metrics(prefix=task), step=self.t
-        )
-
+            metrics_final = feedback_agg_over_controllers.get_metrics()
+            metrics_final.update(self.metrics_storer)
+            self.logger.log_scalars(metrics_final, step=self.t)
+        self.logger.log_scalars(get_runtime_metrics(), step=self.t)
         # Move forward t
         self.t += 1
 
@@ -150,7 +154,8 @@ class LLM_BasedControllerGenerator(BaseAgent2):
     def generate_controller(self, task: Task, log_dir: str = None) -> Controller:
         """Generate a controller for the given task using the LLM."""
         # Generate the prompt
-        task_description = task.get_description()
+        with RuntimeMeter("env_get_description"):
+            task_description = task.get_description()
         prompt_task = "=== Task ===\n" f"Task : {task}"
         prompt_task_description = f"Description : \n{task_description}"
         prompt_instructions = (
@@ -171,7 +176,11 @@ class LLM_BasedControllerGenerator(BaseAgent2):
             ), f"Prompt key {prompt_key} not found in prompts."
             list_prompt.append(prompts[prompt_key])
         prompt = "\n\n".join(list_prompt)
-
+        self.metrics_storer["len_prompt"] = len(prompt)
+        self.metrics_storer["len_prompt_tokens"] = len(
+            self.language_encoding.encode(prompt)
+        )
+        
         # Log the prompt and the task description
         self.log_texts(
             {
@@ -191,9 +200,10 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         self.llm.reset()
         self.llm.add_prompt(prompt)
         for no_attempt in range(self.num_attempts_inference):
-            self.metrics_memory_aware["n_attempts_inference"] += 1
+            self.metrics_storer["n_attempts_inference"] += 1
             # Ask the assistant
-            answer = self.llm.generate()
+            with RuntimeMeter("llm_inference"):
+                answer = self.llm.generate()
             self.llm.add_answer(answer)
             # Extract the code block from the answer
             try:
@@ -213,7 +223,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
                     },
                     log_dir=log_dir,
                 )
-                self.metrics_memory_aware["n_failure_sc_code_extraction"] += 1
+                self.metrics_storer["n_failure_sc_code_extraction"] += 1
                 if self.config["config_debug"][
                     "breakpoint_inference_on_failure_code_extraction"
                 ]:
@@ -222,7 +232,8 @@ class LLM_BasedControllerGenerator(BaseAgent2):
                 continue
             # Extract the controller
             try:
-                specialized_controller = self.exec_code_and_get_controller(code)
+                with RuntimeMeter("exec_code"):
+                    specialized_controller = self.exec_code_and_get_controller(code)
             except Exception as e:
                 full_error_info = get_error_info(e)
                 print(
@@ -238,7 +249,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
                     },
                     log_dir=log_dir,
                 )
-                self.metrics_memory_aware["n_failure_sc_code_execution"] += 1
+                self.metrics_storer["n_failure_sc_code_execution"] += 1
                 if self.config["config_debug"][
                     "breakpoint_inference_on_failure_code_execution"
                 ]:
@@ -307,9 +318,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         except Exception as e:
             breakpoint()
             print("[ERROR] : Could not execute the code.")
-            self.metrics_memory_aware[
-                "n_failure_sc_code_execution_code_execution_error"
-            ] += 1
+            self.metrics_storer["n_failure_sc_code_execution_code_execution_error"] += 1
             raise ValueError(
                 f"An error occured while executing the code for instanciating a controller. Full error info : {get_error_info(e)}"
             )
@@ -321,7 +330,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
             return local_scope["controller"]
         else:
             print("[ERROR] : Could not retrieve the controller instance.")
-            self.metrics_memory_aware[
+            self.metrics_storer[
                 "n_failure_sc_code_execution_controller_not_created"
             ] += 1
             breakpoint()

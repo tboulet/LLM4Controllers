@@ -18,16 +18,16 @@ config:
   num_attempts_inference: 5
 
   # The number of inference calls to make
-  n_inferences: 10
+  n_inferences: 1
 
   # The number of episodes on which a controller will be evaluated on a task
   n_episodes_eval: 5
 
   # The parameter for the pass@k metric
-  k_pass: 5
+  k_pass: ${eval:'min(${agent.config.n_inferences}, 5)'}
 
   # The LLM config to use
-  config_llm: ${llm.config}
+  llm: ${llm}
 
   config_debug:
     # Whether to breakpoint on inference events

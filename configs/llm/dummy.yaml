@@ -1,7 +1,7 @@
 name: Dummy
 config:
   # If None, will ask the user for the path to the file, else will use the file
-  path_answer: null
+  path_answer: inf
 
 
 

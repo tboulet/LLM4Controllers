@@ -6,7 +6,7 @@ from core.feedback_aggregator import FeedbackAggregated
 from core.loggers.base_logger import BaseLogger
 from env.base_meta_env import BaseMetaEnv, Observation, ActionType
 from core.task import Task, TaskDescription
-
+from tbutils.tmeasure import RuntimeMeter
 
 class BaseAgent2(ABC):
 
@@ -42,19 +42,20 @@ class BaseAgent2(ABC):
         Args:
             dict_name_to_text (Dict[str, str]): a mapping from the name of the file to create to the text to write in it.
         """
-        list_log_dirs: List[str] = []
-        for log_dir_global in self.list_log_dirs_global:
-            log_dir = os.path.join(log_dir_global, log_dir)
-            list_log_dirs.append(log_dir)
+        with RuntimeMeter("log_texts"):
+            list_log_dirs: List[str] = []
+            for log_dir_global in self.list_log_dirs_global:
+                log_dir = os.path.join(log_dir_global, log_dir)
+                list_log_dirs.append(log_dir)
 
-        for log_dir in list_log_dirs:
-            os.makedirs(log_dir, exist_ok=True)
-            for name, text in dict_name_to_text.items():
-                assert isinstance(name, str) and isinstance(
-                    text, str
-                ), "Keys and values of dict_name_to_text should be strings."
-                log_file = os.path.join(log_dir, name)
-                with open(log_file, "w") as f:
-                    f.write(text)
-                f.close()
-                print(f"[LOGGING] : Logged {log_file}")
+            for log_dir in list_log_dirs:
+                os.makedirs(log_dir, exist_ok=True)
+                for name, text in dict_name_to_text.items():
+                    assert isinstance(name, str) and isinstance(
+                        text, str
+                    ), "Keys and values of dict_name_to_text should be strings."
+                    log_file = os.path.join(log_dir, name)
+                    with open(log_file, "w") as f:
+                        f.write(text)
+                    f.close()
+                    print(f"[LOGGING] : Logged {log_file}")

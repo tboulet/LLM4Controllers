@@ -24,7 +24,6 @@ class SpecializedController(Controller):
         """Initialize the controller with the starting position of the agent."""
         self.position = (0, 0)  # Starting position
         self.has_given_position = False
-        testing = abstractmethod
         
     def act(self, observation: Observation) -> ActionType:
         """Return the position of the agent when asked.
@@ -35,7 +34,6 @@ class SpecializedController(Controller):
         Returns:
             ActionType: The action to take in the environment.
         """
-        sleep(50)
         if not self.has_given_position:
             # Here we calculate the position based on the direction
             direction = observation["direction"]

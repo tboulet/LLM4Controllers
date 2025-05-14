@@ -156,7 +156,7 @@ class TaskMinigrid(Task):
             TaskDescription: The task description.
         """
         return TaskDescription(
-            name=f"{self.func_str} - Mission : {env_mg.unwrapped.mission}",
+            # name=f"{self.func_str}",  # Mission : {env_mg.unwrapped.mission}
             description=extract_sections(
                 docstring=env_mg.unwrapped.__doc__,
                 sections_docstring=self.meta_env.sections_docstring,
@@ -166,8 +166,11 @@ class TaskMinigrid(Task):
         )
 
     def create_new_env_mg(self, **kwargs) -> MiniGridEnv:
+        # Create the env based on the creator_env_mg_func
         env_mg = self.creator_env_mg_func(**kwargs)
+        # Fully obs wrapper
         env_mg = FullyObsWrapper(env_mg)
+        # Modify action space to FiniteSpace("forward", ...)
         if hasattr(env_mg.unwrapped, "get_new_action_space"):
             env_mg.action_space = env_mg.unwrapped.get_new_action_space()
         else:
@@ -176,6 +179,17 @@ class TaskMinigrid(Task):
                     list(dict_actions.keys()), key=lambda x: dict_actions[x][0]
                 )
             )
+        # Modify observation space's mission field so that it has nice repr
+        mission_space = env_mg.observation_space["mission"]
+        class MissionSpaceGoodRepr(mission_space.__class__):
+            def __repr__(self : MissionSpace) -> str:
+                args = inspect.signature(self.mission_func).parameters.keys()
+                mission_sig = self.mission_func(**{arg: f"{{{arg}}}>" for arg in args})
+                if self.ordered_placeholders is not None:
+                    return f"MissionSpace(mission_template={mission_sig}, ordered_placeholders={self.ordered_placeholders})"
+                else:
+                    return f"MissionSpace(mission={mission_sig})"
+        mission_space.__class__ = MissionSpaceGoodRepr
         return env_mg
 
     # ===== Mandatory interface methods ======
@@ -377,7 +391,7 @@ class MinigridMetaEnv(BaseMetaEnv):
                 # Navigation tasks (medium)
                 # lambda **kwargs: GoToDoorEnv(size=self.size, **kwargs),
                 lambda **kwargs: CrossingEnv(size=11, obstacle_type=Wall, **kwargs),
-                # lambda **kwargs: GoToObjectEnv(size=self.size, numObjs=2, **kwargs),
+                lambda **kwargs: GoToObjectEnv(size=self.size, numObjs=2, **kwargs),
                 lambda **kwargs: FourRoomsEnv(**kwargs),
                 lambda **kwargs: DistShiftEnv(**kwargs),
             },
@@ -414,7 +428,12 @@ class MinigridMetaEnv(BaseMetaEnv):
                 lambda **kwargs: ObstructedMaze_Full_V1(**kwargs),
             },
         ]
-
+        # levels = [
+        #     # For testing envs
+        #     {
+        #         lambda **kwargs: GoToObjectEnv(size=self.size, numObjs=2, **kwargs),
+        #     }
+        # ]
         levels = [
             {
                 TaskMinigrid(

@@ -156,8 +156,14 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         # Generate the prompt
         with RuntimeMeter("env_get_description"):
             task_description = task.get_description()
-        prompt_task = "=== Task ===\n" f"Task : {task}"
-        prompt_task_description = f"Description : \n{task_description}"
+        prompt_task = (
+            "=== Task ===\n"
+            f"{task}"
+        )
+        prompt_task_description = (
+            "=== Task description ===\n"
+            f"{task_description}"
+        )
         prompt_instructions = (
             "=== Instructions ===\n"
             "Your answer should include a python code (inside a code block) that implements a class "

@@ -15,6 +15,7 @@ import datetime
 from time import time, sleep
 from typing import Any, Dict, Type
 import cProfile
+from tbutils.config import try_get
 
 # ML libraries
 import random
@@ -53,7 +54,7 @@ def main(config: DictConfig):
     # Get the config values from the config object.
     agent_name: str = config["agent"]["name"]
     env_name: str = config["env"]["name"]
-    model_name: str = config["llm"].get("model", "none")
+    model_name: str = try_get(config["agent"], "config.config_llm.model", default="")
 
     n_steps_max: int = config.get("n_steps_max", np.inf)
     n_steps_max = to_maybe_inf(n_steps_max)
@@ -79,6 +80,8 @@ def main(config: DictConfig):
     config["agent"]["config"]["run_name"] = run_name
     config["env"]["config"]["run_name"] = run_name
     config["llm"]["run_name"] = run_name
+    if "config_llm" in config["agent"]["config"]:
+        config["agent"]["config"]["config_llm"]["run_name"] = run_name
 
     # Initialize loggers
     shutil.rmtree(

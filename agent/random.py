@@ -7,6 +7,7 @@ import numpy as np
 from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller
 from agent.base_agent2 import BaseAgent2
+from core.feedback_aggregator import FeedbackAggregated
 from core.loggers.base_logger import BaseLogger
 from core.play import play_controller_in_task
 from core.task import Task, TaskDescription
@@ -73,10 +74,14 @@ class RandomAgent2(BaseAgent2):
             },
             log_dir=f"task_{self.t}",
         )
+        feedback_agg_over_controllers = FeedbackAggregated() # aggregate on one controller just to have metric name consistency with CG
+        metrics_agg_over_episodes = feedback_agg.get_metrics()
+        feedback_agg_over_controllers.add_feedback(metrics_agg_over_episodes)
+        feedback_agg_over_controllers.aggregate()
         self.logger.log_scalars(
-            feedback_agg.get_metrics(prefix=task),
-            step=self.t,
+            feedback_agg_over_controllers.get_metrics(prefix=task), step=self.t
         )
+        # Move forward t
         self.t += 1
 
     def is_done(self):

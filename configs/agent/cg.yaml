@@ -26,6 +26,9 @@ config:
   # The parameter for the pass@k metric
   k_pass: 5
 
+  # The LLM config to use
+  config_llm: ${llm.config}
+
   config_debug:
     # Whether to breakpoint on inference events
     breakpoint_inference: False

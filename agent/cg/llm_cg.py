@@ -50,8 +50,8 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         self.metrics_memory_aware = defaultdict(int)
 
         # Initialize LLM
-        name_llm = config["llm"]["name"]
-        config_llm = config["llm"]["config"]
+        config_llm = config["config_llm"]
+        name_llm = config_llm["name"]
         self.llm = llm_name_to_LLMClass[name_llm](config_llm)
 
         # === Generate the different parts of the prompt ===
@@ -131,6 +131,12 @@ class LLM_BasedControllerGenerator(BaseAgent2):
             feedback_agg_over_controllers.add_feedback(metrics_agg_over_episodes)
         feedback_agg_over_controllers.aggregate()
         # Log the metrics
+        self.log_texts(
+            {
+                f"feedback.txt": feedback_agg_over_controllers.get_repr(),
+            },
+            log_dir=f"task_{self.t}",
+        )
         self.logger.log_scalars(
             feedback_agg_over_controllers.get_metrics(prefix=task), step=self.t
         )

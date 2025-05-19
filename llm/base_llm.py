@@ -2,12 +2,23 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Union
 import GPUtil
 import pynvml
+from core.loggers.base_logger import BaseLogger
+from core.loggers.none_logger import NoneLogger
 from llm.utils import get_memory_allocated, get_memory_reserved, get_model_memory_from_model_name
 from transformers import PreTrainedModel
 
 class LanguageModel(ABC):
     """This abstract class define the interface for a language model."""
 
+    def __init__(self, config: Dict[str, Any], logger: BaseLogger = NoneLogger()):
+        """Initialize the language model.
+
+        Args:
+            config (Dict[str, Any]): the configuration of the language model.
+        """
+        self.config = config
+        self.logger = logger
+        
     @abstractmethod
     def reset(self):
         """Reset the language model at empty state."""

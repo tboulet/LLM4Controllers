@@ -2,31 +2,44 @@ import os
 from typing import Any, Dict, List, Union
 
 from core.utils import one_time_warning
+from core.loggers.base_logger import BaseLogger
+from core.loggers.none_logger import NoneLogger
 from .base_llm import LanguageModel
 from transformers import AutoTokenizer, AutoModelForCausalLM, PreTrainedModel
 import torch
 
+
 class LLM_from_HuggingFace(LanguageModel):
     """A language model that load locally a HF model."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], logger: BaseLogger = NoneLogger()):
         # Parameters
         self.device = config["device"]
         if self.device == "cuda":
-            assert torch.cuda.is_available(), "CUDA is not available. Run on CPU or fix the issue."
+            assert (
+                torch.cuda.is_available()
+            ), "CUDA is not available. Run on CPU or fix the issue."
         self.model_name: str = config["model"]
         self.hf_token = os.getenv("HF_TOKEN")
         # Model and tokenizer
-        assert self.hf_token is not None, "You need to set the HF_TOKEN environment variable as your Hugging Face token."
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, token=self.hf_token)
-        self.model : PreTrainedModel = AutoModelForCausalLM.from_pretrained(self.model_name, device_map=self.device, token=self.hf_token)
+        assert (
+            self.hf_token is not None
+        ), "You need to set the HF_TOKEN environment variable as your Hugging Face token."
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.model_name, token=self.hf_token
+        )
+        self.model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
+            self.model_name, device_map=self.device, token=self.hf_token
+        )
         self.model.resize_token_embeddings(len(self.tokenizer))
         # Kwargs
         self.kwargs: Dict[str, Any] = config.get("kwargs", {})
         # Logging
         print(f"[INFO] Loaded model {self.model_name}.")
-        print(self.get_gpu_usage_info(model_hf=self.model, model_name_hf=self.model_name))
-        
+        print(
+            self.get_gpu_usage_info(model_hf=self.model, model_name_hf=self.model_name)
+        )
+
     def reset(self):
         """Reset the language model at empty state."""
         self.message = ""
@@ -57,21 +70,25 @@ class LLM_from_HuggingFace(LanguageModel):
             # Tokenize and unsure it does not exceed the max length
             tokens = self.tokenizer(message_to_complete, return_tensors="pt")
             if tokens["input_ids"].shape[1] > self.model.config.max_position_embeddings:
-                raise ValueError(f"Input length ({tokens['input_ids'].shape[1]}) exceeds the model's maximum length ({self.model.config.max_position_embeddings}).")
+                raise ValueError(
+                    f"Input length ({tokens['input_ids'].shape[1]}) exceeds the model's maximum length ({self.model.config.max_position_embeddings})."
+                )
             # Transfer to the device
             tokens = tokens.to(self.model.device)
             # Generate the completion
             outputs = self.model.generate(**tokens, **self.kwargs)
             # Decode the completion : from tensor(?) to string
-            message_completed = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+            message_completed = self.tokenizer.decode(
+                outputs[0], skip_special_tokens=True
+            )
             # Extract the completion
-            answer = message_completed[len(message_to_complete):].lstrip("\n\t ")
+            answer = message_completed[len(message_to_complete) :].lstrip("\n\t ")
             breakpoint()
             return answer
         except Exception as e:
             breakpoint()
             raise e
-        
+
     def add_answer(self, answer: str):
         """Add the answer to the language model.
 

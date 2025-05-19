@@ -54,8 +54,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         # Initialize LLM
         name_llm = config["llm"]["name"]
         config_llm = config["llm"]["config"]
-        self.llm = llm_name_to_LLMClass[name_llm](config_llm)
-        self.language_encoding  = tiktoken.encoding_for_model("gpt-4") # encodings are roughly similar for any LLM
+        self.llm = llm_name_to_LLMClass[name_llm](config=config_llm, logger=logger)
         
         # === Generate the different parts of the prompt ===
 
@@ -176,10 +175,6 @@ class LLM_BasedControllerGenerator(BaseAgent2):
             ), f"Prompt key {prompt_key} not found in prompts."
             list_prompt.append(prompts[prompt_key])
         prompt = "\n\n".join(list_prompt)
-        self.metrics_storer["len_prompt"] = len(prompt)
-        self.metrics_storer["len_prompt_tokens"] = len(
-            self.language_encoding.encode(prompt)
-        )
         
         # Log the prompt and the task description
         self.log_texts(
@@ -202,8 +197,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         for no_attempt in range(self.num_attempts_inference):
             self.metrics_storer["n_attempts_inference"] += 1
             # Ask the assistant
-            with RuntimeMeter("llm_inference"):
-                answer = self.llm.generate()
+            answer = self.llm.generate()
             self.llm.add_answer(answer)
             # Extract the code block from the answer
             try:

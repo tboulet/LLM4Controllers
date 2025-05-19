@@ -35,7 +35,6 @@ from core.loggers.tqdm_logger import LoggerTQDM
 from core.task import Task
 from core.utils import get_error_info
 from core.register_hydra import register_hydra_resolvers
-from core.time_measure import RuntimeMeter
 from core.utils import try_get_seed, to_maybe_inf
 from core.play import play_controller_in_task
 from env import env_name_to_MetaEnvClass

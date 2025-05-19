@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Union
 
 import numpy as np
+from core.loggers.base_logger import BaseLogger
+from core.loggers.none_logger import NoneLogger
 from .base_llm import LanguageModel
 from hydra.utils import instantiate
 from openai import OpenAI
@@ -10,7 +12,7 @@ from openai import OpenAI
 class LLM_Dummy(LanguageModel):
     """A dummy LLM for testing purposes."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], logger: BaseLogger = NoneLogger()):
         self.config = config
         self.path_answer = config["path_answer"]
 

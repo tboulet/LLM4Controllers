@@ -14,12 +14,20 @@ class MultiLogger(BaseLogger):
 
     def __init__(self, *loggers: BaseLogger):
         self.loggers = loggers
+        self.max_timestep = 0
 
-    def log_scalars(self, metrics, step):
+    def log_scalars(self, metrics, step = None):
+        # Use the max timestep if step is None, else update the max timestep
+        if step is None:
+            step = self.max_timestep
+        else:
+            self.max_timestep = max(self.max_timestep, step)
+        # Check for unsafe characters in the metric keys
         for key in metrics:
             matches = re.search(unsafe_chars, key)
             if matches:
                 print_once(f"WARNING : metric key '{key}' contains unsafe characters : {matches.group(0)}. This may cause issues with some loggers.")
+        # Log the metrics to each logger
         for logger in self.loggers:
             with RuntimeMeter(f"log_scalars_{logger.__class__.__name__}"):
                 logger.log_scalars(metrics, step)
@@ -29,6 +37,12 @@ class MultiLogger(BaseLogger):
         histograms: Dict[str, List[float]],
         step: int,
     ):
+        # Use the max timestep if step is None, else update the max timestep
+        if step is None:
+            step = self.max_timestep
+        else:
+            self.max_timestep = max(self.max_timestep, step)
+        # Log the histograms to each logger
         for logger in self.loggers:
             logger.log_histograms(histograms, step)
 
@@ -37,6 +51,12 @@ class MultiLogger(BaseLogger):
         images: Dict[str, List[List[float]]],
         step: int,
     ):
+        # Use the max timestep if step is None, else update the max timestep
+        if step is None:
+            step = self.max_timestep
+        else:
+            self.max_timestep = max(self.max_timestep, step)
+        # Log the images to each logger
         for logger in self.loggers:
             logger.log_images(images, step)
 

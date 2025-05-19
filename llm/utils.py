@@ -78,9 +78,11 @@ def get_model_memory_from_params(n_tokens_io, n_params, batch_size=1, n_embeddin
     return round(total_memory / 1e9, 2)
 
 def get_memory_allocated():
+    """Get the total GPU memory allocated by PyTorch."""
     return torch.cuda.memory_allocated() / 1024**3
 
 def get_memory_reserved():
+    """Get the total GPU memory reserved by PyTorch."""
     return torch.cuda.memory_reserved() / 1024**3
 
 

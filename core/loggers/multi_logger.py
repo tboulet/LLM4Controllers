@@ -10,6 +10,7 @@ from tbutils.exec_max_n import print_once
 
 unsafe_chars = r'[\\\s:.,;=?!&#@!%*"\'\[\]\{\}\(\)]'
 
+
 class MultiLogger(BaseLogger):
 
     def __init__(self, *loggers: BaseLogger):

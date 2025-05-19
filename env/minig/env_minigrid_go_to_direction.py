@@ -34,40 +34,32 @@ from env.minig.utils import (
 )
 
 
-
 class GoTowardsDirection(MiniGridEnv):
     def __init__(
         self,
-        direction: str,
         size=10,
         max_steps: Optional[int] = None,
         **kwargs,
     ):
-        # Optional things implemented here
-        self.direction_target = direction
-        if self.direction_target == "random":
-            self.direction_target = random.choice(list(dict_directions.keys()))
+        mission_space = MissionSpace(
+            mission_func=self._gen_mission,
+            ordered_placeholders=[list(dict_directions.keys())],
+        )
         self.size = size
         if max_steps is None:
             max_steps = 4 * size**2
 
-        # MUST BE DONE : create mission space
-        mission_space = MissionSpace(
-            mission_func=lambda : f"go towards direction {self.direction_target}",
-        )
-
         super().__init__(
             mission_space=mission_space,
             grid_size=size,
-            # Set this to True for maximum speed
             see_through_walls=True,
             max_steps=max_steps,
             **kwargs,
         )
 
-    # @staticmethod
-    def _gen_mission(self):
-        return f"go towards direction {self.direction_target}"
+    @staticmethod
+    def _gen_mission(direction: str):
+        return f"go towards direction {direction}"
 
     def _gen_grid(self, width, height):
         # Create an empty grid
@@ -84,6 +76,10 @@ class GoTowardsDirection(MiniGridEnv):
         self.agent_pos = np.random.randint(2, self.size - 2, size=2)
         self.agent_dir = np.random.randint(0, 4)
 
+        # Select a random direction
+        self.direction_target = self._rand_elem(list(dict_directions.keys()))
+        self.mission = f"go towards direction {self.direction_target}"
+
     def step(self, action):
 
         # MUST BE DONE (note : super().step() does all 4):
@@ -95,22 +91,26 @@ class GoTowardsDirection(MiniGridEnv):
 
         # Run normal action
         obs, reward, done, truncated, info = super().step(action)
-        
+
         # Check if the agent reached any of the direction
         x, y = self.agent_pos
         if x in [1, self.size - 2] or y in [1, self.size - 2]:
             done = True
             if (
-                self.direction_target == "left" and x == 1
-                or self.direction_target == "right" and x == self.size - 2
-                or self.direction_target == "up" and y == 1
-                or self.direction_target == "down" and y == self.size - 2
+                self.direction_target == "left"
+                and x == 1
+                or self.direction_target == "right"
+                and x == self.size - 2
+                or self.direction_target == "up"
+                and y == 1
+                or self.direction_target == "down"
+                and y == self.size - 2
             ):
                 reward = self._reward()
             else:
                 reward = 0
                 self.failure_reason = f"The agent went to a wrong direction, and not to {self.direction_target}."
-        
+
         return obs, reward, done, truncated, info
 
     def get_feedback(self):

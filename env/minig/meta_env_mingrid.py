@@ -58,7 +58,7 @@ from env.minig.env_minigrid_autosuccess import AutoSuccessEnv
 from env.minig.env_minigrid_give_agent_position import GiveAgentPositionEnv
 from env.minig.env_minigrid_give_goal_position import GiveGoalPositionEnv
 from env.minig.env_minigrid_go_to_direction import GoTowardsDirection
-from env.minig.env_minigrid_go_to_position import MoveToPosition
+from env.minig.env_minigrid_go_to_position import AAAMoveToPosition
 
 # Minig imports
 from env.minig.utils import (
@@ -156,7 +156,7 @@ class TaskMinigrid(Task):
             TaskDescription: The task description.
         """
         return TaskDescription(
-            name=f"{self.func_str} - Mission : {env_mg.unwrapped.mission}",
+            # name=f"{self.func_str}",  # Mission : {env_mg.unwrapped.mission}
             description=extract_sections(
                 docstring=env_mg.unwrapped.__doc__,
                 sections_docstring=self.meta_env.sections_docstring,
@@ -166,8 +166,11 @@ class TaskMinigrid(Task):
         )
 
     def create_new_env_mg(self, **kwargs) -> MiniGridEnv:
+        # Create the env based on the creator_env_mg_func
         env_mg = self.creator_env_mg_func(**kwargs)
+        # Fully obs wrapper
         env_mg = FullyObsWrapper(env_mg)
+        # Modify action space to FiniteSpace("forward", ...)
         if hasattr(env_mg.unwrapped, "get_new_action_space"):
             env_mg.action_space = env_mg.unwrapped.get_new_action_space()
         else:
@@ -176,6 +179,20 @@ class TaskMinigrid(Task):
                     list(dict_actions.keys()), key=lambda x: dict_actions[x][0]
                 )
             )
+        # Modify observation space's mission field so that it has nice repr
+        mission_space = env_mg.observation_space["mission"]
+
+        class MissionSpaceGoodRepr(mission_space.__class__):
+            def __repr__(self: MissionSpace) -> str:
+                args = inspect.signature(self.mission_func).parameters.keys()
+                mission_sig = self.mission_func(**{arg: f"{{{arg}}}" for arg in args})
+                if self.ordered_placeholders is not None:
+                    ordered_placeholders = [f"{order_pl[:10]}..." if len(order_pl) > 10 else order_pl for order_pl in self.ordered_placeholders]
+                    return f"MissionSpace(mission_template={mission_sig}, ordered_placeholders={ordered_placeholders})"
+                else:
+                    return f"MissionSpace(mission={mission_sig})"
+
+        mission_space.__class__ = MissionSpaceGoodRepr
         return env_mg
 
     # ===== Mandatory interface methods ======
@@ -349,8 +366,7 @@ class MinigridMetaEnv(BaseMetaEnv):
         levels = [
             # {
             #     # For testing envs
-            #     # lambda **kwargs: GoToObj(room_size=self.size, **kwargs),
-            #     # lambda **kwargs: GiveAgentPositionEnv(size=self.size, **kwargs),
+            #     lambda **kwargs: GoTowardsDirection(size=self.size, **kwargs),
             # },
             {
                 # Observation structure comprehension and navigation comprehension tasks
@@ -359,8 +375,8 @@ class MinigridMetaEnv(BaseMetaEnv):
                 lambda **kwargs: GoTowardsDirection(
                     size=self.size, direction="up", **kwargs
                 ),
-                lambda **kwargs: MoveToPosition(
-                    size=self.size, position=(3, 3), **kwargs
+                lambda **kwargs: AAAMoveToPosition(
+                    size=self.size, **kwargs
                 ),
             },
             {
@@ -375,11 +391,12 @@ class MinigridMetaEnv(BaseMetaEnv):
             },
             {
                 # Navigation tasks (medium)
-                # lambda **kwargs: GoToDoorEnv(size=self.size, **kwargs),
+                lambda **kwargs: GoToDoorEnv(size=self.size, **kwargs),
                 lambda **kwargs: CrossingEnv(size=11, obstacle_type=Wall, **kwargs),
-                # lambda **kwargs: GoToObjectEnv(size=self.size, numObjs=2, **kwargs),
+                lambda **kwargs: GoToObjectEnv(size=self.size, numObjs=2, **kwargs),
                 lambda **kwargs: FourRoomsEnv(**kwargs),
                 lambda **kwargs: DistShiftEnv(**kwargs),
+                # lambda **kwargs: GoToObj(room_size=self.size, **kwargs), # not sure BabyAI envs are compatible
             },
             {
                 # Navigation tasks (hard)
@@ -392,24 +409,24 @@ class MinigridMetaEnv(BaseMetaEnv):
             },
             {
                 # Simple manipulative tasks (1 step)
-                # lambda **kwargs: FetchEnv(size=self.size, numObjs=3, **kwargs),
+                lambda **kwargs: FetchEnv(size=self.size, numObjs=3, **kwargs),
                 lambda **kwargs: UnlockEnv(**kwargs),
             },
             {
                 # Medium manipulative tasks (2-3 steps)
-                # lambda **kwargs: UnlockPickupEnv(**kwargs),
-                # lambda **kwargs: PutNearEnv(size=6, numObjs=2, **kwargs),
+                lambda **kwargs: UnlockPickupEnv(**kwargs),
+                lambda **kwargs: PutNearEnv(size=6, numObjs=2, **kwargs),
                 lambda **kwargs: MemoryEnv(size=9, **kwargs),
                 lambda **kwargs: DoorKeyEnv(**kwargs),
-                # lambda **kwargs: KeyCorridorEnv(**kwargs),
+                lambda **kwargs: KeyCorridorEnv(**kwargs),
                 lambda **kwargs: ObstructedMaze_1Dlhb(**kwargs),
                 lambda **kwargs: RedBlueDoorEnv(**kwargs),
             },
             {
                 # Hard manipulative tasks (4-5 steps or more)
-                # lambda **kwargs: BlockedUnlockPickupEnv(**kwargs),
-                # lambda **kwargs: PutNearEnv(size=14, numObjs=6, **kwargs),
-                # lambda **kwargs: LockedRoomEnv(size=19, **kwargs),
+                lambda **kwargs: BlockedUnlockPickupEnv(**kwargs),
+                lambda **kwargs: PutNearEnv(size=14, numObjs=6, **kwargs),
+                lambda **kwargs: LockedRoomEnv(size=19, **kwargs),
                 lambda **kwargs: ObstructedMaze_Full(**kwargs),
                 lambda **kwargs: ObstructedMaze_Full_V1(**kwargs),
             },

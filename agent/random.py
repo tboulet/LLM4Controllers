@@ -54,17 +54,26 @@ class RandomAgent2(BaseAgent2):
 
     def __init__(self, config, logger: BaseLogger, env: BaseMetaEnv):
         super().__init__(config, logger, env)
+        self.n_episodes_eval = config["n_episodes_eval"]
         self.tasks = self.env.get_current_tasks()
         self.tasks = sorted(self.tasks, key=lambda task: str(task))
         self.t = 0
 
     def step(self):
         task = self.tasks[self.t]
-        print(f"Step {self.t}, task received: {task}")
         task_description = task.get_description()
+        print(
+            f"Step {self.t} :\n"
+            f"\tTask received: {task}.\n"
+            f"\tMission space: {task_description.observation_space['mission']}.\n"
+        )
         controller = RandomController(action_space=task_description.action_space)
         feedback_agg = play_controller_in_task(
-            controller, task, n_episodes=10, is_eval=False, log_dir=f"task_{self.t}"
+            controller,
+            task,
+            n_episodes=self.n_episodes_eval,
+            is_eval=False,
+            log_dir=f"task_{self.t}",
         )
         feedback_agg.aggregate()
         # Log the metrics
@@ -74,7 +83,9 @@ class RandomAgent2(BaseAgent2):
             },
             log_dir=f"task_{self.t}",
         )
-        feedback_agg_over_controllers = FeedbackAggregated() # aggregate on one controller just to have metric name consistency with CG
+        feedback_agg_over_controllers = (
+            FeedbackAggregated()
+        )  # aggregate on one controller just to have metric name consistency with CG
         metrics_agg_over_episodes = feedback_agg.get_metrics()
         feedback_agg_over_controllers.add_feedback(metrics_agg_over_episodes)
         feedback_agg_over_controllers.aggregate()

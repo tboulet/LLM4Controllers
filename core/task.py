@@ -13,7 +13,6 @@ class TaskDescription:
 
     def __init__(
         self,
-        name: str,
         description: str = None,
         observation_space: Space = None,
         action_space: Space = None,
@@ -21,34 +20,29 @@ class TaskDescription:
         """Initialize the TaskDescription object.
 
         Args:
-            name (str): the name (unique identifier) of the task, for exemple "go to the green ball"
             description (str): a textual description of the task, for example "go to the green ball" (can be the same as the name)
             observation_space (Space): the observation space of the environment
             action_space (Space): the action space of the environment
         """
-        self.name = name
         self.description = description
         self.observation_space = observation_space
         self.action_space = action_space
 
     def __repr__(self) -> str:
-        res = ""
-        if self.name is not None:
-            res = f"Task name : {self.name}."
-        if self.description != self.name and self.description is not None:
-            res += f"\n\nTask description : \n{self.description}"
+        list_strings = []
+        if self.description is not None:
+            list_strings.append(f"{self.description}")
         if self.observation_space is not None:
-            res += f"\n\nObservation gym space : \n{self.observation_space}"
+            list_strings.append(f"Observation gym space : \n{self.observation_space}")
         if self.action_space is not None:
-            res += f"\n\nAction gym space (the actions you can take MUST belong to this space) : {self.action_space}\nYou HAVE to take an action that belongs to this space."
-        return res
+            list_strings.append(f"Action gym space (the actions you can take MUST belong to this space) : {self.action_space}\nYou HAVE to take an action that belongs to this space.")
+        return "\n\n".join(list_strings)
     
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, TaskDescription):
             return False
         return (
-            self.name == other.name
-            and self.description == other.description
+            self.description == other.description
             and self.observation_space == other.observation_space
             and self.action_space == other.action_space
         )

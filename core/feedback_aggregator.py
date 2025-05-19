@@ -314,13 +314,13 @@ class FeedbackAggregated:
                 d = self.dict_aggregated_feedback[key]
                 metrics.update(
                     {
-                        f"{key}_{agg_name}": d[agg_name]
+                        f"{key}/{agg_name}": d[agg_name]
                         for agg_name in self.agg_methods
                     }
                 )
             # Boolean : rate
             elif metric.type_value == FeedbackType.BOOLEAN:
-                metrics[f"{key}_rate"] = self.dict_aggregated_feedback[key]
+                metrics[f"{key}/rate"] = self.dict_aggregated_feedback[key]
             # Error : rate of each error
             elif metric.type_value == FeedbackType.ERROR:
                 # if task is not None:
@@ -328,14 +328,14 @@ class FeedbackAggregated:
                 d: Dict[str, int] = self.dict_aggregated_feedback[key]
                 for error_message, count in d.items():
                     error_rate = count / self.n_data
-                    metrics[f"{key}_{error_message}_rate"] = error_rate
+                    metrics[f"{key}_{error_message}/rate"] = error_rate
             else:
                 raise ValueError(f"Unsupported feedback type: {metric.type_value}")
         # Log what is needed
         metrics_res = {}
         if prefix is not None:
             prefix = sanitize_name(prefix)
-            metrics_res.update({f"{prefix}_{key}": value for key, value in metrics.items()})
+            metrics_res.update({f"{prefix}/{key}": value for key, value in metrics.items()})
         if do_log_no_prefix:
             metrics_res.update(metrics)
         # Return the metrics

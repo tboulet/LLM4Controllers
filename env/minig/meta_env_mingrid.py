@@ -58,7 +58,7 @@ from env.minig.env_minigrid_autosuccess import AutoSuccessEnv
 from env.minig.env_minigrid_give_agent_position import GiveAgentPositionEnv
 from env.minig.env_minigrid_give_goal_position import GiveGoalPositionEnv
 from env.minig.env_minigrid_go_to_direction import GoTowardsDirection
-from env.minig.env_minigrid_go_to_position import AAAMoveToPosition
+from env.minig.env_minigrid_go_to_position import MoveToPosition
 
 # Minig imports
 from env.minig.utils import (
@@ -187,7 +187,10 @@ class TaskMinigrid(Task):
                 args = inspect.signature(self.mission_func).parameters.keys()
                 mission_sig = self.mission_func(**{arg: f"{{{arg}}}" for arg in args})
                 if self.ordered_placeholders is not None:
-                    ordered_placeholders = [f"{order_pl[:10]}..." if len(order_pl) > 10 else order_pl for order_pl in self.ordered_placeholders]
+                    ordered_placeholders = [
+                        f"{order_pl[:10]}..." if len(order_pl) > 10 else order_pl
+                        for order_pl in self.ordered_placeholders
+                    ]
                     return f"MissionSpace(mission_template={mission_sig}, ordered_placeholders={ordered_placeholders})"
                 else:
                     return f"MissionSpace(mission={mission_sig})"
@@ -375,9 +378,7 @@ class MinigridMetaEnv(BaseMetaEnv):
                 lambda **kwargs: GoTowardsDirection(
                     size=self.size, direction="up", **kwargs
                 ),
-                lambda **kwargs: AAAMoveToPosition(
-                    size=self.size, **kwargs
-                ),
+                lambda **kwargs: MoveToPosition(size=self.size, **kwargs),
             },
             {
                 # Navigation tasks (minimalistic)

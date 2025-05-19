@@ -33,7 +33,7 @@ from env.minig.utils import (
 )
 
 
-class AAAMoveToPosition(MiniGridEnv):
+class MoveToPosition(MiniGridEnv):
     def __init__(
         self,
         size=10,
@@ -107,7 +107,7 @@ class AAAMoveToPosition(MiniGridEnv):
 
 
 def main():
-    env = AAAMoveToPosition("up", render_mode="human")
+    env = MoveToPosition("up", render_mode="human")
 
     # enable manual control for testing
     manual_control = ManualControl(env, seed=42)

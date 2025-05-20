@@ -18,7 +18,7 @@ config:
   num_attempts_inference: 5
 
   # The number of inference calls to make
-  n_inferences: 1
+  n_inferences: 3
 
   # The number of episodes on which a controller will be evaluated on a task
   n_episodes_eval: 5
@@ -31,7 +31,7 @@ config:
 
   config_debug:
     # Whether to breakpoint on inference events
-    breakpoint_inference: False
+    breakpoint_inference: True
     breakpoint_inference_on_failure_code_extraction: False
     breakpoint_inference_on_failure_code_execution: False
     # Whether to breakpoint on update events

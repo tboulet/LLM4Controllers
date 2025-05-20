@@ -8,6 +8,7 @@ from env.base_meta_env import BaseMetaEnv, Observation, ActionType
 from core.task import Task, TaskDescription
 from tbutils.tmeasure import RuntimeMeter
 
+
 class BaseAgent2(ABC):
 
     def __init__(self, config: Dict, logger: BaseLogger, env: BaseMetaEnv):
@@ -45,8 +46,7 @@ class BaseAgent2(ABC):
         with RuntimeMeter("log_texts"):
             list_log_dirs: List[str] = []
             for log_dir_global in self.list_log_dirs_global:
-                log_dir = os.path.join(log_dir_global, log_dir)
-                list_log_dirs.append(log_dir)
+                list_log_dirs.append(os.path.join(log_dir_global, log_dir))
 
             for log_dir in list_log_dirs:
                 os.makedirs(log_dir, exist_ok=True)

@@ -1,7 +1,9 @@
 from typing import Dict, Union
+from GPUtil import getGPUs, GPU
 from huggingface_hub import get_safetensors_metadata
 import argparse
 import sys
+from tbutils.exec_max_n import print_once
 
 import torch
 
@@ -85,6 +87,22 @@ def get_memory_reserved():
     """Get the total GPU memory reserved by PyTorch."""
     return torch.cuda.memory_reserved() / 1024**3
 
+def get_GPUtil_metrics(prefix: str = "") -> Dict[str, Union[str, float]]:
+    """Get metrics from GPUtil"""
+    gpus = getGPUs()
+    if len(gpus) == 0:
+        print_once("[WARNING] No GPUs found.")
+        return {}
+    elif len(gpus) > 1:
+        print_once("[WARNING] Multiple GPUs found. Using the first one.")
+    gpu : GPU = gpus[0]
+    metrics = {
+        "gpu_memory_used": gpu.memoryUsed,
+        "gpu_memory_percent: ": gpu.memoryUtil,
+        "gpu_load_percent": gpu.load,
+        "gpu_temperature": gpu.temperature,
+    }
+    return {f"{prefix}{k}": v for k, v in metrics.items()}
 
 if __name__ == "__main__":
     model_id = input("Enter the model ID: ")

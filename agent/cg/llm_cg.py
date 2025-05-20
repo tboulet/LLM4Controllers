@@ -151,7 +151,12 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         return self.t >= len(self.tasks)
 
     def generate_controller(self, task: Task, log_dir: str = None) -> Controller:
-        """Generate a controller for the given task using the LLM."""
+        """Generate a controller for the given task using the LLM.
+        
+        Args:
+            task (Task): the task to solve
+            log_dir (str): the directory to log the generated controller. By default, it is None and the controller is not logged.
+        """
         # Generate the prompt
         with RuntimeMeter("env_get_description"):
             task_description = task.get_description()

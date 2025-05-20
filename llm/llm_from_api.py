@@ -17,7 +17,7 @@ from llm.utils import (
     get_memory_allocated,
     get_memory_reserved,
 )
-
+from llm.model_pricing import get_model_pricing
 
 
 class LLM_from_API(LanguageModel):
@@ -31,7 +31,10 @@ class LLM_from_API(LanguageModel):
         self.language_encoding = tiktoken.encoding_for_model(
             "gpt-4"
         )  # encodings are roughly similar for any LLM
-        self.messages : List[Dict[str, str]] = []
+        self.price_per_1M_token_input, self.price_per_1M_token_output = (
+            get_model_pricing(self.model)
+        )
+        self.messages: List[Dict[str, str]] = []
         self.n_tokens_in_messages = 0
         self.n_chars_in_messages = 0
 
@@ -67,39 +70,52 @@ class LLM_from_API(LanguageModel):
         ), "You need to add a prompt before generating completions."
         # Perform the inference
         with RuntimeMeter("llm_inference"):
-            choices = self.client.chat.completions.create(
+            response = self.client.chat.completions.create(
                 model=self.model,
                 messages=self.messages,
                 **self.kwargs,
                 seed=np.random.randint(0, 10000),
-            ).choices
+            )
+        choices = response.choices
         answer = choices[0].message.content
         # Log inference metrics
+        n_chars_in_answer = len(answer)
+        n_tokens_in_answer = len(self.language_encoding.encode(answer))
+        if self.price_per_1M_token_input is not None:
+            price_input = self.price_per_1M_token_input * self.n_tokens_in_messages / 1_000_000
+            price_output = self.price_per_1M_token_output * n_tokens_in_answer / 1_000_000
+            price_inference = price_input + price_output
+            pricing_metrics = {
+                "inference_metrics/price_input": price_input,
+                "inference_metrics/price_output": price_output,
+                "inference_metrics/price_inference": price_inference,
+            }
+        else:
+            pricing_metrics = {}
         self.logger.log_scalars(
             {
                 "inference_metrics/runtime_inference": RuntimeMeter.get_last_stage_runtime(
                     "llm_inference"
                 ),
-                "inference_metrics/n_chars_in_messages": self.n_chars_in_messages,
+                "inference_metrics/n_chars_in_messages": self.n_chars_in_messages,  # alternative option is to use response.usage.prompt_tokens/completion_tokens/total_tokens
                 "inference_metrics/n_tokens_in_messages": self.n_tokens_in_messages,
-                "inference_metrics/n_chars_in_answer": len(answer),
-                "inference_metrics/n_tokens_in_answer": len(
-                    self.language_encoding.encode(answer)
-                ),
+                "inference_metrics/n_chars_in_answer": n_chars_in_answer,
+                "inference_metrics/n_tokens_in_answer": n_tokens_in_answer,
                 "inference_metrics/memory_model_torch_allocated": get_memory_allocated(),
                 "inference_metrics/memory_model_torch_reserved": get_memory_reserved(),
+                **pricing_metrics,
             }
         )
         # Warn if the call finished because of too long answer
-        for c in choices:
-            if c.finish_reason == "length":
-                print(
-                    (
-                        f"[WARNING] The answer was cut because it was too long.\n"
-                        f"n_tokens_in_messages: {self.n_tokens_in_messages}\n"
-                        f"n_tokens_in_answer: {len(self.language_encoding.encode(answer))}"
-                    )
+        if choices[0].finish_reason == "length":
+            print(
+                (
+                    f"[WARNING] The answer was cut because it was too long.\n"
+                    f"n_tokens_in_messages: {self.n_tokens_in_messages}\n"
+                    f"n_tokens_in_answer: {len(self.language_encoding.encode(answer))}"
                 )
+            )
+            answer += "\n\nWARNING : The answer was cut because it was too long for the model's context window."
         # Return the answer
         return answer
 

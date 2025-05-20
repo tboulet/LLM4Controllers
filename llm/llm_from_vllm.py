@@ -21,6 +21,7 @@ from llm.utils import (
     get_model_memory_from_params,
     get_memory_allocated,
     get_memory_reserved,
+    get_GPUtil_metrics,
 )
 
 
@@ -129,6 +130,7 @@ class LLM_from_VLLM(LanguageModel):
                 ),
                 "inference_metrics/memory_model_torch_allocated": get_memory_allocated(),
                 "inference_metrics/memory_model_torch_reserved": get_memory_reserved(),
+                **get_GPUtil_metrics("inference_metrics/gputil/"),
             }
         )
         # Warn if the call finished because of too long answer

@@ -34,6 +34,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
             },
             log_dir="",
         )
+        self.language_encoding = tiktoken.encoding_for_model("gpt-4")
         # Get tasks here
         self.tasks = self.env.get_current_tasks()
         self.tasks = sorted(self.tasks, key=lambda task: str(task))
@@ -55,7 +56,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         name_llm = config["llm"]["name"]
         config_llm = config["llm"]["config"]
         self.llm = llm_name_to_LLMClass[name_llm](config=config_llm, logger=logger)
-        
+
         # === Generate the different parts of the prompt ===
 
         # Prompt system
@@ -88,12 +89,20 @@ class LLM_BasedControllerGenerator(BaseAgent2):
             "==========================="
         )
 
+        # Code prompt
+        prompt_code_env = (
+            "=== Code of the environment ===\n"
+            "Here is the code of the environment. You can use it to help understand the environment :\n"
+            f"{env.get_code_repr()}"
+        )
+
         # TODO : add doc and env code prompt
 
         # Prompts dict
         self.prompts: Dict[str, str] = {
             "system": prompt_system,
             "env": prompt_env,
+            "code_env": prompt_code_env,
             "controller_structure": prompt_controller_structure,
             "example_answer": prompt_example_answer,
         }
@@ -152,7 +161,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
 
     def generate_controller(self, task: Task, log_dir: str = None) -> Controller:
         """Generate a controller for the given task using the LLM.
-        
+
         Args:
             task (Task): the task to solve
             log_dir (str): the directory to log the generated controller. By default, it is None and the controller is not logged.
@@ -160,24 +169,24 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         # Generate the prompt
         with RuntimeMeter("env_get_description"):
             task_description = task.get_description()
-        prompt_task = (
-            "=== Task ===\n"
-            f"{task}"
-        )
-        prompt_task_description = (
-            "=== Task description ===\n"
-            f"{task_description}"
-        )
+        prompt_task = "=== Task ===\n" f"{task}"
+        prompt_task_description = "=== Task description ===\n" f"{task_description}"
         prompt_instructions = (
             "=== Instructions ===\n"
             "Your answer should include a python code (inside a code block) that implements a class "
             "inheriting from 'Controller' and instantiate it under a variable named 'controller'. "
+        )
+        prompt_code_task = (
+            "=== Code of the task ===\n"
+            "Here is the code used to create the task, as well as the code of the particular task. \n"
+            f"{task.get_code_repr()}\n"
         )
 
         prompts = self.prompts.copy()
         prompts["task"] = prompt_task
         prompts["task_description"] = prompt_task_description
         prompts["instructions"] = prompt_instructions
+        prompts["code_task"] = prompt_code_task
 
         list_prompt = []
         for prompt_key in self.list_prompt_keys:
@@ -185,8 +194,11 @@ class LLM_BasedControllerGenerator(BaseAgent2):
                 prompt_key in prompts
             ), f"Prompt key {prompt_key} not found in prompts."
             list_prompt.append(prompts[prompt_key])
+            self.metrics_storer[f"n_tokens_prompts/{prompt_key}"] = len(
+                self.language_encoding.encode(prompts[prompt_key])
+            )
         prompt = "\n\n".join(list_prompt)
-        
+
         # Log the prompt and the task description
         self.log_texts(
             {

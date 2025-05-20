@@ -8,6 +8,8 @@ config:
   list_prompt_keys:
     - system
     - env
+    # - code_env
+    # - code_task
     - controller_structure
     - example_answer
     - task

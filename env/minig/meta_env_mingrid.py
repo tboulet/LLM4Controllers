@@ -141,7 +141,8 @@ class TaskMinigrid(Task):
         self.func_str = re.sub(r"\s+", " ", self.func_str).strip()
 
         # Other variables
-        self.task_description = None
+        self.task_description: str = None
+        self.code_of_env_mg_class: str = None
         self.env_mg = None
 
     # ===== Helper methods ===
@@ -212,6 +213,29 @@ class TaskMinigrid(Task):
             del self.env_mg
             self.env_mg = None
         return self.task_description
+
+    def get_code_repr(self) -> str:
+        if self.code_of_env_mg_class is None:
+            if self.env_mg is None:
+                self.env_mg = self.create_new_env_mg(render_mode=None)
+            # Extract the code repr of the class of the environment
+            self.code_of_env_mg_class = inspect.getsource(
+                self.env_mg.unwrapped.__class__
+            )
+            docstring_of_class = self.env_mg.unwrapped.__class__.__doc__
+            self.code_of_env_mg_class = self.code_of_env_mg_class.replace(
+                docstring_of_class, ""
+            )
+        return (
+            "```python\n"
+            f"{self.code_of_env_mg_class}\n"
+            f"env = {self.func_str.replace(',', '')}\n"
+            f"env = FullyObsWrapper(env)\n"
+            f"env.action_space = FiniteSpace(\n"
+            f"    elems={sorted(list(dict_actions.keys()), key=lambda x: dict_actions[x][0])}\n"
+            "    )\n"
+            "```"
+        )
 
     def reset(
         self, is_eval: str = False, log_dir: str = None
@@ -500,3 +524,11 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
     def update(self, task: TaskMinigrid, feedback: FeedbackAggregated) -> None:
         self.curriculum.update(objective=task, feedback=feedback)
         self.timestep += 1
+
+    def get_code_repr(self) -> str:
+        return (
+            "```python\n"
+            f"{inspect.getsource(MiniGridEnv)}\n"
+            f"{inspect.getsource(FullyObsWrapper)}\n"
+            "```"
+        )

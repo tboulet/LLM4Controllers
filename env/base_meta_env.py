@@ -56,3 +56,15 @@ class BaseMetaEnv(ABC):
             str: the textual description of the environment
         """
         raise NotImplementedError
+
+    @abstractmethod
+    def get_code_repr(self) -> str:
+        """Return a code representation of the environment, this will be given to the agent at the beginning of the training
+        to help it getting a general idea of the environment and the tasks it will be facing.
+
+        It should include the general principle of the environment, the actions available, the structure of the observations, the reward system, etc.
+
+        Returns:
+            str: the code representation of the environment
+        """
+        raise NotImplementedError

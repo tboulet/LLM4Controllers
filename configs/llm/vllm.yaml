@@ -1,6 +1,7 @@
 name: VLLM
-model: Qwen/Qwen2.5-1.5B-Instruct # vllm serve Qwen/Qwen2.5-1.5B-Instruct
+model: /lustre/fsn1/projects/rech/imi/upb99ot/hf/Qwen3-4B # vllm serve Qwen/Qwen2.5-1.5B-Instruct
 config:
+  dtype_half: True  # True on v100
   config_server:
     do_server: True
   model: ${llm.model}

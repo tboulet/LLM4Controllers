@@ -33,7 +33,7 @@ from core.loggers.multi_logger import MultiLogger
 from core.loggers.tensorboard import LoggerTensorboard
 from core.loggers.tqdm_logger import LoggerTQDM
 from core.task import Task
-from core.utils import get_error_info
+from core.utils import get_error_info, sanitize_name
 from core.register_hydra import register_hydra_resolvers
 from core.utils import try_get_seed, to_maybe_inf
 from core.play import play_controller_in_task
@@ -55,7 +55,8 @@ def main(config: DictConfig):
     agent_name: str = config["agent"]["name"]
     env_name: str = config["env"]["name"]
     model_name: str = try_get(config["agent"], "config.llm.model", default="")
-
+    model_name = sanitize_name(model_name.replace("/", "_"))
+    
     n_steps_max: int = config.get("n_steps_max", np.inf)
     n_steps_max = to_maybe_inf(n_steps_max)
 

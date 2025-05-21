@@ -30,6 +30,7 @@ class LLM_from_VLLM(LanguageModel):
 
     def __init__(self, config: Dict[str, Any], logger: BaseLogger = NoneLogger()):
         self.model: str = config["model"]
+        self.dtype_half: bool = config["dtype_half"]
         self.logger = logger
         self.config_server: Dict[str, Any] = config["config_server"]
         self.logger.log_scalars(
@@ -39,6 +40,7 @@ class LLM_from_VLLM(LanguageModel):
                 ),
                 "inference_metrics/memory_model_torch_allocated_before": get_memory_allocated(),
                 "inference_metrics/memory_model_torch_reserved_before": get_memory_reserved(),
+                **get_GPUtil_metrics("inference_metrics/gputil/"),
             },
             step=0,
         )
@@ -70,6 +72,7 @@ class LLM_from_VLLM(LanguageModel):
             {
                 "inference_metrics/memory_model_torch_allocated": get_memory_allocated(),
                 "inference_metrics/memory_model_torch_reserved": get_memory_reserved(),
+                **get_GPUtil_metrics("inference_metrics/gputil/"),
             },
             step=0,
         )
@@ -177,6 +180,8 @@ class LLM_from_VLLM(LanguageModel):
             "--gpu-memory-utilization",
             str(gpu_memory_utilization),
         ]
+        if self.dtype_half:
+            command.append("--dtype=half")
         if enable_prefix_caching:
             command.append("--enable-prefix-caching")
 

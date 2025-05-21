@@ -82,8 +82,8 @@ def generate_slurm_script(args,job_name):
 #SBATCH --cpus-per-task={n_cpu}
 #SBATCH --hint=nomultithread
 #SBATCH --time={hour}:00:00
-#SBATCH --output=./out/{job_name}-%A.out
-#SBATCH --error=./out/{job_name}-%A.out
+#SBATCH --output=./out/{job_name}-%A/.out
+#SBATCH --error=./out/{job_name}-%A/.err
 # set -x
 
 export TMPDIR=$JOBSCRATCH

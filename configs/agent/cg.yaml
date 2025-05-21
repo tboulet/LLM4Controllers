@@ -33,7 +33,7 @@ config:
 
   config_debug:
     # Whether to breakpoint on inference events
-    breakpoint_inference: True
+    breakpoint_inference: False
     breakpoint_inference_on_failure_code_extraction: False
     breakpoint_inference_on_failure_code_execution: False
     # Whether to breakpoint on update events

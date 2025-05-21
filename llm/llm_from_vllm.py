@@ -49,8 +49,8 @@ class LLM_from_VLLM(LanguageModel):
             print("Starting VLLM server...")
             # os.system(f"vllm serve {self.model} &")
             self.launch_vllm_server(
-                n_gpu=1,
                 model_name=self.model,
+                n_gpu=1,
                 model_len=5000,
                 enable_prefix_caching=True,
                 gpu_memory_utilization=0.9,
@@ -160,6 +160,7 @@ class LLM_from_VLLM(LanguageModel):
         raise NotImplementedError  # not implemented yet
 
     def launch_vllm_server(
+        self,
         model_name,
         n_gpu,
         model_len=32000,
@@ -194,7 +195,7 @@ class LLM_from_VLLM(LanguageModel):
             print(f"Failed to launch server: {str(e)}")
             return None
 
-    def wait_for_server2start(max_retries=60, delay=10, port=8000):
+    def wait_for_server2start(self, max_retries=60, delay=10, port=8000):
         for _ in range(max_retries):
             try:
                 response = requests.get(f"http://localhost:{port}/health")

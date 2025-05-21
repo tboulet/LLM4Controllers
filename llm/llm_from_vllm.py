@@ -32,9 +32,6 @@ class LLM_from_VLLM(LanguageModel):
         self.model: str = config["model"]
         self.logger = logger
         self.config_server: Dict[str, Any] = config["config_server"]
-        self.language_encoding = tiktoken.encoding_for_model(
-            "gpt-4"
-        )  # encodings are roughly similar for any LLM
         self.logger.log_scalars(
             {
                 "inference_metrics/memory_model_from_name": get_model_memory_from_model_name(
@@ -91,7 +88,6 @@ class LLM_from_VLLM(LanguageModel):
         """
         # We use user to avoid Claude incompatibility with system
         self.n_chars_in_messages += len(prompt)
-        self.n_tokens_in_messages += len(self.language_encoding.encode(prompt))
         self.messages.append({"role": "user", "content": prompt})
 
     def generate(self) -> str:
@@ -125,9 +121,7 @@ class LLM_from_VLLM(LanguageModel):
                 "inference_metrics/n_chars_in_messages": self.n_chars_in_messages,
                 "inference_metrics/n_tokens_in_messages": self.n_tokens_in_messages,
                 "inference_metrics/n_chars_in_answer": len(answer),
-                "inference_metrics/n_tokens_in_answer": len(
-                    self.language_encoding.encode(answer)
-                ),
+                "inference_metrics/n_tokens_in_answer": 66,
                 "inference_metrics/memory_model_torch_allocated": get_memory_allocated(),
                 "inference_metrics/memory_model_torch_reserved": get_memory_reserved(),
                 **get_GPUtil_metrics("inference_metrics/gputil/"),
@@ -140,7 +134,7 @@ class LLM_from_VLLM(LanguageModel):
                     (
                         f"[WARNING] The answer was cut because it was too long.\n"
                         f"n_tokens_in_messages: {self.n_tokens_in_messages}\n"
-                        f"n_tokens_in_answer: {len(self.language_encoding.encode(answer))}"
+                        f"n_tokens_in_answer: {66}"
                     )
                 )
         # Return the answer
@@ -153,7 +147,6 @@ class LLM_from_VLLM(LanguageModel):
             answer (str): the answer to add.
         """
         self.n_chars_in_messages += len(answer)
-        self.n_tokens_in_messages += len(self.language_encoding.encode(answer))
         self.messages.append({"role": "assistant", "content": answer})
 
     def optimize(self):

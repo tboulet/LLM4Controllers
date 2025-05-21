@@ -6,14 +6,12 @@ import os
 import subprocess
 # arg train
 parser = argparse.ArgumentParser(description="Argument parsing for experiment")
-parser.add_argument("--cpu", action=argparse.BooleanOptionalAction, help="Use CPU partition")
-parser.add_argument("--v100", action=argparse.BooleanOptionalAction, help="Use V100 GPUs")
-parser.add_argument("--h100", action=argparse.BooleanOptionalAction, help="Use H100 GPUs")
-parser.add_argument("--a100", action=argparse.BooleanOptionalAction, help="Use A100 GPUs")
-parser.add_argument("--cpus-per-task", type=int, default=1, help="Number of CPUs per task")
+parser.add_argument("--cpu", action=argparse.BooleanOptionalAction, help="Use CPU partition")  
+parser.add_argument("--v100", action=argparse.BooleanOptionalAction, help="Use V100 GPUs")     # 32G or other
+parser.add_argument("--h100", action=argparse.BooleanOptionalAction, help="Use H100 GPUs")     # 80G
+parser.add_argument("--a100", action=argparse.BooleanOptionalAction, help="Use A100 GPUs")     # 80G (not available)
+parser.add_argument("--cpus-per-task", type=int, default=1, help="Number of CPUs per task")      # 
 parser.add_argument("--dev", action=argparse.BooleanOptionalAction, help="Development mode")
-parser.add_argument("--long", action=argparse.BooleanOptionalAction, help="long mode 100h instead of 20h")
-parser.add_argument("--medium", action=argparse.BooleanOptionalAction, help="medium mode 40h instead of 20h")
 parser.add_argument("--n_gpu", type=int, help="Number of GPUs to use", default=1)
 parser.add_argument("--hour",  type=int, default=20)
 
@@ -28,13 +26,9 @@ def generate_slurm_script(args,job_name):
 
     # Set the time limit based on the mode    
     if args.dev:
-        hour = '2'
-    elif args.medium:
-        hour = '40'
-    elif args.long:
-        hour = '99'
+        hour = 2
     else:
-        hour = str(args.hour)
+        hour = args.hour
     
     # For each partition, specify account and constrains (if any), qos, and number of CPUs (if applicable)   
     module_load = ""
@@ -50,6 +44,8 @@ def generate_slurm_script(args,job_name):
         list_lines_script.append("#SBATCH -C v100-32g")
         if args.dev:
             list_lines_script.append("#SBATCH --qos=qos_gpu-dev")
+        elif hour <= 20 :
+            list_lines_script.append("#SBATCH --qos=qos_gpu-t3")
         else:
             list_lines_script.append("#SBATCH --qos=qos_gpu-t4")
         n_cpu = min(args.n_gpu * 10,40)
@@ -60,6 +56,8 @@ def generate_slurm_script(args,job_name):
         module_load = "module load arch/h100"
         if args.dev:
             list_lines_script.append("#SBATCH --qos=qos_gpu_h100-dev")
+        elif hour <= 20 :
+            list_lines_script.append("#SBATCH --qos=qos_gpu_h100-t3")
         else:
             list_lines_script.append("#SBATCH --qos=qos_gpu_h100-t4")
 
@@ -92,14 +90,13 @@ export TMPDIR=$JOBSCRATCH
 module purge
 {module_load}
 ulimit -c 0
-limit coredumpsize 0
 export CORE_PATTERN=/dev/null
 
 
 
 source $SCRATCH/venv/bin/activate
 cd $WORK/LLM4Controllers
-python run2.py agent=cg llm=azure
+python run2.py agent=cg llm=vllm
 """
     return script    
 

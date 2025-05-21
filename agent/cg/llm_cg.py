@@ -34,7 +34,6 @@ class LLM_BasedControllerGenerator(BaseAgent2):
             },
             log_dir="",
         )
-        self.language_encoding = tiktoken.encoding_for_model("gpt-4")
         # Get tasks here
         self.tasks = self.env.get_current_tasks()
         self.tasks = sorted(self.tasks, key=lambda task: str(task))
@@ -194,9 +193,6 @@ class LLM_BasedControllerGenerator(BaseAgent2):
                 prompt_key in prompts
             ), f"Prompt key {prompt_key} not found in prompts."
             list_prompt.append(prompts[prompt_key])
-            self.metrics_storer[f"n_tokens_prompts/{prompt_key}"] = len(
-                self.language_encoding.encode(prompts[prompt_key])
-            )
         prompt = "\n\n".join(list_prompt)
 
         # Log the prompt and the task description

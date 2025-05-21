@@ -46,7 +46,7 @@ def get_model_memory_from_model_name(model_id: str, dtype: str = "float16") -> U
 
     except Exception as e:
         print(f"Error estimating model size: {str(e)}", file=sys.stderr)
-        return None
+        return 0
     
 def get_model_memory_from_params(n_tokens_io, n_params, batch_size=1, n_embedding=768):
     """

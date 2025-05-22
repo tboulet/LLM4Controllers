@@ -1,7 +1,9 @@
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 import os
 import re
-from typing import Dict, List
+import time
+from typing import Dict, Iterator, List
 from tbutils.tmeasure import RuntimeMeter, get_runtime_metrics
 import tiktoken
 
@@ -11,11 +13,12 @@ from omegaconf import OmegaConf
 from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller
 from agent.base_agent2 import BaseAgent2
+from core.error_trace import ErrorTrace
 from core.feedback_aggregator import FeedbackAggregated
 from core.loggers.base_logger import BaseLogger
 from core.play import play_controller_in_task
 from core.task import Task, TaskDescription
-from core.utils import get_error_info
+from core.utils import get_error_info, sanitize_name
 from env.base_meta_env import BaseMetaEnv, Observation, ActionType, InfoDict
 from abc import ABC, abstractmethod
 import enum
@@ -58,55 +61,253 @@ class LLM_BasedControllerGenerator(BaseAgent2):
 
         # === Generate the different parts of the prompt ===
 
+        self.dict_prompts: Dict[str, str] = {}
+
         # Prompt system
-        prompt_system = (
-            "You are an AI agent that is used in order to solve a task-based environment through the generation of controller objects. "
-            "A controller is a class that implements the method 'act(observation: Observation) -> ActionType' "
-            "and that inherits from the class Controller. You will be provided with several informations in order to help you. "
-        )
+        if "system" in self.list_prompt_keys:
+            prompt_system = (
+                "You are an AI agent that is used in order to solve a task-based environment through the generation of controller objects. "
+                "A controller is a class that implements the method 'act(observation: Observation) -> ActionType' "
+                "and that inherits from the class Controller. You will be provided with several informations in order to help you. "
+            )
+            self.dict_prompts["system"] = prompt_system
 
         # Env prompt
-        description_env = env.get_textual_description()
-        prompt_env = (
-            "=== General description of the environment ===\n" f"{description_env}"
-        )
+        if "env" in self.list_prompt_keys:
+            description_env = env.get_textual_description()
+            prompt_env = (
+                "=== General description of the environment ===\n" f"{description_env}"
+            )
+            self.dict_prompts["env"] = prompt_env
 
         # Controller structure prompt
-        text_base_controller = open("agent/llm_hcg/text_base_controller.txt").read()
-        prompt_controller_structure = (
-            "=== Controller interface ===\n"
-            "A controller obeys the following interface:\n"
-            f"{self.code_tag(text_base_controller)}"
-        )
+        if "controller_structure" in self.list_prompt_keys:
+            text_base_controller = open("agent/llm_hcg/text_base_controller.txt").read()
+            prompt_controller_structure = (
+                "=== Controller interface ===\n"
+                "A controller obeys the following interface:\n"
+                f"{self.code_tag(text_base_controller)}"
+            )
+            self.dict_prompts["controller_structure"] = prompt_controller_structure
 
         # Example of answer
-        text_example_answer = open("agent/cg/text_example_answer.txt").read()
-        prompt_example_answer = (
-            "=== Example of answer ===\n"
-            "Here is an example of acceptable answer:\n"
-            f"{text_example_answer}\n"
-            "==========================="
-        )
+        if "example_answer" in self.list_prompt_keys:
+            text_example_answer = open("agent/cg/text_example_answer.txt").read()
+            prompt_example_answer = (
+                "=== Example of answer ===\n"
+                "Here is an example of acceptable answer:\n"
+                f"{text_example_answer}\n"
+                "==========================="
+            )
+            self.dict_prompts["example_answer"] = prompt_example_answer
 
         # Code prompt
-        prompt_code_env = (
-            "=== Code of the environment ===\n"
-            "Here is the code of the environment. You can use it to help understand the environment :\n"
-            f"{env.get_code_repr()}"
-        )
+        if "code_env" in self.list_prompt_keys:
+            prompt_code_env = (
+                "=== Code of the environment ===\n"
+                "Here is the code of the environment. You can use it to help understand the environment :\n"
+                f"{env.get_code_repr()}"
+            )
+            self.dict_prompts["code_env"] = prompt_code_env
 
-        # TODO : add doc and env code prompt
+        # TODO : add doc prompt
 
-        # Prompts dict
-        self.prompts: Dict[str, str] = {
-            "system": prompt_system,
-            "env": prompt_env,
-            "code_env": prompt_code_env,
-            "controller_structure": prompt_controller_structure,
-            "example_answer": prompt_example_answer,
-        }
+        # Add the instructions prompt
+        if "instructions" in self.list_prompt_keys:
+            prompt_instructions = (
+                "=== Instructions ===\n"
+                "Your answer should include a python code (inside a code block) that implements a class "
+                "inheriting from 'Controller' and instantiate it under a variable named 'controller'. "
+            )
+            self.dict_prompts["instructions"] = prompt_instructions
 
+    def build_task_prompt(self, task: Task) -> str:
+        """Build the prompt for the given task."""
+        # Initialize the mapping prompt key -> prompt
+        dict_prompts = self.dict_prompts.copy()
+
+        # Add the task prompt
+        if "task" in self.list_prompt_keys:
+            prompt_task = f"=== Task ===\n{task}"
+            dict_prompts["task"] = prompt_task
+        # Add the task description prompt
+        if "task_description" in self.list_prompt_keys:
+            prompt_task_description = (
+                f"=== Task description ===\n{task.get_description()}"
+            )
+            dict_prompts["task_description"] = prompt_task_description
+        # Add the task code prompt
+        if "code_task" in self.list_prompt_keys:
+            prompt_code_task = (
+                "=== Code of the task ===\n"
+                "Here is the code used to create the task, as well as the code of the particular task. \n"
+                f"{task.get_code_repr()}\n"
+            )
+            dict_prompts["code_task"] = prompt_code_task
+
+        # Assemble the prompt
+        list_prompt = []
+        for prompt_key in self.list_prompt_keys:
+            assert (
+                prompt_key in dict_prompts
+            ), f"Prompt key {prompt_key} not found in prompts."
+            list_prompt.append(dict_prompts[prompt_key])
+        task_prompt = "\n\n".join(list_prompt)
+        return task_prompt
+
+    def solve_tasks(
+        self,
+        tasks: List[Task],
+        n_inferences: Union[int, List[int]],
+        n_episodes_eval: Union[int, List[int]],
+    ) -> Iterator[FeedbackAggregated]:
+        """Solve the tasks using the LLM.
+
+        Args:
+            tasks (List[Task]): the list of tasks to solve
+            n_inferences (Union[int, List[int]]): the number of inferences to perform for each task
+            n_episodes_eval (Union[int, List[int]]): the number of episodes to evaluate for each task
+
+        Yields:
+            FeedbackAggregated: the feedback aggregated over all controllers
+        """
+        # Check if n_inferences and n_episodes_eval are lists or not
+        if isinstance(n_inferences, int):
+            list_n_inferences = [n_inferences] * len(tasks)
+        if isinstance(n_episodes_eval, int):
+            list_n_episodes_eval = [n_episodes_eval] * len(tasks)
+
+        # Build the kwargs to send to the solve_task function
+        batch_kwargs_solve_tasks: List[Dict[str, Any]] = []
+        for i in range(len(tasks)):
+            task = tasks[i]
+            n_inf = list_n_inferences[i]
+            n_ep_eval = list_n_episodes_eval[i]
+            batch_kwargs_solve_tasks.append(
+                {
+                    "task": task,
+                    "n_inferences": n_inf,
+                    "n_episodes_eval": n_ep_eval,
+                }
+            )
+
+        # Get the completions in parallel
+        list_feedback_on_tasks = []
+        count = 0
+        max_workers = 2
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            for sub_batch_kwargs in self.get_chunks(
+                batch_kwargs_solve_tasks, max_workers
+            ):
+                for kwargs_solve_tasks in sub_batch_kwargs:
+                    count += 1
+                    future = executor.submit(self.solve_task, **kwargs_solve_tasks)
+                    list_feedback_on_tasks.append(future)
+                time.sleep(5)
+                print(f"send {count} / {len(batch_kwargs_solve_tasks)} tasks")
+
+        breakpoint()
+        
+    def get_chunks(lst: List[Any], size_chunk: int) -> Iterator[List[Any]]:
+        """Yield successive n-sized chunks from lst."""
+        for i in range(0, len(lst), size_chunk):
+            yield lst[i : i + size_chunk]
+
+    def solve_task(
+        self, task : Task, n_inferences: int, n_episodes_eval: int
+    ) -> List[FeedbackAggregated]:
+        """Solve a task using the LLM.
+
+        Args:
+            prompt_task (str): the prompt to send to the LLM
+            n_inferences (int): the number of inferences to perform
+            n_episodes_eval (int): the number of episodes to evaluate
+
+        Returns:
+            List[FeedbackAggregated]: a list of n_inferences feedback, each aggregated over n_episodes_eval
+        """
+        # Generate n_inferences answers for the task
+        prompt_task = self.build_task_prompt(task)
+        self.llm.reset()
+        self.llm.add_prompt(prompt_task)
+        answers = self.llm.generate(n=n_inferences) # TODO : deal with errors here
+
+        # Extract, execute, and play the controller for each answer
+        list_feedback_agg = []
+        for idx_c, answer in enumerate(answers):
+            feedback_agg = FeedbackAggregated()
+            # Extract the code block from the answer
+            try:
+                code = self.extract_controller_code(answer)
+            except Exception as e:
+                # Retry if the code could not be extracted
+                print(
+                    f"[WARNING] : Could not extract the code from the answer. Error : {e}"
+                )
+                feedback_agg.add_feedback(
+                    {
+                        "error": ErrorTrace(
+                            f"Could not extract the code from the answer. Error : {e}"
+                        ),
+                    }
+                )
+                feedback_agg.aggregate()
+                list_feedback_agg.append(feedback_agg)
+                continue
+            # Execute the code and get the controller
+            try:
+                controller = self.exec_code_and_get_controller(code)
+            except Exception as e:
+                print(
+                    f"[WARNING] : Could not execute and get the controller from the produced code. Error : {e}"
+                )
+                feedback_agg.add_feedback(
+                    {
+                        "error": ErrorTrace(
+                            f"Could not execute and get the controller from the produced code. Error : {e}"
+                        ),
+                    }
+                )
+                feedback_agg.aggregate()
+                list_feedback_agg.append(feedback_agg)
+                continue
+            # Play the controller in the task
+            task_name = sanitize_name(str(task))
+            feedback_agg = play_controller_in_task(
+                controller,
+                task,
+                n_episodes=n_episodes_eval,
+                is_eval=False,
+                log_dir=f"task_{task_name}/controller_{idx_c}",
+            )
+            feedback_agg.aggregate()
+            list_feedback_agg.append(feedback_agg)
+        
+        return list_feedback_agg
+            
+            
     def step(self):
+        with RuntimeMeter("step"):
+            # Solve the tasks
+            for list_feedback_agg in self.solve_tasks(
+                tasks=self.tasks,
+                n_inferences=self.n_inferences,
+                n_episodes_eval=self.n_episodes_eval,
+            ):
+                feedback_agg_over_controllers.aggregate()
+                # Log the metrics
+                self.log_texts(
+                    {
+                        f"feedback.txt": feedback_agg_over_controllers.get_repr(),
+                    },
+                    log_dir=f"task_{self.t}",
+                )
+                metrics_final = feedback_agg_over_controllers.get_metrics(
+                    prefix=str(self.tasks[self.t])
+                )
+                metrics_final.update(self.metrics_storer)
+                self.logger.log_scalars(metrics_final, step=self.t)
+
         with RuntimeMeter("step"):
             # Get the task
             task = self.tasks[self.t]
@@ -181,7 +382,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
             f"{task.get_code_repr()}\n"
         )
 
-        prompts = self.prompts.copy()
+        prompts = self.dict_prompts.copy()
         prompts["task"] = prompt_task
         prompts["task_description"] = prompt_task_description
         prompts["instructions"] = prompt_instructions
@@ -346,7 +547,6 @@ class LLM_BasedControllerGenerator(BaseAgent2):
             self.metrics_storer[
                 "n_failure_sc_code_execution_controller_not_created"
             ] += 1
-            breakpoint()
             raise ValueError(
                 "No object named 'controller' of the class Controller found in the provided code."
             )

@@ -55,14 +55,15 @@ class LLM_from_API(LanguageModel):
         self.n_tokens_in_messages += len(self.language_encoding.encode(prompt))
         self.messages.append({"role": "user", "content": prompt})
 
-    def generate(self) -> str:
+    def generate(self, n : int) -> Union[str, List[str]]:
         """Generate a completion for the given prompt.
 
         Args:
             prompt (str): the prompt to complete.
-
+            n (int): the number of completions to generate.
+            
         Returns:
-            str: the completion of the prompt.
+            Union[str, List[str]]: the generated completion(s).
         """
         # Unsure that the prompt is not empty
         assert (
@@ -74,8 +75,11 @@ class LLM_from_API(LanguageModel):
                 model=self.model,
                 messages=self.messages,
                 **self.kwargs,
+                n=n,
                 seed=np.random.randint(0, 10000),
             )
+        return [choice.message.content for choice in response.choices]
+    
         choices = response.choices
         answer = choices[0].message.content
         # Log inference metrics

@@ -126,11 +126,7 @@ def main(config: DictConfig):
 
 if __name__ == "__main__":
     with cProfile.Profile() as pr:
-        try:
-            main()
-        except KeyboardInterrupt:
-            print("Caught CTRL+C, exiting...")
-            os._exit(1)
+        main()
     pr.dump_stats("logs/profile_stats.prof")
     print("\nProfile stats dumped to profile_stats.prof")
     print(

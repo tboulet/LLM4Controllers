@@ -84,4 +84,8 @@ def get_name_copy(path: str) -> str:
 
 
 def sanitize_name(name: str) -> str:
-    return name.replace('/', ' div ')
+    name = name.replace('/', ' div ')
+    name = name.replace(' ', '_')
+    name = name.replace('(', '')
+    name = name.replace(')', '')
+    return name

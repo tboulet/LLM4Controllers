@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import time
 from typing import Any, Dict, List, Union
 
 import numpy as np
@@ -18,22 +19,28 @@ from llm.utils import (
     get_memory_reserved,
 )
 from llm.model_pricing import get_model_pricing
+from openai import RateLimitError, LengthFinishReasonError
 
 
 class LLM_from_API(LanguageModel):
     """A language model that uses an API to generate completions."""
 
     def __init__(self, config: Dict[str, Any], logger: BaseLogger = NoneLogger()):
+        super().__init__(config, logger)
+        # Initialize client
         self.client: OpenAI = instantiate(config["client"])
+        # Initialize config parameters
         self.model: str = config["model"]
-        self.logger = logger
-        self.kwargs: Dict[str, Any] = config.get("kwargs", {})
+        self.config_inference: Dict[str, Any] = config.get("config_inference", {})
+        self.max_retries: int = config["max_retries"]
+        # Initialize other objects
         self.language_encoding = tiktoken.encoding_for_model(
             "gpt-4"
         )  # encodings are roughly similar for any LLM
         self.price_per_1M_token_input, self.price_per_1M_token_output = (
             get_model_pricing(self.model)
         )
+        # Initialize variables
         self.messages: List[Dict[str, str]] = []
         self.n_tokens_in_messages = 0
         self.n_chars_in_messages = 0
@@ -55,13 +62,13 @@ class LLM_from_API(LanguageModel):
         self.n_tokens_in_messages += len(self.language_encoding.encode(prompt))
         self.messages.append({"role": "user", "content": prompt})
 
-    def generate(self, n : int) -> Union[str, List[str]]:
+    def generate(self, n: int) -> Union[str, List[str]]:
         """Generate a completion for the given prompt.
 
         Args:
             prompt (str): the prompt to complete.
             n (int): the number of completions to generate.
-            
+
         Returns:
             Union[str, List[str]]: the generated completion(s).
         """
@@ -70,24 +77,42 @@ class LLM_from_API(LanguageModel):
             len(self.messages) > 0
         ), "You need to add a prompt before generating completions."
         # Perform the inference
-        with RuntimeMeter("llm_inference"):
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=self.messages,
-                **self.kwargs,
-                n=n,
-                seed=np.random.randint(0, 10000),
-            )
-        return [choice.message.content for choice in response.choices]
-    
+        retries = 0
+        while retries < self.max_retries:
+            try:
+                with RuntimeMeter("llm_inference"):
+                    response = self.client.chat.completions.create(
+                        model=self.model,
+                        messages=self.messages,
+                        **self.config_inference,
+                        n=n,
+                        seed=np.random.randint(0, 10000),
+                    )
+                return [choice.message.content for choice in response.choices]
+            except RateLimitError as e:
+                # Handle rate limit error
+                print(f"Rate limit error: {e}. Retrying...")
+                retries += 1
+                if retries >= self.max_retries:
+                    raise ValueError(f"Max retries reached: {e}")
+                time_wait = np.clip(2**retries + np.random.uniform(0, 1), 10, 600)
+                time.sleep(time_wait)  # Exponential backoff
+            except LengthFinishReasonError as e:
+                # Crash if the answer is too long
+                raise ValueError(f"Length finish reason error: {e}")
+
         choices = response.choices
         answer = choices[0].message.content
         # Log inference metrics
         n_chars_in_answer = len(answer)
         n_tokens_in_answer = len(self.language_encoding.encode(answer))
         if self.price_per_1M_token_input is not None:
-            price_input = self.price_per_1M_token_input * self.n_tokens_in_messages / 1_000_000
-            price_output = self.price_per_1M_token_output * n_tokens_in_answer / 1_000_000
+            price_input = (
+                self.price_per_1M_token_input * self.n_tokens_in_messages / 1_000_000
+            )
+            price_output = (
+                self.price_per_1M_token_output * n_tokens_in_answer / 1_000_000
+            )
             price_inference = price_input + price_output
             pricing_metrics = {
                 "inference_metrics/price_input": price_input,

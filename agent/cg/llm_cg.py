@@ -1,5 +1,10 @@
 from collections import defaultdict
-from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from concurrent.futures import (
+    Future,
+    ProcessPoolExecutor,
+    ThreadPoolExecutor,
+    as_completed,
+)
 import os
 import re
 import signal
@@ -14,9 +19,11 @@ from omegaconf import OmegaConf
 from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller
 from agent.base_agent2 import BaseAgent2
+from core import task
 from core.error_trace import ErrorTrace
 from core.feedback_aggregator import FeedbackAggregated
 from core.loggers.base_logger import BaseLogger
+from core.parallel import run_parallel
 from core.play import play_controller_in_task
 from core.task import Task, TaskDescription
 from core.utils import get_error_info, sanitize_name
@@ -27,15 +34,13 @@ import random
 from typing import Any, Dict, Tuple, Union
 from llm import llm_name_to_LLMClass
 
-# Global interrupt flag
-interrupted = False
 
-def ctrl_c_handler(signum, frame):
-    global interrupted
-    print("\n[!] Ctrl+C received. Preparing graceful shutdown...")
-    interrupted = True
+class CodeExtractionError(Exception):
+    pass
 
-signal.signal(signal.SIGINT, ctrl_c_handler)
+
+class ControllerExecutionError(Exception):
+    pass
 
 
 class LLM_BasedControllerGenerator(BaseAgent2):
@@ -46,10 +51,10 @@ class LLM_BasedControllerGenerator(BaseAgent2):
             {
                 "config.yaml": OmegaConf.to_yaml(config),
             },
-            log_dir="",
+            log_subdir="",
         )
         # Get tasks here
-        self.tasks = self.env.get_current_tasks()
+        self.tasks = self.env.get_current_tasks()[:2]
         self.tasks = sorted(self.tasks, key=lambda task: str(task))
         # Get hyperparameters
         self.num_attempts_inference = config["num_attempts_inference"]
@@ -58,6 +63,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         self.k_pass = config["k_pass"]
         # Initialize variables
         self.t = 0
+        self.iter = 0
         self.list_prompt_keys: List[str] = config["list_prompt_keys"]
         self.base_scope = {}
         exec(open("agent/llm_hcg/base_scope.py").read(), self.base_scope)
@@ -155,6 +161,15 @@ class LLM_BasedControllerGenerator(BaseAgent2):
                 f"{task.get_code_repr()}\n"
             )
             dict_prompts["code_task"] = prompt_code_task
+        # Add the task map prompt
+        if "task_map" in self.list_prompt_keys:
+            prompt_task_map = (
+                "=== Task map ===\n"
+                "Here is the representation of the map in one of the episodes of the task. "
+                "Please note that some elements may vary between two episodes, for example, if the mission is something like 'go to the \{color\} goal', "
+                "the color of the goal may vary between two episodes. "
+                f"{task.get_map_repr()}"
+            )
 
         # Assemble the prompt
         list_prompt = []
@@ -166,204 +181,148 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         task_prompt = "\n\n".join(list_prompt)
         return task_prompt
 
-    def solve_tasks(
-        self,
-        tasks: List[Any],  # Replace `Any` with your `Task` type
-        n_inferences: Union[int, List[int]],
-        n_episodes_eval: Union[int, List[int]],
-    ) -> Iterator[str]:  # Change to `FeedbackAggregated` if needed
+    def step(self):
+        with RuntimeMeter("step"):
 
-        global interrupted
-        if isinstance(n_inferences, int):
-            list_n_inferences = [n_inferences] * len(tasks)
-        else:
-            list_n_inferences = n_inferences
-
-        if isinstance(n_episodes_eval, int):
-            list_n_episodes_eval = [n_episodes_eval] * len(tasks)
-        else:
-            list_n_episodes_eval = n_episodes_eval
-
-        batch_kwargs_solve_tasks: List[Dict[str, Any]] = []
-        for i in range(len(tasks)):
-            batch_kwargs_solve_tasks.append(
-                {
-                    "task": tasks[i],
-                    "n_inferences": list_n_inferences[i],
-                    "n_episodes_eval": list_n_episodes_eval[i],
-                }
+            # Run the task solving process in parallel
+            batch_configs_tasks: List[Dict[str, Any]] = []
+            for idx_task in range(len(self.tasks)):
+                task = self.tasks[idx_task]
+                batch_configs_tasks.append(
+                    {
+                        "task": task,
+                        "n_inferences": self.n_inferences,
+                        "n_episodes_eval": self.n_episodes_eval,
+                        "log_subdir": f"task_{sanitize_name(str(task))}",
+                    }
+                )
+            list_feedback_over_ctrl: List[FeedbackAggregated] = run_parallel(
+                func=self.solve_task,
+                batch_configs=batch_configs_tasks,
+                config_parallel=self.config["config_parallel"],
+                return_value_exception=None,
             )
+            
 
-        max_workers = 2
-        futures: List[Future] = []
-        count = 0
-
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            try:
-                for sub_batch_kwargs in self.get_chunks(batch_kwargs_solve_tasks, max_workers):
-                    if interrupted:
-                        break
-                    for kwargs_solve_task in sub_batch_kwargs:
-                        if interrupted:
-                            break
-                        future = executor.submit(self.solve_task, **kwargs_solve_task)
-                        futures.append(future)
-                        count += 1
-                    print(f"Submitted {count} / {len(batch_kwargs_solve_tasks)} tasks")
-
-                for future in futures:
-                    try:
-                        result = future.result()  # Optional timeout lets you respond to Ctrl+C faster
-                        print(result)
-                    except Exception as e:
-                        print(f"Task failed or timed out: {e}")
-            except KeyboardInterrupt:
-                os._exit(1)
-                print("KeyboardInterrupt while waiting for tasks.")
-
-        print("[✓] Graceful shutdown complete.")
+        self.logger.log_scalars(get_runtime_metrics(), step=0)
+        self.iter += 1
         
-    def get_chunks(self, lst: List[Any], size_chunk: int) -> Iterator[List[Any]]:
-        """Yield successive n-sized chunks from lst."""
-        for i in range(0, len(lst), size_chunk):
-            yield lst[i : i + size_chunk]
-
+    @retry(wait=wait_exponential(multiplier=1, min=30, max=600)+wait_random(min=0, max=1))
     def solve_task(
-        self, **kwargs: Dict[str, Any]  # Replace `Any` with your `Task` type
-    ) -> List[FeedbackAggregated]:
+        self,
+        task: Task,
+        n_inferences: int,
+        n_episodes_eval: int,
+        log_subdir: str,
+    ) -> FeedbackAggregated:
         """Solve a task using the LLM.
 
         Args:
             prompt_task (str): the prompt to send to the LLM
             n_inferences (int): the number of inferences to perform
             n_episodes_eval (int): the number of episodes to evaluate
+            log_subdir (str): the subdirectory to log the results. Results will be logged in <log_dir>/<log_subdir>/<log_name>
 
         Returns:
-            List[FeedbackAggregated]: a list of n_inferences feedback, each aggregated over n_episodes_eval
+            FeedbackAggregated: the feedback over the controllers
         """
-        # print(f"[{os.getpid()}] Starting task {task}")
-        time.sleep(1)
-        return "task solved"
         # Generate n_inferences answers for the task
         prompt_task = self.build_task_prompt(task)
+        self.log_texts(
+            {
+                "prompt.txt": prompt_task,
+            },
+            log_subdir=log_subdir,
+        )
         self.llm.reset()
         self.llm.add_prompt(prompt_task)
-        answers = self.llm.generate(n=n_inferences) # TODO : deal with errors here
+        answers = self.llm.generate(n=n_inferences)  # TODO : deal with errors here
 
         # Extract, execute, and play the controller for each answer
-        list_feedback_agg = []
-        for idx_c, answer in enumerate(answers):
-            feedback_agg = FeedbackAggregated()
-            # Extract the code block from the answer
+        feedback_over_ctrl = FeedbackAggregated(
+            agg_methods=["mean", f"best@{self.k_pass}", f"worst@{self.k_pass}"]
+        )
+        for idx_controller, answer in enumerate(answers):
             try:
-                code = self.extract_controller_code(answer)
-            except Exception as e:
-                # Retry if the code could not be extracted
-                print(
-                    f"[WARNING] : Could not extract the code from the answer. Error : {e}"
+                feedback_over_eps = FeedbackAggregated()
+                self.log_texts(
+                    {
+                        "answer.txt": answer,
+                    },
+                    log_subdir=f"{log_subdir}/completion_{idx_controller}",
                 )
-                feedback_agg.add_feedback(
+
+                # Extract the code block from the answer
+                code = self.extract_controller_code(answer)
+                self.log_texts(
+                    {
+                        "code.py": code,
+                    },
+                    log_subdir=f"{log_subdir}/completion_{idx_controller}",
+                )
+
+                # Execute the code and get the controller
+                controller = self.exec_code_and_get_controller(code)
+                self.log_texts(
+                    {
+                        "controller.py": code,
+                    },
+                    log_subdir=f"{log_subdir}/completion_{idx_controller}",
+                )
+
+                # Play the controller in the task
+                feedback_over_eps = play_controller_in_task(
+                    controller,
+                    task,
+                    n_episodes=n_episodes_eval,
+                    is_eval=False,
+                    log_subdir=f"{log_subdir}/completion_{idx_controller}",
+                )
+
+            except CodeExtractionError as e:
+                print(f"[WARNING] CodeExtractionError : {e}")
+                feedback_over_eps.add_feedback(
                     {
                         "error": ErrorTrace(
                             f"Could not extract the code from the answer. Error : {e}"
                         ),
                     }
                 )
-                feedback_agg.aggregate()
-                list_feedback_agg.append(feedback_agg)
-                continue
-            # Execute the code and get the controller
-            try:
-                controller = self.exec_code_and_get_controller(code)
-            except Exception as e:
-                print(
-                    f"[WARNING] : Could not execute and get the controller from the produced code. Error : {e}"
-                )
-                feedback_agg.add_feedback(
+
+            except ControllerExecutionError as e:
+                print(f"[WARNING] ControllerExecutionError : {e}")
+                feedback_over_eps.add_feedback(
                     {
                         "error": ErrorTrace(
-                            f"Could not execute and get the controller from the produced code. Error : {e}"
+                            f"Could not execute the code extracted from the answer. Error : {e}"
                         ),
                     }
                 )
-                feedback_agg.aggregate()
-                list_feedback_agg.append(feedback_agg)
-                continue
-            # Play the controller in the task
-            task_name = sanitize_name(str(task))
-            feedback_agg = play_controller_in_task(
-                controller,
-                task,
-                n_episodes=n_episodes_eval,
-                is_eval=False,
-                log_dir=f"task_{task_name}/controller_{idx_c}",
-            )
-            feedback_agg.aggregate()
-            list_feedback_agg.append(feedback_agg)
-        
-        return list_feedback_agg
-            
-            
-    def step(self):
-        with RuntimeMeter("step"):
-            # Solve the tasks
-            for list_feedback_agg in self.solve_tasks(
-                tasks=self.tasks,
-                n_inferences=self.n_inferences,
-                n_episodes_eval=self.n_episodes_eval,
-            ):
-                pass
-        raise
-        with RuntimeMeter("step"):
-            # Get the task
-            task = self.tasks[self.t]
-            print(f"Step {self.t}, task received: {task}")
-            # Reset metrics
-            for key in self.metrics_storer.keys():
-                self.metrics_storer[key] = 0
-            feedback_agg_over_controllers = FeedbackAggregated(
-                agg_methods=["mean", f"best@{self.k_pass}", f"worst@{self.k_pass}"]
-            )
-            # Play n controllers in the task
-            for i in range(self.n_inferences):
-                print(f"Step {self.t}, controller {i} generation...")
-                controller = self.generate_controller(
-                    task, log_dir=f"task_{self.t}/controller_{i}"
-                )
-                # Play the controller in the task
-                feedback_agg = play_controller_in_task(
-                    controller,
-                    task,
-                    n_episodes=self.n_episodes_eval,
-                    is_eval=False,
-                    log_dir=f"task_{self.t}/controller_{i}",
-                )
-                feedback_agg.aggregate()
-                self.log_texts(
-                    {
-                        f"feedback.txt": feedback_agg.get_repr(),
-                    },
-                    log_dir=f"task_{self.t}/controller_{i}",
-                )
-                metrics_agg_over_episodes = feedback_agg.get_metrics()
-                feedback_agg_over_controllers.add_feedback(metrics_agg_over_episodes)
-            feedback_agg_over_controllers.aggregate()
-            # Log the metrics
+
+            feedback_over_eps.aggregate()
             self.log_texts(
                 {
-                    f"feedback.txt": feedback_agg_over_controllers.get_repr(),
+                    f"feedback_over_eps.txt": feedback_over_eps.get_repr(),
                 },
-                log_dir=f"task_{self.t}",
+                log_subdir=f"{log_subdir}/completion_{idx_controller}",
             )
-            metrics_final = feedback_agg_over_controllers.get_metrics(prefix=str(task))
-            metrics_final.update(self.metrics_storer)
-            self.logger.log_scalars(metrics_final, step=self.t)
-        self.logger.log_scalars(get_runtime_metrics(), step=self.t)
-        # Move forward t
-        self.t += 1
+            metrics_over_eps = feedback_over_eps.get_metrics()
+            feedback_over_ctrl.add_feedback(metrics_over_eps)
+
+        feedback_over_ctrl.aggregate()
+        # Log the metrics
+        self.log_texts(
+            {
+                f"feedback_over_ctrl.txt": feedback_over_ctrl.get_repr(),
+            },
+            log_subdir=log_subdir,
+        )
+        metrics_final = feedback_over_ctrl.get_metrics(prefix=str(task))
+        self.logger.log_scalars(metrics_final, step=0)
+        return feedback_over_ctrl
 
     def is_done(self):
-        return self.t >= len(self.tasks)
+        return self.iter >= 1
 
     def generate_controller(self, task: Task, log_dir: str = None) -> Controller:
         """Generate a controller for the given task using the LLM.
@@ -408,7 +367,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
                 "prompt.txt": prompt,
                 "task_description.txt": str(task_description),
             },
-            log_dir=log_dir,
+            log_subdir=log_dir,
         )
 
         # Breakpoint-pause at each task if the debug mode is activated
@@ -441,7 +400,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
                         f"failure_sc_code_extraction_{no_attempt}_answer.txt": answer,
                         f"failure_sc_code_extraction_{no_attempt}_error.txt": str(e),
                     },
-                    log_dir=log_dir,
+                    log_subdir=log_dir,
                 )
                 self.metrics_storer["n_failure_sc_code_extraction"] += 1
                 if self.config["config_debug"][
@@ -467,7 +426,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
                         f"failure_sc_code_execution_{no_attempt}_answer.txt": answer,
                         f"failure_sc_code_execution_{no_attempt}_error.txt": full_error_info,
                     },
-                    log_dir=log_dir,
+                    log_subdir=log_dir,
                 )
                 self.metrics_storer["n_failure_sc_code_execution"] += 1
                 if self.config["config_debug"][
@@ -485,7 +444,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
                     "answer.txt": answer,
                     "specialized_controller.py": code,
                 },
-                log_dir=log_dir,
+                log_subdir=log_dir,
             )
             return specialized_controller
 
@@ -509,9 +468,11 @@ class LLM_BasedControllerGenerator(BaseAgent2):
             str: the code block extracted from the answer
         """
         matches = re.findall(r"```python\n(.*?)\n```", answer, re.DOTALL)
+        if len(matches) == 0:
+            raise CodeExtractionError("No python code block found in the answer.")
         if len(matches) != 1:
-            raise ValueError(
-                f"Expected exactly one Python code block, found {len(matches)}."
+            raise CodeExtractionError(
+                f"Expected exactly one python code block in the answer, found {len(matches)}."
             )
         return matches[0]
 
@@ -536,10 +497,8 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         try:
             exec(code, local_scope)
         except Exception as e:
-            breakpoint()
-            print("[ERROR] : Could not execute the code.")
             self.metrics_storer["n_failure_sc_code_execution_code_execution_error"] += 1
-            raise ValueError(
+            raise ControllerExecutionError(
                 f"An error occured while executing the code for instanciating a controller. Full error info : {get_error_info(e)}"
             )
 
@@ -549,11 +508,10 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         ):
             return local_scope["controller"]
         else:
-            print("[ERROR] : Could not retrieve the controller instance.")
             self.metrics_storer[
                 "n_failure_sc_code_execution_controller_not_created"
             ] += 1
-            raise ValueError(
+            raise ControllerExecutionError(
                 "No object named 'controller' of the class Controller found in the provided code."
             )
 

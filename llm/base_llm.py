@@ -32,11 +32,14 @@ class LanguageModel(ABC):
         """
 
     @abstractmethod
-    def generate(self) -> str:
+    def generate(self, n : int) -> List[str]:
         """Generate a completion based on its current state.
-
+        
+        Args:
+            n (int): the number of completions to generate.
+            
         Returns:
-            str: the completion of the prompt.
+            List[str]: the completion of the prompt.
         """
 
     @abstractmethod

@@ -25,6 +25,7 @@ class SpecializedController(Controller):
         self.position = (0, 0)  # Starting position
         self.has_given_position = False
         
+        
     def act(self, observation: Observation) -> ActionType:
         """Return the position of the agent when asked.
 

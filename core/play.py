@@ -45,7 +45,7 @@ def act_time_bounded(controller: Controller, obs: Any, time_limit: float) -> Act
 
     Raises:
         TimeoutError: If the action takes too long.
-        
+
     Returns:
         Any: The action to take.
     """
@@ -62,15 +62,16 @@ def act_time_bounded(controller: Controller, obs: Any, time_limit: float) -> Act
     finally:
         pool.close()
 
+
 def play_controller_in_task(
     controller: Controller,
     task: Task,
     n_episodes: int,
     is_eval: bool,
-    log_dir: str,
+    log_subdir: str,
 ) -> FeedbackAggregated:
     """Play the controller in the task for n_episodes episodes and return the feedback.
-    
+
     Args:
         controller (Controller): The controller to play in the task.
         task (Task): The task to play in.
@@ -80,12 +81,12 @@ def play_controller_in_task(
             in each of <log_dir_global>/<log_dir>/<name_file>.txt
     """
     # Initialize the feedback
-    feedback_agg_over_episodes = FeedbackAggregated()
+    feedback_over_eps = FeedbackAggregated()
     for k in range(n_episodes):
         # Reset the environment
         with RuntimeMeter("env_reset"):
             obs, info = task.reset(
-                is_eval=is_eval and k == 0, log_dir=log_dir
+                is_eval=is_eval and k == 0, log_dir=log_subdir
             )  # eval only once per rollout for now
         task.render()
 
@@ -99,14 +100,16 @@ def play_controller_in_task(
                 with RuntimeMeter("controller_act"):
                     # Use the time-bounded action method
                     action = act_time_bounded(controller, obs, time_limit=4.0)
-            except Exception as e: # Deal with error happening in the act method
+            except Exception as e:  # Deal with error happening in the act method
                 full_error_info = get_error_info(e)
                 error_message = f"An error occured during the act method of the controller. Full error info : {full_error_info}"
                 obs, reward, done, truncated = None, 0, False, True
                 break
             # Step in the environment
             obs, reward, done, truncated, info = task.step(action)
-            if "Error" in info: # Deal with error happening in the step method and logged in the info dict
+            if (
+                "Error" in info
+            ):  # Deal with error happening in the step method and logged in the info dict
                 error_message = info["Error"]
                 print(f"ERROR WARNING : {error_message}")
                 break
@@ -130,8 +133,8 @@ def play_controller_in_task(
         feedback.update(env_feedback)  # add environment feedback to feedback
         if error_message is not None:
             feedback["error"] = ErrorTrace(error_message)
-            
-        # Add feedback to the feedback aggregator
-        feedback_agg_over_episodes.add_feedback(feedback)
 
-    return feedback_agg_over_episodes
+        # Add feedback to the feedback aggregator
+        feedback_over_eps.add_feedback(feedback)
+
+    return feedback_over_eps

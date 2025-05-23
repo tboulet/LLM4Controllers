@@ -8,8 +8,9 @@ config:
     api_key: ${env_variable:'${llm.api_key_name}'}
     api_version: 2024-02-15-preview
   model: ${llm.model}
-  kwargs:
+  config_inference:
     temperature: 0.3
+  max_retries: 5
 
 
 

@@ -400,7 +400,7 @@ class MinigridMetaEnv(BaseMetaEnv):
                 lambda **kwargs: GiveAgentPositionEnv(size=self.size, **kwargs),
                 lambda **kwargs: GiveGoalPositionEnv(size=self.size, **kwargs),
                 lambda **kwargs: GoTowardsDirection(
-                    size=self.size, direction="up", **kwargs
+                    size=self.size, **kwargs
                 ),
                 lambda **kwargs: MoveToPosition(size=self.size, **kwargs),
             },

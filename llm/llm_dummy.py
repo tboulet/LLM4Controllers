@@ -29,15 +29,7 @@ class LLM_Dummy(LanguageModel):
         # We use user to avoid Claude incompatibility with system
         self.messages.append({"role": "user", "content": prompt})
 
-    def generate(self) -> str:
-        """Generate a completion for the given prompt.
-
-        Args:
-            prompt (str): the prompt to complete.
-
-        Returns:
-            str: the completion of the prompt.
-        """
+    def generate(self, n : int) -> str:
         assert (
             len(self.messages) > 0
         ), "You need to add a prompt before generating completions."
@@ -64,7 +56,7 @@ class LLM_Dummy(LanguageModel):
                     print(f"File inputs/{file_name_input} not found. Try again.")
                     file_name_input = input(f"Write answer file : inputs/")
                     continue
-            return answer
+            return [answer] * n
 
     def add_answer(self, answer: str):
         """Add the answer to the language model.

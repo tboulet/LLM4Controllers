@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import os
-from typing import Any, Dict, List, Union
+from typing import Any, Callable, Dict, List, Union
 from agent.base_controller import Controller
 from core.feedback_aggregator import FeedbackAggregated
 from core.loggers.base_logger import BaseLogger
@@ -32,21 +32,27 @@ class BaseAgent2(ABC):
         """Check if the agent is done."""
         return False
 
+    # === Helper functions ===
+
     def log_texts(
         self,
         dict_name_to_text: Dict[str, str],
-        log_dir: str,
+        log_subdir: str,
     ):
-        """Log texts in a directory. For each (key, value) in the directory, the file <log_dir>/task_<t>/<key> will contain the value.
+        """Log texts in a directory. For each (key, value) in the directory, the file <log_dir>/<log_subdir>/<key> will be created and the value will be written in it.
         It will do that for all <log_dir> in self.list_run_names.
 
         Args:
             dict_name_to_text (Dict[str, str]): a mapping from the name of the file to create to the text to write in it.
+            log_subdir (str): the subdirectory in which to create the files. If None, it will be created in the root directory of the run.
         """
+        if log_subdir is None:
+            log_subdir = ""
+            
         with RuntimeMeter("log_texts"):
             list_log_dirs: List[str] = []
             for log_dir_global in self.list_log_dirs_global:
-                list_log_dirs.append(os.path.join(log_dir_global, log_dir))
+                list_log_dirs.append(os.path.join(log_dir_global, log_subdir))
 
             for log_dir in list_log_dirs:
                 os.makedirs(log_dir, exist_ok=True)

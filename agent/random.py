@@ -73,7 +73,7 @@ class RandomAgent2(BaseAgent2):
             task,
             n_episodes=self.n_episodes_eval,
             is_eval=False,
-            log_dir=f"task_{self.t}",
+            log_subdir=f"task_{self.t}",
         )
         feedback_agg.aggregate()
         # Log the metrics
@@ -81,7 +81,7 @@ class RandomAgent2(BaseAgent2):
             {
                 f"feedback.txt": feedback_agg.get_repr(),
             },
-            log_dir=f"task_{self.t}",
+            log_subdir=f"task_{self.t}",
         )
         feedback_agg_over_controllers = (
             FeedbackAggregated()

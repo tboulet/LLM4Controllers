@@ -1,7 +1,8 @@
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 import os
 import re
+import signal
 import time
 from typing import Dict, Iterator, List
 from tbutils.tmeasure import RuntimeMeter, get_runtime_metrics
@@ -25,6 +26,16 @@ import enum
 import random
 from typing import Any, Dict, Tuple, Union
 from llm import llm_name_to_LLMClass
+
+# Global interrupt flag
+interrupted = False
+
+def ctrl_c_handler(signum, frame):
+    global interrupted
+    print("\n[!] Ctrl+C received. Preparing graceful shutdown...")
+    interrupted = True
+
+signal.signal(signal.SIGINT, ctrl_c_handler)
 
 
 class LLM_BasedControllerGenerator(BaseAgent2):
@@ -157,64 +168,68 @@ class LLM_BasedControllerGenerator(BaseAgent2):
 
     def solve_tasks(
         self,
-        tasks: List[Task],
+        tasks: List[Any],  # Replace `Any` with your `Task` type
         n_inferences: Union[int, List[int]],
         n_episodes_eval: Union[int, List[int]],
-    ) -> Iterator[FeedbackAggregated]:
-        """Solve the tasks using the LLM.
+    ) -> Iterator[str]:  # Change to `FeedbackAggregated` if needed
 
-        Args:
-            tasks (List[Task]): the list of tasks to solve
-            n_inferences (Union[int, List[int]]): the number of inferences to perform for each task
-            n_episodes_eval (Union[int, List[int]]): the number of episodes to evaluate for each task
-
-        Yields:
-            FeedbackAggregated: the feedback aggregated over all controllers
-        """
-        # Check if n_inferences and n_episodes_eval are lists or not
+        global interrupted
         if isinstance(n_inferences, int):
             list_n_inferences = [n_inferences] * len(tasks)
+        else:
+            list_n_inferences = n_inferences
+
         if isinstance(n_episodes_eval, int):
             list_n_episodes_eval = [n_episodes_eval] * len(tasks)
+        else:
+            list_n_episodes_eval = n_episodes_eval
 
-        # Build the kwargs to send to the solve_task function
         batch_kwargs_solve_tasks: List[Dict[str, Any]] = []
         for i in range(len(tasks)):
-            task = tasks[i]
-            n_inf = list_n_inferences[i]
-            n_ep_eval = list_n_episodes_eval[i]
             batch_kwargs_solve_tasks.append(
                 {
-                    "task": task,
-                    "n_inferences": n_inf,
-                    "n_episodes_eval": n_ep_eval,
+                    "task": tasks[i],
+                    "n_inferences": list_n_inferences[i],
+                    "n_episodes_eval": list_n_episodes_eval[i],
                 }
             )
 
-        # Get the completions in parallel
-        list_feedback_on_tasks = []
-        count = 0
         max_workers = 2
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            for sub_batch_kwargs in self.get_chunks(
-                batch_kwargs_solve_tasks, max_workers
-            ):
-                for kwargs_solve_tasks in sub_batch_kwargs:
-                    count += 1
-                    future = executor.submit(self.solve_task, **kwargs_solve_tasks)
-                    list_feedback_on_tasks.append(future)
-                time.sleep(5)
-                print(f"send {count} / {len(batch_kwargs_solve_tasks)} tasks")
+        futures: List[Future] = []
+        count = 0
 
-        breakpoint()
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            try:
+                for sub_batch_kwargs in self.get_chunks(batch_kwargs_solve_tasks, max_workers):
+                    if interrupted:
+                        break
+                    for kwargs_solve_task in sub_batch_kwargs:
+                        if interrupted:
+                            break
+                        future = executor.submit(self.solve_task, **kwargs_solve_task)
+                        futures.append(future)
+                        count += 1
+                    print(f"Submitted {count} / {len(batch_kwargs_solve_tasks)} tasks")
+
+                for future in futures:
+                    try:
+                        result = future.result()  # Optional timeout lets you respond to Ctrl+C faster
+                        print(result)
+                    except Exception as e:
+                        print(f"Task failed or timed out: {e}")
+            except KeyboardInterrupt:
+                os._exit(1)
+                print("KeyboardInterrupt while waiting for tasks.")
+
+        print("[✓] Graceful shutdown complete.")
         
-    def get_chunks(lst: List[Any], size_chunk: int) -> Iterator[List[Any]]:
+    def get_chunks(self, lst: List[Any], size_chunk: int) -> Iterator[List[Any]]:
         """Yield successive n-sized chunks from lst."""
         for i in range(0, len(lst), size_chunk):
             yield lst[i : i + size_chunk]
 
     def solve_task(
-        self, task : Task, n_inferences: int, n_episodes_eval: int
+        self, **kwargs: Dict[str, Any]  # Replace `Any` with your `Task` type
     ) -> List[FeedbackAggregated]:
         """Solve a task using the LLM.
 
@@ -226,6 +241,9 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         Returns:
             List[FeedbackAggregated]: a list of n_inferences feedback, each aggregated over n_episodes_eval
         """
+        # print(f"[{os.getpid()}] Starting task {task}")
+        time.sleep(1)
+        return "task solved"
         # Generate n_inferences answers for the task
         prompt_task = self.build_task_prompt(task)
         self.llm.reset()
@@ -294,20 +312,8 @@ class LLM_BasedControllerGenerator(BaseAgent2):
                 n_inferences=self.n_inferences,
                 n_episodes_eval=self.n_episodes_eval,
             ):
-                feedback_agg_over_controllers.aggregate()
-                # Log the metrics
-                self.log_texts(
-                    {
-                        f"feedback.txt": feedback_agg_over_controllers.get_repr(),
-                    },
-                    log_dir=f"task_{self.t}",
-                )
-                metrics_final = feedback_agg_over_controllers.get_metrics(
-                    prefix=str(self.tasks[self.t])
-                )
-                metrics_final.update(self.metrics_storer)
-                self.logger.log_scalars(metrics_final, step=self.t)
-
+                pass
+        raise
         with RuntimeMeter("step"):
             # Get the task
             task = self.tasks[self.t]

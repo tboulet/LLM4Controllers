@@ -1,7 +1,7 @@
 #!/bin/bash 
 
 #OAR -q default 
-#OAR -l host=1/cpu=4
+#OAR -l host=1/cpu=1
 #OAR -l walltime=1:00:00
 ##OAR -p gpu-16GB AND gpu_compute_capability_major>=5
 #OAR -O OAR_out.out

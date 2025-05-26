@@ -95,12 +95,12 @@ def get_GPUtil_metrics(prefix: str = "") -> Dict[str, Union[str, float]]:
         return {}
     elif len(gpus) > 1:
         print_once("[WARNING] Multiple GPUs found. Using the first one.")
-    gpu : GPU = gpus[0]
+    gpu_0_info : GPU = gpus[0]
     metrics = {
-        "gpu_memory_used": gpu.memoryUsed,
-        "gpu_memory_percent": gpu.memoryUtil,
-        "gpu_load_percent": gpu.load,
-        "gpu_temperature": gpu.temperature,
+        "gpu_memory_used": gpu_0_info.memoryUsed,
+        "gpu_memory_percent": gpu_0_info.memoryUtil,
+        "gpu_load_percent": gpu_0_info.load,
+        "gpu_temperature": gpu_0_info.temperature,
     }
     return {f"{prefix}{k}": v for k, v in metrics.items()}
 

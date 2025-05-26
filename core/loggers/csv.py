@@ -8,21 +8,24 @@ from core.loggers.base_logger import BaseLogger
 class LoggerCSV(BaseLogger):
     def __init__(
         self,
-        log_dir: str,
+        log_dirs: str,
         timestep_key: str = "_step",
     ):
-        os.makedirs(log_dir, exist_ok=True)
+        log_dirs = log_dirs if isinstance(log_dirs, list) else [log_dirs]
+        for log_dir in log_dirs:
+            os.makedirs(log_dir, exist_ok=True)
         self.timestep_key = timestep_key
         # Initialize scalar logger
 
-        self.csv_path = os.path.join(log_dir, "scalars.csv")
+        self.csv_paths = [os.path.join(log_dir, "scalars.csv") for log_dir in log_dirs]
         self.headers = [self.timestep_key]
         self.seen_fields = set(self.headers)
 
         # Create empty file and write initial header
-        with open(self.csv_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=self.headers)
-            writer.writeheader()
+        for csv_path in self.csv_paths:
+            with open(csv_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=self.headers)
+                writer.writeheader()
 
     def log_scalars(
         self,
@@ -41,15 +44,17 @@ class LoggerCSV(BaseLogger):
         # Build full row with missing values as ""
         complete_row = {key: row_dict.get(key, "") for key in self.headers}
 
-        with open(self.csv_path, "a", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=self.headers)
-            writer.writerow(complete_row)
+        for csv_path in self.csv_paths:
+            with open(csv_path, "a", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=self.headers)
+                writer.writerow(complete_row)
 
     def _expand_csv_with_new_keys(self, new_keys):
         # Read all rows
-        with open(self.csv_path, "r", newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            existing_rows = list(reader)
+        for csv_path in self.csv_paths:
+            with open(csv_path, "r", newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                existing_rows = list(reader)
 
         # Update rows with NaN ("") for new keys
         updated_rows = []
@@ -59,7 +64,8 @@ class LoggerCSV(BaseLogger):
             updated_rows.append(row)
 
         # Rewrite file with updated headers and rows
-        with open(self.csv_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=self.headers)
-            writer.writeheader()
-            writer.writerows(updated_rows)
+        for csv_path in self.csv_paths:
+            with open(csv_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=self.headers)
+                writer.writeheader()
+                writer.writerows(updated_rows)

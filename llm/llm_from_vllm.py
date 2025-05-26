@@ -93,15 +93,8 @@ class LLM_from_VLLM(LanguageModel):
         self.n_chars_in_messages += len(prompt)
         self.messages.append({"role": "user", "content": prompt})
 
-    def generate(self) -> str:
-        """Generate a completion for the given prompt.
+    def generate(self, n : int) -> str:
 
-        Args:
-            prompt (str): the prompt to complete.
-
-        Returns:
-            str: the completion of the prompt.
-        """
         # Unsure that the prompt is not empty
         assert (
             len(self.messages) > 0

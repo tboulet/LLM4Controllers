@@ -9,7 +9,9 @@ config:
     api_version: 2024-02-15-preview
   model: ${llm.model}
   config_inference:
-    temperature: 0.3
+    max_tokens: 4096
+    temperature: 0.5
+    top_p: 1.0
   max_retries: 5
 
 

@@ -56,7 +56,7 @@ def main(config: DictConfig):
     env_name: str = config["env"]["name"]
     model_name: str = try_get(config["agent"], "config.llm.model", default="")
     model_name = sanitize_name(model_name.replace("/", "_"))
-    
+
     n_steps_max: int = config.get("n_steps_max", np.inf)
     n_steps_max = to_maybe_inf(n_steps_max)
 
@@ -76,9 +76,7 @@ def main(config: DictConfig):
 
     # Set the run name
     date = datetime.datetime.now().strftime("%mmo%dth_%Hh%Mmin%Ss")
-    run_name = "_".join(
-        [date, agent_name, model_name, env_name, f"seed{seed}"]
-    )
+    run_name = "_".join([date, agent_name, model_name, env_name, f"seed{seed}"])
     config["agent"]["config"]["run_name"] = run_name
     config["env"]["config"]["run_name"] = run_name
     config["llm"]["run_name"] = run_name
@@ -99,7 +97,12 @@ def main(config: DictConfig):
     if do_tb:
         loggers.append(LoggerTensorboard(log_dir=f"{log_dir}/{run_name}"))
     if do_csv:
-        loggers.append(LoggerCSV(log_dir=f"{log_dir}/{run_name}"))
+        loggers.append(
+            LoggerCSV(
+                log_dirs=[f"{log_dir}/{run_name}", f"{log_dir}/last/"],
+                timestep_key="_step",
+            )
+        )
     if do_tqdm and n_steps_max != np.inf:
         loggers.append(LoggerTQDM(n_total=n_steps_max))
     logger = MultiLogger(*loggers)

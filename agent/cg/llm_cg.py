@@ -9,7 +9,7 @@ import os
 import re
 import signal
 import time
-from typing import Dict, Iterator, List
+from typing import Dict, Iterator, List, Optional
 from tbutils.tmeasure import RuntimeMeter, get_runtime_metrics
 import tiktoken
 
@@ -53,17 +53,14 @@ class LLM_BasedControllerGenerator(BaseAgent2):
             },
             log_subdir="",
         )
-        # Get tasks here
-        self.tasks = self.env.get_current_tasks()[:2]
-        self.tasks = sorted(self.tasks, key=lambda task: str(task))
         # Get hyperparameters
-        self.num_attempts_inference = config["num_attempts_inference"]
-        self.n_inferences = config["n_inferences"]
-        self.n_episodes_eval = config["n_episodes_eval"]
-        self.k_pass = config["k_pass"]
+        self.n_tasks_to_do: Optional[int] = config["n_tasks_to_do"]
+        self.n_completions: int = config["n_completions"]
+        self.n_episodes_eval: int = config["n_episodes_eval"]
+        self.k_pass: int = config["k_pass"]
         # Initialize variables
-        self.t = 0
-        self.iter = 0
+        self.t: int = 0
+        self.iter: int = 0
         self.list_prompt_keys: List[str] = config["list_prompt_keys"]
         self.base_scope = {}
         exec(open("agent/llm_hcg/base_scope.py").read(), self.base_scope)
@@ -72,12 +69,17 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         self.metrics_storer = defaultdict(int)
 
         # Initialize LLM
+        print("Initializing LLM...")
         name_llm = config["llm"]["name"]
         config_llm = config["llm"]["config"]
         self.llm = llm_name_to_LLMClass[name_llm](config=config_llm, logger=logger)
 
-        # === Generate the different parts of the prompt ===
+        # Get tasks here
+        print("Getting tasks...")
+        self.tasks = self.env.get_current_tasks()[: self.n_tasks_to_do]
+        self.tasks = sorted(self.tasks, key=lambda task: str(task))
 
+        # === Generate the different parts of the prompt ===
         self.dict_prompts: Dict[str, str] = {}
 
         # Prompt system
@@ -191,7 +193,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
                 batch_configs_tasks.append(
                     {
                         "task": task,
-                        "n_inferences": self.n_inferences,
+                        "n_completions": self.n_completions,
                         "n_episodes_eval": self.n_episodes_eval,
                         "log_subdir": f"task_{sanitize_name(str(task))}",
                     }
@@ -200,18 +202,32 @@ class LLM_BasedControllerGenerator(BaseAgent2):
                 func=self.solve_task,
                 batch_configs=batch_configs_tasks,
                 config_parallel=self.config["config_parallel"],
-                return_value_exception=None,
+                return_value_on_exception=None,
             )
-            
 
-        self.logger.log_scalars(get_runtime_metrics(), step=0)
+        # Log runtime metrics
+        metrics_runtime = get_runtime_metrics()
+
+        def sanitize_runtime_key(key: str) -> str:
+            if key.endswith("_last"):
+                return f"runtime_last/{key[8:]}"
+            elif key.endswith("_avg"):
+                return f"runtime_avg/{key[8:]}"
+            else:
+                return key
+
+        metrics_runtime = {
+            sanitize_runtime_key(key): value for key, value in metrics_runtime.items()
+        }
+        self.logger.log_scalars(metrics_runtime, step=0)
+
+        # Move forward the iter counter
         self.iter += 1
-        
-    @retry(wait=wait_exponential(multiplier=1, min=30, max=600)+wait_random(min=0, max=1))
+
     def solve_task(
         self,
         task: Task,
-        n_inferences: int,
+        n_completions: int,
         n_episodes_eval: int,
         log_subdir: str,
     ) -> FeedbackAggregated:
@@ -219,14 +235,14 @@ class LLM_BasedControllerGenerator(BaseAgent2):
 
         Args:
             prompt_task (str): the prompt to send to the LLM
-            n_inferences (int): the number of inferences to perform
+            n_completions (int): the number of completions to perform
             n_episodes_eval (int): the number of episodes to evaluate
             log_subdir (str): the subdirectory to log the results. Results will be logged in <log_dir>/<log_subdir>/<log_name>
 
         Returns:
             FeedbackAggregated: the feedback over the controllers
         """
-        # Generate n_inferences answers for the task
+        # Generate n_completions answers for the task
         prompt_task = self.build_task_prompt(task)
         self.log_texts(
             {
@@ -234,9 +250,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
             },
             log_subdir=log_subdir,
         )
-        self.llm.reset()
-        self.llm.add_prompt(prompt_task)
-        answers = self.llm.generate(n=n_inferences)  # TODO : deal with errors here
+        answers = self.llm.generate(prompt=prompt_task, n=n_completions)
 
         # Extract, execute, and play the controller for each answer
         feedback_over_ctrl = FeedbackAggregated(
@@ -263,12 +277,6 @@ class LLM_BasedControllerGenerator(BaseAgent2):
 
                 # Execute the code and get the controller
                 controller = self.exec_code_and_get_controller(code)
-                self.log_texts(
-                    {
-                        "controller.py": code,
-                    },
-                    log_subdir=f"{log_subdir}/completion_{idx_controller}",
-                )
 
                 # Play the controller in the task
                 feedback_over_eps = play_controller_in_task(
@@ -323,135 +331,6 @@ class LLM_BasedControllerGenerator(BaseAgent2):
 
     def is_done(self):
         return self.iter >= 1
-
-    def generate_controller(self, task: Task, log_dir: str = None) -> Controller:
-        """Generate a controller for the given task using the LLM.
-
-        Args:
-            task (Task): the task to solve
-            log_dir (str): the directory to log the generated controller. By default, it is None and the controller is not logged.
-        """
-        # Generate the prompt
-        with RuntimeMeter("env_get_description"):
-            task_description = task.get_description()
-        prompt_task = "=== Task ===\n" f"{task}"
-        prompt_task_description = "=== Task description ===\n" f"{task_description}"
-        prompt_instructions = (
-            "=== Instructions ===\n"
-            "Your answer should include a python code (inside a code block) that implements a class "
-            "inheriting from 'Controller' and instantiate it under a variable named 'controller'. "
-        )
-        prompt_code_task = (
-            "=== Code of the task ===\n"
-            "Here is the code used to create the task, as well as the code of the particular task. \n"
-            f"{task.get_code_repr()}\n"
-        )
-
-        prompts = self.dict_prompts.copy()
-        prompts["task"] = prompt_task
-        prompts["task_description"] = prompt_task_description
-        prompts["instructions"] = prompt_instructions
-        prompts["code_task"] = prompt_code_task
-
-        list_prompt = []
-        for prompt_key in self.list_prompt_keys:
-            assert (
-                prompt_key in prompts
-            ), f"Prompt key {prompt_key} not found in prompts."
-            list_prompt.append(prompts[prompt_key])
-        prompt = "\n\n".join(list_prompt)
-
-        # Log the prompt and the task description
-        self.log_texts(
-            {
-                "prompt.txt": prompt,
-                "task_description.txt": str(task_description),
-            },
-            log_subdir=log_dir,
-        )
-
-        # Breakpoint-pause at each task if the debug mode is activated
-        if self.config["config_debug"]["breakpoint_inference"]:
-            print(f"Task {self.t}. Press 'c' to continue.")
-            breakpoint()
-
-        # Iterate until the controller is generated. If error, log it in the message and ask the assistant to try again.
-        is_controller_instance_generated = False
-        self.llm.reset()
-        self.llm.add_prompt(prompt)
-        for no_attempt in range(self.num_attempts_inference):
-            self.metrics_storer["n_attempts_inference"] += 1
-            # Ask the assistant
-            answer = self.llm.generate()
-            self.llm.add_answer(answer)
-            # Extract the code block from the answer
-            try:
-                code = self.extract_controller_code(answer)
-            except Exception as e:
-                # Retry if the code could not be extracted
-                print(
-                    f"[WARNING] : Could not extract the code from the answer. Asking the assistant to try again. (Attempt {no_attempt+1}/{self.num_attempts_inference}). Error : {e}"
-                )
-                self.llm.add_prompt(
-                    f"I'm sorry, extracting the code from your answer failed. Please try again and make sure the code obeys the following format:\n```python\n<your code here>\n```. Error : {e}"
-                )
-                self.log_texts(
-                    {
-                        f"failure_sc_code_extraction_{no_attempt}_answer.txt": answer,
-                        f"failure_sc_code_extraction_{no_attempt}_error.txt": str(e),
-                    },
-                    log_subdir=log_dir,
-                )
-                self.metrics_storer["n_failure_sc_code_extraction"] += 1
-                if self.config["config_debug"][
-                    "breakpoint_inference_on_failure_code_extraction"
-                ]:
-                    print("controller code extraction failed. Press 'c' to continue.")
-                    breakpoint()
-                continue
-            # Extract the controller
-            try:
-                with RuntimeMeter("exec_code"):
-                    specialized_controller = self.exec_code_and_get_controller(code)
-            except Exception as e:
-                full_error_info = get_error_info(e)
-                print(
-                    f"[WARNING] : Could not execute the code from the answer. Asking the assistant to try again (Attempt {no_attempt+1}/{self.num_attempts_inference}). Full error info : {full_error_info}"
-                )
-                self.llm.add_prompt(
-                    f"I'm sorry, an error occured while executing your code. Please try again and make sure the code is correct. Full error info : {full_error_info}"
-                )
-                self.log_texts(
-                    {
-                        f"failure_sc_code_execution_{no_attempt}_answer.txt": answer,
-                        f"failure_sc_code_execution_{no_attempt}_error.txt": full_error_info,
-                    },
-                    log_subdir=log_dir,
-                )
-                self.metrics_storer["n_failure_sc_code_execution"] += 1
-                if self.config["config_debug"][
-                    "breakpoint_inference_on_failure_code_execution"
-                ]:
-                    print("controller code execution failed. Press 'c' to continue.")
-                    breakpoint()
-                continue
-            is_controller_instance_generated = True
-            break
-
-        if is_controller_instance_generated:
-            self.log_texts(
-                {
-                    "answer.txt": answer,
-                    "specialized_controller.py": code,
-                },
-                log_subdir=log_dir,
-            )
-            return specialized_controller
-
-        else:
-            raise ValueError(
-                f"Could not generate a controller after {self.num_attempts_inference} attempts. Stopping the process."
-            )
 
     def extract_controller_code(self, answer: str) -> str:
         """Extract a python code block from the answer.

@@ -497,7 +497,7 @@ Observations: The observation is a dictionary with the following keys:
 - direction (int) : the direction the agent is facing : {dict_directions}
 - image (nd.array) : the full map of the environment as a 3D numpy array of shape (height, width, 3). The channels represent the encoding of the object at position (i,j) in the environment (object type, color, state). 
 IMPORTANT : The environment is fully observable and the camera position and orientation are fixed (centered on the environment and facing up).
-- mission (str) : the mission string describing the task to be accomplished (e.g. "go to the green ball"). This should be the same as the task you will receive later so don't pay attention to it.
+- mission (str) : the mission string describing the task to be accomplished (e.g. "go to the green ball").
 
 The mapping from object type integer to object type string is as follows: {IDX_TO_OBJECT}.
 The mapping from color integer to color string is as follows: {IDX_TO_COLOR}.

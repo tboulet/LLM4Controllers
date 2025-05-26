@@ -89,3 +89,43 @@ def sanitize_name(name: str) -> str:
     name = name.replace('(', '')
     name = name.replace(')', '')
     return name
+
+def abbreviate_metric(metric: str, max_len_metric_name: int = 20) -> str:
+    if len(metric) <= max_len_metric_name:
+        return metric
+
+    parts = metric.split('/')
+    longest_idx = max(range(len(parts)), key=lambda i: len(parts[i]))
+    longest_part = parts[longest_idx]
+
+    # Length available for the abbreviated name (excluding "...")
+    available_length = max_len_metric_name
+
+    # Calculate total length without the longest part
+    total_len_wo_longest = sum(len(p) for i, p in enumerate(parts) if i != longest_idx)
+    num_slashes = len(parts) - 1
+    total_len_wo_longest += num_slashes  # count slashes
+
+    # Length available for abbreviated part
+    abbrev_len = available_length - total_len_wo_longest
+    if abbrev_len < 2:
+        # Cannot abbreviate properly
+        return metric[:max_len_metric_name]
+
+    # Abbreviate the longest part
+    left = abbrev_len // 2
+    right = abbrev_len - left
+    abbreviated = longest_part[:left] + "..." + longest_part[-right:]
+
+    # Reconstruct the metric
+    parts[longest_idx] = abbreviated
+    result = '/'.join(parts)
+    
+    return result if len(result) <= max_len_metric_name else result[:max_len_metric_name]
+
+
+def average(lst : list) -> float:
+    """Compute the average of a list of numbers."""
+    if len(lst) == 0:
+        return 0.0
+    return sum(lst) / len(lst)

@@ -3,6 +3,8 @@ from typing import Dict, List, Tuple, Type, Union
 
 import numpy as np
 
+from core.utils import abbreviate_metric
+
 from .base_logger import BaseLogger
 from tensorboardX import SummaryWriter
 from tbutils.tmeasure import RuntimeMeter
@@ -28,6 +30,8 @@ class MultiLogger(BaseLogger):
             matches = re.search(unsafe_chars, key)
             if matches:
                 print_once(f"WARNING : metric key '{key}' contains unsafe characters : {matches.group(0)}. This may cause issues with some loggers.")
+        # Reduce the size of the metrics
+        metrics = {abbreviate_metric(k, max_len_metric_name=50): v for k, v in metrics.items()}
         # Log the metrics to each logger
         for logger in self.loggers:
             with RuntimeMeter(f"log_scalars_{logger.__class__.__name__}"):

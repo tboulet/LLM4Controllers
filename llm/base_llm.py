@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Union
-import GPUtil
+from typing import Any, Dict, List, Optional, Union
+from GPUtil import GPU, getGPUs
 import pynvml
 from core.loggers.base_logger import BaseLogger
 from core.loggers.none_logger import NoneLogger
@@ -18,38 +18,26 @@ class LanguageModel(ABC):
         """
         self.config = config
         self.logger = logger
-        
-    @abstractmethod
-    def reset(self):
-        """Reset the language model at empty state."""
 
     @abstractmethod
-    def add_prompt(self, prompt: str):
-        """Add the prompt to the language model.
-
-        Args:
-            prompt (str): the prompt to add.
-        """
-
-    @abstractmethod
-    def generate(self, n : int) -> List[str]:
+    def generate(
+        self,
+        prompt: Optional[str] = None,
+        messages: Optional[List[Dict[str, str]]] = None,
+        n: int = 1,
+    ) -> List[str]:
         """Generate a completion based on its current state.
         
         Args:
-            n (int): the number of completions to generate.
+            prompt (Optional[str], optional): the prompt to use for the completion. Defaults to None (use messages).
+            messages (Optional[List[Dict[str, str]]], optional): a list of messages to use for the completion. Defaults to None (use the prompt).
+            n (int, optional): the number of completions to generate. Defaults to 1.
             
         Returns:
             List[str]: the completion of the prompt.
         """
-
-    @abstractmethod
-    def add_answer(self, answer: str):
-        """Add the answer to the language model.
-
-        Args:
-            answer (str): the answer to add.
-        """
-
+        raise NotImplementedError
+    
     def optimize(self):
         raise NotImplementedError  # not implemented yet
 
@@ -63,6 +51,7 @@ class LanguageModel(ABC):
         """Get the GPU usage information.
 
         Args:
+            model_hf (PreTrainedModel, optional): the Hugging Face model if any.
             model_name_hf (str): the Hugging Face model name if any.
             
         Returns:
@@ -84,10 +73,16 @@ class LanguageModel(ABC):
         info = pynvml.nvmlDeviceGetMemoryInfo(gpu_handle)
         list_info.append(f"(PyNVML) GPU 0 Memory Used: {info.used / 1024**3:.2f} GB")
         # GPUtil
-        gpu_0_info = GPUtil.getGPUs()[0]
-        list_info.append(f"(GPUtil) GPU 0 Memory Used: {gpu_0_info.memoryUsed / 1024:.2f} GB")
-        list_info.append(f"(GPUtil) GPU 0 Memory Free: {gpu_0_info.memoryFree / 1024:.2f} GB")
-        list_info.append(f"(GPUtil) GPU 0 Memory Total: {gpu_0_info.memoryTotal / 1024:.2f} GB")
-        list_info.append(f"(GPUtil) GPU 0 Memory Util: {gpu_0_info.memoryUtil * 100:.2f}%")
+        gpus = getGPUs()
+        if len(gpus) > 1:
+            print("[WARNING] Multiple GPUs found. Using the first one.")
+        if len(gpus) == 0:
+            print("[WARNING] No GPUs found.")
+        else:
+            gpu_0_info : GPU = getGPUs()[0]
+            list_info.append(f"(GPUtil) GPU 0 Memory Used: {gpu_0_info.memoryUsed / 1024:.2f} GB")
+            list_info.append(f"(GPUtil) GPU 0 Memory Free: {gpu_0_info.memoryFree / 1024:.2f} GB")
+            list_info.append(f"(GPUtil) GPU 0 Memory Total: {gpu_0_info.memoryTotal / 1024:.2f} GB")
+            list_info.append(f"(GPUtil) GPU 0 Memory Util: {gpu_0_info.memoryUtil * 100:.2f}%")
         # Return
         return "\t" + "\n\t".join(list_info)

@@ -121,7 +121,7 @@ def abbreviate_metric(metric: str, max_len_metric_name: int = 20) -> str:
     parts[longest_idx] = abbreviated
     result = '/'.join(parts)
     
-    return result if len(result) <= max_len_metric_name else result[:max_len_metric_name]
+    return result
 
 
 def average(lst : list) -> float:

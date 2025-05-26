@@ -5,8 +5,8 @@ config:
   list_prompt_keys:
     - system
     - env
-    # - code_env
-    # - code_task
+    - code_env
+    - code_task
     - controller_structure
     - example_answer
     - task
@@ -14,10 +14,10 @@ config:
     - instructions
 
   # The number of tasks to do. If none, will do all tasks.
-  n_tasks_to_do: null
+  n_tasks_to_do: 10
 
   # The number of completions to make per inference on a task
-  n_completions: 30
+  n_completions: 10
 
   # The number of episodes on which a controller will be evaluated on a task
   n_episodes_eval: 10
@@ -30,8 +30,8 @@ config:
 
   # The config for parallel running
   config_parallel:
-    method: thread_pool # either thread_pool or sequential
-    # method: sequential
+    # method: thread_pool # either thread_pool or sequential
+    method: thread_pool
     max_workers: 3
 
   config_debug:

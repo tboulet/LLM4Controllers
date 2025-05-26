@@ -13,6 +13,8 @@ from typing import Any, Callable, Dict, Iterator, List
 from tbutils.tmeasure import RuntimeMeter, get_runtime_metrics
 import tiktoken
 
+from core.utils import get_error_info
+
 
 def get_chunks(lst: List[Any], size_chunk: int) -> Iterator[List[Any]]:
     """Yield successive n-sized chunks from lst."""
@@ -54,7 +56,7 @@ def run_parallel(
             try:
                 result = future.result()
             except Exception as e:
-                print(f"Exception in thread: {e}")
+                print(f"Exception in thread: {get_error_info(e)}")
                 result = return_value_on_exception
             results.append(result)
         return results
@@ -65,8 +67,8 @@ def run_parallel(
         for config_task in batch_configs:
             try:
                 result = func(**config_task)
-            except Exception as e:
-                print(f"Exception in thread: {e}")
+            except ValueError as e:
+                print(f"Exception in thread: {get_error_info(e)}")
                 result = return_value_on_exception
             results.append(result)
         return results

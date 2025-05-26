@@ -223,9 +223,10 @@ class TaskMinigrid(Task):
                 self.env_mg.unwrapped.__class__
             )
             docstring_of_class = self.env_mg.unwrapped.__class__.__doc__
-            self.code_of_env_mg_class = self.code_of_env_mg_class.replace(
-                docstring_of_class, ""
-            )
+            if docstring_of_class is not None:
+                self.code_of_env_mg_class = self.code_of_env_mg_class.replace(
+                    docstring_of_class, ""
+                )
         return (
             "```python\n"
             f"{self.code_of_env_mg_class}\n"

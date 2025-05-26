@@ -10,7 +10,7 @@ from tensorboardX import SummaryWriter
 from tbutils.tmeasure import RuntimeMeter
 from tbutils.exec_max_n import print_once
 
-unsafe_chars = r'[\\\s:.,;=?!&#@!%*"\'\[\]\{\}\(\)]'
+unsafe_chars = r'[\\\s:,;=?!&#@!%*"\'\[\]\{\}\(\)]'
 
 
 class MultiLogger(BaseLogger):
@@ -25,13 +25,13 @@ class MultiLogger(BaseLogger):
             step = self.max_timestep
         else:
             self.max_timestep = max(self.max_timestep, step)
+        # Reduce the size of the metrics
+        metrics = {abbreviate_metric(k, max_len_metric_name=50): v for k, v in metrics.items()}
         # Check for unsafe characters in the metric keys
         for key in metrics:
             matches = re.search(unsafe_chars, key)
             if matches:
                 print_once(f"WARNING : metric key '{key}' contains unsafe characters : {matches.group(0)}. This may cause issues with some loggers.")
-        # Reduce the size of the metrics
-        metrics = {abbreviate_metric(k, max_len_metric_name=50): v for k, v in metrics.items()}
         # Log the metrics to each logger
         for logger in self.loggers:
             with RuntimeMeter(f"log_scalars_{logger.__class__.__name__}"):

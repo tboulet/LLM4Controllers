@@ -6,12 +6,22 @@ import signal
 from contextlib import contextmanager
 
 
-def get_error_info(e):
+def get_error_info(e : Union[Exception, Type[Exception]], string_mode: bool = True) -> Union[str, Tuple[str, str]]:
+    """Get the error information from an exception, including the stack trace.
+    
+    Args:
+        e (Exception): The exception to get the error information from.
+        string_mode (bool): If True, return the error information as a string. If False, return a tuple of (stack_trace, error_output).
+        
+    Returns:
+        str : returns the error information as a string.
+    """
     stack_trace = traceback.format_exc()  # Capture the full stack trace as a string
-    relevant_stack_trace = "\n".join(
-        line for line in stack_trace.splitlines() if "<string>" in line
-    )
-    error_info = f"Stack Trace:\n{relevant_stack_trace} \nError Output:\n{e}"
+    if string_mode:
+        stack_trace = "\n".join(
+            line for line in stack_trace.splitlines() if "<string>" in line
+        )
+    error_info = f"Stack Trace:\n{stack_trace} \nError Output:\n{e}"
     return error_info
 
 

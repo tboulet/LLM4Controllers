@@ -56,7 +56,7 @@ def run_parallel(
             try:
                 result = future.result()
             except Exception as e:
-                print(f"Exception in thread: {get_error_info(e)}")
+                print(f"Exception in thread: {get_error_info(e, string_mode=False)}")
                 result = return_value_on_exception
             results.append(result)
         return results
@@ -68,8 +68,7 @@ def run_parallel(
             try:
                 result = func(**config_task)
             except Exception as e:
-                raise e
-                print(f"Exception in thread: {get_error_info(e)}")
+                print(f"Exception in thread: {get_error_info(e, string_mode=False)}")
                 result = return_value_on_exception
             results.append(result)
         return results

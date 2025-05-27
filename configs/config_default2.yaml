@@ -27,8 +27,8 @@ config_logs:
 defaults:
   - _self_
   - env : minigrid
-  - agent : hcg2
-  - llm : openai
+  - agent : cg
+  - llm : dummy
   - override hydra/hydra_logging: disabled  
   - override hydra/job_logging: disabled 
 

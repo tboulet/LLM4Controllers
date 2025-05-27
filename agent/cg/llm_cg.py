@@ -168,10 +168,13 @@ class LLM_BasedControllerGenerator(BaseAgent2):
             prompt_task_map = (
                 "=== Task map ===\n"
                 "Here is the representation of the map in one of the episodes of the task. "
-                "Please note that some elements may vary between two episodes, for example, if the mission is something like 'go to the \{color\} goal', "
+                "Please note that some elements may vary between two episodes, for example, if the mission is something like 'go to the {color} goal', "
                 "the color of the goal may vary between two episodes. "
+                "Or if the episodic creation involves some random elements, the map may vary. "
+                "\n"
                 f"{task.get_map_repr()}"
             )
+            dict_prompts["task_map"] = prompt_task_map
 
         # Assemble the prompt
         list_prompt = []

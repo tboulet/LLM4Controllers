@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 from core.loggers.base_logger import BaseLogger
@@ -16,23 +16,18 @@ class LLM_Dummy(LanguageModel):
         self.config = config
         self.path_answer = config["path_answer"]
 
-    def reset(self):
-        """Reset the language model at empty state."""
-        self.messages = []
-
-    def add_prompt(self, prompt: str):
-        """Add a prompt to the language model.
-
-        Args:
-            prompt (str): the prompt to add.
-        """
-        # We use user to avoid Claude incompatibility with system
-        self.messages.append({"role": "user", "content": prompt})
-
-    def generate(self, n : int) -> str:
-        assert (
-            len(self.messages) > 0
-        ), "You need to add a prompt before generating completions."
+    def generate(
+        self,
+        prompt: Optional[str] = None,
+        messages: Optional[List[Dict[str, str]]] = None,
+        n: int = 1,
+    ) -> List[str]:
+        # Build the messages, assert prompt xor messages is provided
+        assert (prompt is not None) ^ (
+            messages is not None
+        ), "Either 'prompt' or 'messages' must be provided, but not both."
+        if messages is None:
+            messages = [{"role": "user", "content": prompt}]
         # Load the answer from the input file
         if self.path_answer is None:
             file_name_input = input(f"Write answer file : inputs/")
@@ -40,7 +35,7 @@ class LLM_Dummy(LanguageModel):
             file_name_input = self.path_answer
         # If file_name_input == 'see', show the prompt
         if file_name_input == "see":
-            print(self.messages)
+            print(messages)
             return self.generate()
         elif file_name_input == "break":
             breakpoint()
@@ -57,11 +52,3 @@ class LLM_Dummy(LanguageModel):
                     file_name_input = input(f"Write answer file : inputs/")
                     continue
             return [answer] * n
-
-    def add_answer(self, answer: str):
-        """Add the answer to the language model.
-
-        Args:
-            answer (str): the answer to add.
-        """
-        self.messages.append({"role": "assistant", "content": answer})

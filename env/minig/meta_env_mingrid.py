@@ -143,7 +143,8 @@ class TaskMinigrid(Task):
         # Other variables
         self.task_description: str = None
         self.code_of_env_mg_class: str = None
-        self.env_mg = None
+        self.env_mg : MiniGridEnv = None
+        self.first_obs : Observation = None
 
     # ===== Helper methods ===
 
@@ -210,8 +211,6 @@ class TaskMinigrid(Task):
                 self.env_mg = self.create_new_env_mg(render_mode=None)
             # Extract the task description from the environment
             self.task_description = self.extract_task_description_from_env(self.env_mg)
-            del self.env_mg
-            self.env_mg = None
         return self.task_description
 
     def get_code_repr(self) -> str:
@@ -238,6 +237,62 @@ class TaskMinigrid(Task):
             "```"
         )
 
+    def get_map_repr(self) -> str:
+        """Get a string representation of the map of the environment.
+
+        Returns:
+            str: The string representation of the map.
+        """
+        if self.env_mg is None:
+            self.env_mg = self.create_new_env_mg(render_mode=None)
+        if self.first_obs is None:
+            self.first_obs, _ = self.env_mg.reset()
+        
+        grid = self.first_obs['image']
+
+        # Step 1: Build grid of cell labels
+        label_grid = []
+        for row in grid:
+            label_row = []
+            for cell in row:
+                obj_idx, color_idx, state_idx = cell
+                obj = IDX_TO_OBJECT.get(obj_idx, 'empty')
+                color = IDX_TO_COLOR.get(color_idx, '')
+                state = [k for k, v in STATE_TO_IDX.items() if v == state_idx]
+                state_str = state[0] if state else None
+
+                if obj == 'empty':
+                    label = ''
+                elif obj == 'wall':
+                    label = 'wall'
+                elif obj == 'door' and state_str:
+                    label = f'{color} door ({state_str})'
+                else:
+                    label = f'{color} {obj}'
+                label_row.append(label)
+            label_grid.append(label_row)
+
+        # Step 2: Find max label length
+        max_len = max(len(label) for row in label_grid for label in row)
+        num_cols = len(label_grid[0])
+        hcell = '─' * (max_len + 2)
+
+        # Step 3: Build box borders
+        top    = '┌' + '┬'.join([hcell] * num_cols) + '┐'
+        mid    = '├' + '┼'.join([hcell] * num_cols) + '┤'
+        bottom = '└' + '┴'.join([hcell] * num_cols) + '┘'
+
+        # Step 4: Build rows with centered labels
+        lines = [top]
+        for i, row in enumerate(label_grid):
+            centered_cells = [f' {label.center(max_len)} ' for label in row]
+            lines.append('│' + '│'.join(centered_cells) + '│')
+            if i < len(label_grid) - 1:
+                lines.append(mid)
+        lines.append(bottom)
+
+        return '\n'.join(lines)
+        
     def reset(
         self, is_eval: str = False, log_dir: str = None
     ) -> Tuple[Observation, InfoDict]:
@@ -263,7 +318,8 @@ class TaskMinigrid(Task):
         # Reset the environment
         self.env_mg = self.create_new_env_mg(render_mode=self.render_mode)
         obs, info = self.env_mg.reset()
-
+        self.first_obs = obs
+        
         # Build info
         info = {"task_name": self.func_str, **info}
 
@@ -354,10 +410,11 @@ class TaskMinigrid(Task):
 
     def get_feedback(self) -> Dict[str, Any]:
         if hasattr(self.env_mg.unwrapped, "get_feedback"):
-            return self.env_mg.unwrapped.get_feedback()
+            feedback = self.env_mg.unwrapped.get_feedback()
         else:
-            return {}
-
+            feedback = {}
+        return feedback
+    
     def __repr__(self) -> str:
         return self.get_name()
 

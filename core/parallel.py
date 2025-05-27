@@ -67,7 +67,8 @@ def run_parallel(
         for config_task in batch_configs:
             try:
                 result = func(**config_task)
-            except ValueError as e:
+            except Exception as e:
+                raise e
                 print(f"Exception in thread: {get_error_info(e)}")
                 result = return_value_on_exception
             results.append(result)

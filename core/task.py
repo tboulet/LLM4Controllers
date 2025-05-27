@@ -71,7 +71,13 @@ class Task(ABC):
     def get_code_repr(self) -> str:
         """Get the code representation of the task."""
         
-        
+    @abstractmethod
+    def get_map_repr(self) -> str:
+        """Get the map representation of the task.
+
+        Returns:
+            str: the map representation of the task
+        """
     @abstractmethod
     def reset(self, **kwargs) -> Tuple[Observation, InfoDict]:
         """Reset the task to its initial state.

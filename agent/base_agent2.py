@@ -61,7 +61,7 @@ class BaseAgent2(ABC):
                         text, str
                     ), "Keys and values of dict_name_to_text should be strings."
                     log_file = os.path.join(log_dir, name)
-                    with open(log_file, "w") as f:
+                    with open(log_file, "w", encoding="utf-8") as f:
                         f.write(text)
                     f.close()
                     print(f"[LOGGING] : Logged {log_file}")

@@ -425,8 +425,6 @@ class FeedbackAggregated:
                 metrics[f"{key}/rate"] = self.dict_aggregated_feedback[key]
             # Error : rate of each error
             elif metric.type_value == FeedbackType.ERROR:
-                # if task is not None:
-                #     continue # skip the error metrics if task is provided
                 d: Dict[str, int] = self.dict_aggregated_feedback[key]
                 for error_message, count in d.items():
                     error_rate = count / self.n_data

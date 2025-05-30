@@ -100,12 +100,24 @@ def sanitize_name(name: str) -> str:
     name = name.replace(')', '')
     return name
 
-def abbreviate_metric(metric: str, max_len_metric_name: int = 20) -> str:
-    if len(metric) <= max_len_metric_name:
-        return metric
+def abbreviate_metric(metric_key: str, max_len_metric_name: int = 20) -> str:
+    if len(metric_key) <= max_len_metric_name:
+        return metric_key
 
-    parts = metric.split('/')
-    longest_idx = max(range(len(parts)), key=lambda i: len(parts[i]))
+    parts = metric_key.split('/')
+    # New version: abbreviate only first part if it is too long
+    if len(parts[0]) > max_len_metric_name:
+        # Abbreviate the first part
+        left = max_len_metric_name // 2
+        right = max_len_metric_name - left
+        abbreviated = parts[0][:left] + "..." + parts[0][-right:]
+        parts[0] = abbreviated
+        return '/'.join(parts)
+    else:
+        return metric_key
+    
+    # Old version: abbreviate longest part except the first one
+    longest_idx = max(range(len(parts)), key=lambda i: len(parts[i]) * int(i == 0))
     longest_part = parts[longest_idx]
 
     # Length available for the abbreviated name (excluding "...")
@@ -120,7 +132,7 @@ def abbreviate_metric(metric: str, max_len_metric_name: int = 20) -> str:
     abbrev_len = available_length - total_len_wo_longest
     if abbrev_len < 2:
         # Cannot abbreviate properly
-        return metric[:max_len_metric_name]
+        return metric_key[:max_len_metric_name]
 
     # Abbreviate the longest part
     left = abbrev_len // 2

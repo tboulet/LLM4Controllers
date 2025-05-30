@@ -26,7 +26,7 @@ class MultiLogger(BaseLogger):
         else:
             self.max_timestep = max(self.max_timestep, step)
         # Reduce the size of the metrics
-        metrics = {abbreviate_metric(k, max_len_metric_name=50): v for k, v in metrics.items()}
+        metrics = {abbreviate_metric(k, max_len_metric_name=100): v for k, v in metrics.items()}
         # Check for unsafe characters in the metric keys
         for key in metrics:
             matches = re.search(unsafe_chars, key)

@@ -5,12 +5,12 @@ from minigrid.core.world_object import Door, Goal, Key, Wall
 from minigrid.manual_control import ManualControl
 from minigrid.minigrid_env import MiniGridEnv
 
-from core.error_trace import ErrorTrace
+from core.types import ErrorTrace
 
 
 class AutoSuccessMGEnv(MiniGridEnv):
     # SHOULD BE DONE : docstring
-    
+
     def __init__(
         self,
         size=10,
@@ -24,12 +24,12 @@ class AutoSuccessMGEnv(MiniGridEnv):
         self.agent_start_dir = agent_start_dir
         if max_steps is None:
             max_steps = 4 * size**2
-            
+
         # MUST BE DONE : create mission space
         mission_space = MissionSpace(mission_func=self._gen_mission)
 
         # CAN BE DONE : define obs (with or without mission) and action spaces
-        
+
         super().__init__(
             mission_space=mission_space,
             grid_size=size,
@@ -76,7 +76,7 @@ class AutoSuccessMGEnv(MiniGridEnv):
     def step(self, action):
 
         if False:
-            return super().step(action) # normal step
+            return super().step(action)  # normal step
 
         # MUST BE DONE (note : super().step() does all 4):
         # 1. update t and check if t >= max_steps

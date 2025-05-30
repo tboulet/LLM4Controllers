@@ -26,7 +26,7 @@ from minigrid.core.constants import IDX_TO_OBJECT, IDX_TO_COLOR, STATE_TO_IDX
 from minigrid.core.world_object import Goal, Lava, Wall, Key, Door
 
 # Minig imports
-from core.error_trace import ErrorTrace
+from core.types import ErrorTrace
 from env.minig.utils import (
     IDX_TO_STATE,
     dict_actions,

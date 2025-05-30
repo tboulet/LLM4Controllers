@@ -26,7 +26,7 @@ import transformers
 
 # Project imports
 from agent.base_controller import Controller
-from core.error_trace import ErrorTrace
+from core.types import ErrorTrace
 from core.feedback_aggregator import FeedbackAggregated
 
 from core.task import Task

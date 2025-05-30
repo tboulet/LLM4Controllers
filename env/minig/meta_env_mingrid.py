@@ -72,10 +72,10 @@ from env.base_meta_env import BaseMetaEnv, Observation, InfoDict
 from core.task import Task, TaskDescription
 from core.spaces import FiniteSpace
 from core.curriculums import CurriculumByLevels
-from core.types import ActionType
+from core.types import ActionType, TextualInformation
 
 
-def extract_sections(docstring: str, sections_docstring: list) -> Dict[str, str]:
+def extract_sections(docstring: str, list_sections_docstring: list) -> Dict[str, str]:
     """
     Extract specified sections from a docstring formatted with Markdown-style headers (## Section Name).
 
@@ -102,7 +102,7 @@ def extract_sections(docstring: str, sections_docstring: list) -> Dict[str, str]
     list_sections = []
     for title, content in matches:
         title_clean = title.strip()
-        if title_clean in sections_docstring:
+        if title_clean in list_sections_docstring:
             list_sections.append(f"## {title_clean} \n{content.strip()}\n")
     # Join the sections with new lines
     return "\n".join(list_sections)
@@ -143,8 +143,8 @@ class TaskMinigrid(Task):
         # Other variables
         self.task_description: str = None
         self.code_of_env_mg_class: str = None
-        self.env_mg : MiniGridEnv = None
-        self.first_obs : Observation = None
+        self.env_mg: MiniGridEnv = None
+        self.first_obs: Observation = None
 
     # ===== Helper methods ===
 
@@ -161,7 +161,7 @@ class TaskMinigrid(Task):
             # name=f"{self.func_str}",  # Mission : {env_mg.unwrapped.mission}
             description=extract_sections(
                 docstring=env_mg.unwrapped.__doc__,
-                sections_docstring=self.meta_env.sections_docstring,
+                list_sections_docstring=self.meta_env.list_sections_docstring,
             ),
             observation_space=env_mg.observation_space,
             action_space=env_mg.action_space,
@@ -247,8 +247,8 @@ class TaskMinigrid(Task):
             self.env_mg = self.create_new_env_mg(render_mode=None)
         if self.first_obs is None:
             self.first_obs, _ = self.env_mg.reset()
-        
-        grid = self.first_obs['image']
+
+        grid = self.first_obs["image"]
 
         # Step 1: Build grid of cell labels
         label_grid = []
@@ -256,43 +256,43 @@ class TaskMinigrid(Task):
             label_row = []
             for cell in row:
                 obj_idx, color_idx, state_idx = cell
-                obj = IDX_TO_OBJECT.get(obj_idx, 'empty')
-                color = IDX_TO_COLOR.get(color_idx, '')
+                obj = IDX_TO_OBJECT.get(obj_idx, "empty")
+                color = IDX_TO_COLOR.get(color_idx, "")
                 state = [k for k, v in STATE_TO_IDX.items() if v == state_idx]
                 state_str = state[0] if state else None
 
-                if obj == 'empty':
-                    label = ''
-                elif obj == 'wall':
-                    label = 'wall'
-                elif obj == 'door' and state_str:
-                    label = f'{color} door ({state_str})'
+                if obj == "empty":
+                    label = ""
+                elif obj == "wall":
+                    label = "wall"
+                elif obj == "door" and state_str:
+                    label = f"{color} door ({state_str})"
                 else:
-                    label = f'{color} {obj}'
+                    label = f"{color} {obj}"
                 label_row.append(label)
             label_grid.append(label_row)
 
         # Step 2: Find max label length
         max_len = max(len(label) for row in label_grid for label in row)
         num_cols = len(label_grid[0])
-        hcell = '─' * (max_len + 2)
+        hcell = "─" * (max_len + 2)
 
         # Step 3: Build box borders
-        top    = '┌' + '┬'.join([hcell] * num_cols) + '┐'
-        mid    = '├' + '┼'.join([hcell] * num_cols) + '┤'
-        bottom = '└' + '┴'.join([hcell] * num_cols) + '┘'
+        top = "┌" + "┬".join([hcell] * num_cols) + "┐"
+        mid = "├" + "┼".join([hcell] * num_cols) + "┤"
+        bottom = "└" + "┴".join([hcell] * num_cols) + "┘"
 
         # Step 4: Build rows with centered labels
         lines = [top]
         for i, row in enumerate(label_grid):
-            centered_cells = [f' {label.center(max_len)} ' for label in row]
-            lines.append('│' + '│'.join(centered_cells) + '│')
+            centered_cells = [f" {label.center(max_len)} " for label in row]
+            lines.append("│" + "│".join(centered_cells) + "│")
             if i < len(label_grid) - 1:
                 lines.append(mid)
         lines.append(bottom)
 
-        return '\n'.join(lines)
-        
+        return "\n".join(lines)
+
     def reset(
         self, is_eval: str = False, log_dir: str = None
     ) -> Tuple[Observation, InfoDict]:
@@ -319,7 +319,7 @@ class TaskMinigrid(Task):
         self.env_mg = self.create_new_env_mg(render_mode=self.render_mode)
         obs, info = self.env_mg.reset()
         self.first_obs = obs
-        
+        self.first_agent_pos = np.array(self.env_mg.unwrapped.agent_pos, dtype=np.int32)
         # Build info
         info = {"task_name": self.func_str, **info}
 
@@ -409,12 +409,31 @@ class TaskMinigrid(Task):
                 imageio.mimwrite(path_task_t_video, self.video_frames, fps=10)
 
     def get_feedback(self) -> Dict[str, Any]:
-        if hasattr(self.env_mg.unwrapped, "get_feedback"):
-            feedback = self.env_mg.unwrapped.get_feedback()
-        else:
-            feedback = {}
-        return feedback
-    
+        feedback_metrics = {}
+        if "custom" in self.meta_env.list_feedback_keys and hasattr(
+            self.env_mg.unwrapped, "get_feedback"
+        ):
+            feedback_metrics.update(self.env_mg.unwrapped.get_feedback())
+        if "position" in self.meta_env.list_feedback_keys:
+            feedback_metrics["final_agent_position"] = np.array(
+                self.env_mg.unwrapped.agent_pos
+            )
+            feedback_metrics["first_agent_position"] = self.first_agent_pos
+        if "duration" in self.meta_env.list_feedback_keys:
+            feedback_metrics["episode_duration"] = self.meta_env.timestep
+            if hasattr(self.env_mg.unwrapped, "max_steps"):
+                feedback_metrics["episode_duration_noramalized_by_max_duration"] = (
+                    self.meta_env.timestep / self.env_mg.unwrapped.max_steps
+                )
+        if "distance_begin_to_end" in self.meta_env.list_feedback_keys:
+            feedback_metrics["distance_begin_to_end"] = np.linalg.norm(
+                np.array(self.env_mg.unwrapped.agent_pos) - self.first_agent_pos
+            )
+        if "map" in self.meta_env.list_feedback_keys:
+            feedback_metrics["map_repr"] = TextualInformation(text=self.get_map_repr())
+
+        return feedback_metrics
+
     def __repr__(self) -> str:
         return self.get_name()
 
@@ -429,8 +448,10 @@ class MinigridMetaEnv(BaseMetaEnv):
         # Env parameters
         self.viewsize = config.get("viewsize", 7)  # not used
         self.size = config.get("size", 10)
+        # Feedback parameters
+        self.list_feedback_keys = config.get("list_feedback_keys")
         # Representation parameter
-        self.sections_docstring = config.get("sections_docstring")
+        self.list_sections_docstring = config.get("list_sections_docstring")
         # Logging and render
         self.render_mode_train = config.get("render_mode_train", None)
         self.render_mode_eval = config.get("render_mode_eval", None)
@@ -457,9 +478,7 @@ class MinigridMetaEnv(BaseMetaEnv):
                 # Observation structure comprehension and navigation comprehension tasks
                 lambda **kwargs: GiveAgentPositionEnv(size=self.size, **kwargs),
                 lambda **kwargs: GiveGoalPositionEnv(size=self.size, **kwargs),
-                lambda **kwargs: GoTowardsDirection(
-                    size=self.size, **kwargs
-                ),
+                lambda **kwargs: GoTowardsDirection(size=self.size, **kwargs),
                 lambda **kwargs: MoveToPosition(size=self.size, **kwargs),
             },
             {

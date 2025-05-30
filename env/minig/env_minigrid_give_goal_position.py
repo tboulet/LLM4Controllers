@@ -8,7 +8,7 @@ from minigrid.minigrid_env import MiniGridEnv
 
 from gymnasium import spaces
 
-from core.error_trace import ErrorTrace
+from core.types import ErrorTrace
 
 
 class GiveGoalPositionEnv(MiniGridEnv):

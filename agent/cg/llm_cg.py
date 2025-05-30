@@ -20,7 +20,7 @@ from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller
 from agent.base_agent2 import BaseAgent2
 from core import task
-from core.error_trace import ErrorTrace
+from core.types import ErrorTrace
 from core.feedback_aggregator import FeedbackAggregated
 from core.loggers.base_logger import BaseLogger
 from core.parallel import run_parallel

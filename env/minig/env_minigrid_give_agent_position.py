@@ -8,7 +8,7 @@ from minigrid.minigrid_env import MiniGridEnv
 
 from gymnasium import spaces
 
-from core.error_trace import ErrorTrace
+from core.types import ErrorTrace
 
 
 class GiveAgentPositionEnv(MiniGridEnv):
@@ -76,7 +76,9 @@ class GiveAgentPositionEnv(MiniGridEnv):
             reward = 1
         else:
             reward = 0
-            self.failure_reason = f"The agent given position is not the true position of the agent."
+            self.failure_reason = (
+                f"The agent given position is not the true position of the agent."
+            )
         truncated = True
         done = True
         info = {}

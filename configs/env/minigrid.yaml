@@ -5,13 +5,20 @@ config:
   # Environment
   viewsize: 7
   # Representation
-  sections_docstring:
+  list_sections_docstring:
     - Description
     - Mission Space
     # - Action Space
     - Observation Encoding
     - Rewards
     - Termination
+  # Feedback
+  list_feedback_keys:  # dict_agg_fb["position"] = {mean_0: 4}
+    - custom  # custom feedback from the tasks
+    - position  # initial position and final position
+    - duration  # duration and maximal duration
+    - distance_begin_to_end
+    - map # dict_agg_fb["map"] = [bla, bla, bla]
   # Rendering
   render_mode_train: rgb_array
   render_mode_eval: human

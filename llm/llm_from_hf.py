@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 from core.utils import one_time_warning
 from core.loggers.base_logger import BaseLogger
@@ -7,12 +7,13 @@ from core.loggers.none_logger import NoneLogger
 from .base_llm import LanguageModel
 from transformers import AutoTokenizer, AutoModelForCausalLM, PreTrainedModel
 import torch
-
+from llm.utils import get_model_memory_from_model_name, get_memory_allocated, get_memory_reserved, get_GPUtil_metrics, get_model_memory_from_params
 
 class LLM_from_HuggingFace(LanguageModel):
     """A language model that load locally a HF model."""
 
     def __init__(self, config: Dict[str, Any], logger: BaseLogger = NoneLogger()):
+        super().__init__(config, logger)
         # Parameters
         self.device = config["device"]
         if self.device == "cuda":
@@ -21,6 +22,7 @@ class LLM_from_HuggingFace(LanguageModel):
             ), "CUDA is not available. Run on CPU or fix the issue."
         self.model_name: str = config["model"]
         self.hf_token = os.getenv("HF_TOKEN")
+        print(f"[INFO] Using Hugging Face model: {self.model_name} on device: {self.device}. Model memory: {get_model_memory_from_model_name(self.model_name)} GB.")
         # Model and tokenizer
         assert (
             self.hf_token is not None
@@ -32,72 +34,50 @@ class LLM_from_HuggingFace(LanguageModel):
             self.model_name, device_map=self.device, token=self.hf_token
         )
         self.model.resize_token_embeddings(len(self.tokenizer))
-        # Kwargs
-        self.kwargs: Dict[str, Any] = config.get("kwargs", {})
+        # config_inference
+        self.config_inference: Dict[str, Any] = config.get("config_inference", {})
         # Logging
         print(f"[INFO] Loaded model {self.model_name}.")
         print(
             self.get_gpu_usage_info(model_hf=self.model, model_name_hf=self.model_name)
         )
 
-    def reset(self):
-        """Reset the language model at empty state."""
-        self.message = ""
+    def generate(
+        self,
+        prompt: Optional[str] = None,
+        messages: Optional[List[Dict[str, str]]] = None,
+        n: int = 1,
+    ) -> List[str]:
 
-    def add_prompt(self, prompt: str):
-        """Add a prompt to the language model.
-
-        Args:
-            prompt (str): the prompt to add.
-        """
-        if len(self.message) > 0:
-            self.message += "\n\n"
-        self.message += f"User: {prompt}"
-
-    def generate(self) -> str:
-        """Generate a completion for the given prompt.
-
-        Args:
-            prompt (str): the prompt to complete.
-
-        Returns:
-            str: the completion of the prompt.
-        """
-        try:
-            # Build a message by adding to the prompt the beginning of the assistant part
-            assert len(self.message) > 0, "No prompt to generate completion."
-            message_to_complete = f"{self.message}\n\nAI assistant:"
-            # Tokenize and unsure it does not exceed the max length
-            tokens = self.tokenizer(message_to_complete, return_tensors="pt")
-            if tokens["input_ids"].shape[1] > self.model.config.max_position_embeddings:
-                raise ValueError(
-                    f"Input length ({tokens['input_ids'].shape[1]}) exceeds the model's maximum length ({self.model.config.max_position_embeddings})."
-                )
-            # Transfer to the device
-            tokens = tokens.to(self.model.device)
-            # Generate the completion
-            outputs = self.model.generate(**tokens, **self.kwargs)
-            # Decode the completion : from tensor(?) to string
-            message_completed = self.tokenizer.decode(
-                outputs[0], skip_special_tokens=True
+        # Build the messages, assert prompt xor messages is provided
+        assert (prompt is not None) ^ (
+            messages is not None
+        ), "Either 'prompt' or 'messages' must be provided, but not both."
+        if messages is None:
+            messages = [{"role": "user", "content": prompt}]
+        assert len(messages) > 0, "No prompt to generate completion."
+        
+        # Apply chat template for instruct models
+        if self.tokenizer.chat_template is not None:
+            print(f"[INFO] Using chat template for model {self.model_name}.")
+            prompt = self.tokenizer.apply_chat_template(messages, tokenize=False)
+        else:
+            raise ValueError(
+                f"Model {self.model_name} does not support chat template. Please use a model with a chat template."
             )
-            # Extract the completion
-            answer = message_completed[len(message_to_complete) :].lstrip("\n\t ")
-            breakpoint()
-            return answer
-        except Exception as e:
-            breakpoint()
-            raise e
-
-    def add_answer(self, answer: str):
-        """Add the answer to the language model.
-
-        Args:
-            answer (str): the answer to add.
-        """
-        if len(self.message) > 0:
-            self.message += "\n\n"
-        self.message += f"AI assistant: {answer}"
-
-    def optimize(self):
-        raise NotImplementedError  # not implemented yet
+            
+        # Tokenize and unsure it does not exceed the max length
+        tokens = self.tokenizer(prompt, return_tensors="pt")
+        if tokens["input_ids"].shape[1] > self.model.config.max_position_embeddings:
+            raise ValueError(
+                f"Input length ({tokens['input_ids'].shape[1]}) exceeds the model's maximum length ({self.model.config.max_position_embeddings})."
+            )
+        # Transfer to the device
+        tokens = tokens.to(self.model.device)
+        # Generate the completion
+        outputs = self.model.generate(**tokens, **self.config_inference)
+        # Decode the completion : from tensor(?) to string
+        message_completed = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        # Extract the completion
+        answer = message_completed[len(prompt) :].lstrip("\n\t ")
+        return answer

@@ -19,15 +19,18 @@ tqdm
 imageio[ffmpeg]
 pyvis
 pynvml
-
-# Common libraries
-numpy
+tbutils
 
 # Project libraries
-# torch
+accelerate
+hf_xet
+numpy
 transformers
 openai
 huggingface-hub
 gymnasium
 pygame
 minigrid
+
+# Torch installation
+# torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126

@@ -99,6 +99,7 @@ def get_GPUtil_metrics(prefix: str = "") -> Dict[str, Union[str, float]]:
     metrics = {
         "gpu_memory_used": gpu_0_info.memoryUsed,
         "gpu_memory_percent": gpu_0_info.memoryUtil,
+        "gpu_memory_total": gpu_0_info.memoryTotal,
         "gpu_load_percent": gpu_0_info.load,
         "gpu_temperature": gpu_0_info.temperature,
     }

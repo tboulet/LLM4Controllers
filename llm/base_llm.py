@@ -71,7 +71,7 @@ class LanguageModel(ABC):
         pynvml.nvmlInit()
         gpu_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
         info = pynvml.nvmlDeviceGetMemoryInfo(gpu_handle)
-        list_info.append(f"(PyNVML) GPU 0 Memory Used: {info.used / 1024**3:.2f} GB")
+        list_info.append(f"(PyNVML) Memory Used: {info.used / 1024**3:.2f} GB")
         # GPUtil
         gpus = getGPUs()
         if len(gpus) > 1:

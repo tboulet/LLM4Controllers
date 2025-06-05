@@ -2,6 +2,7 @@
 import os
 import shutil
 import sys
+import concurrent
 import wandb
 from tensorboardX import SummaryWriter
 
@@ -17,6 +18,7 @@ from typing import Any, Dict, Type
 import cProfile
 import multiprocessing
 from tbutils.tmeasure import RuntimeMeter
+import concurrent.futures
 
 # ML libraries
 import random
@@ -49,18 +51,13 @@ def act_time_bounded(controller: Controller, obs: Any, time_limit: float) -> Act
     Returns:
         Any: The action to take.
     """
-    # Use a multiprocessing pool with 1 worker
-    pool = multiprocessing.pool.ThreadPool(processes=1)
-    try:
-        # Submit the task and get an async result
-        async_result = pool.apply_async(controller.act, (obs,))
-        # Wait for the result, with timeout
-        return async_result.get(timeout=time_limit)
-    except multiprocessing.TimeoutError:
-        pool.terminate()  # Force-terminate the pool to stop the worker
-        raise TimeoutError(f"Controller.act() took longer than {time_limit} seconds")
-    finally:
-        pool.close()
+    return controller.act(obs)  # type: ignore[return-value]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(controller.act, obs)
+        try:
+            return future.result(timeout=time_limit)
+        except concurrent.futures.TimeoutError:
+            raise TimeoutError(f"Controller.act() took longer than {time_limit} seconds")
 
 
 def play_controller_in_task(

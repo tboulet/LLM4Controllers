@@ -17,7 +17,7 @@ config:
     - custom  # custom feedback from the tasks
     - position  # initial position and final position
     - duration  # duration and maximal duration
-    - distance_begin_to_end
+    - distance_start_to_end
     - map # dict_agg_fb["map"] = [bla, bla, bla]
   # Rendering
   render_mode_train: rgb_array

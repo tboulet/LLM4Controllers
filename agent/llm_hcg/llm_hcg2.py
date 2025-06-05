@@ -32,8 +32,8 @@ class TextualCommand(enum.Enum):
     CHANGE = "change <name>"
     TEST = "solve task <task_idx> with code"
     TERMINATE = "terminate"
-    
-    def extract_kwargs(self, string : str) -> Optional[Dict[str, str]]:
+
+    def extract_kwargs(self, string: str) -> Optional[Dict[str, str]]:
         """Extract the kwargs corresponding to the command self, from a string given as input
 
         Args:
@@ -42,6 +42,7 @@ class TextualCommand(enum.Enum):
         Returns:
             Optional[Dict[str, str]]: the kwargs extracted from the string, or None if no match is found
         """
+
         # Replace <name> with regex named groups using a function
         def replace(match):
             name = match.group(1)
@@ -50,9 +51,9 @@ class TextualCommand(enum.Enum):
         regex_pattern = re.sub(r"<(\w+)>", replace, self.value)
         regex = re.compile(f"^{regex_pattern}$")
         match = regex.match(string)
-        return match.groupdict() if match else None 
-    
-    
+        return match.groupdict() if match else None
+
+
 class TaskInformation:
     def __init__(
         self,
@@ -63,8 +64,8 @@ class TaskInformation:
         self.task = task
         self.code = code
         self.feedback = feedback
-        
-        
+
+
 class HCG_2(BaseAgent2):
 
     def __init__(self, config: Dict, logger: BaseLogger, env: BaseMetaEnv):
@@ -79,7 +80,7 @@ class HCG_2(BaseAgent2):
             self.list_log_dirs_global.append(os.path.join(log_dir, "last"))
         self.metrics_memory_aware = defaultdict(int)
         # Log the config
-        self.log_texts(
+        self.log_as_texts(
             {"config.yaml": json.dumps(self.config, indent=4)}, in_task_folder=False
         )
         # Initialize LLM
@@ -89,20 +90,19 @@ class HCG_2(BaseAgent2):
         # Initialize the env description
         self.description_env = env.get_textual_description()
         # Initialize the task mapping
-        self.mapping_task : Dict[str, TaskInformation] = {}
-        
-        
+        self.mapping_task: Dict[str, TaskInformation] = {}
+
         # Define the text templates
-        self.text_base_controller = open("agent/llm_hcg/text_base_controller.txt").read()
+        self.text_base_controller = open(
+            "agent/llm_hcg/text_base_controller.txt"
+        ).read()
         self.text_example_answer_inference1 = open(
             "agent/llm_hcg/example_answer_inference1.txt"
         ).read()
         self.text_example_answer_inference2 = open(
             "agent/llm_hcg/example_answer_inference2.txt"
         ).read()
-        self.text_example_answer = open(
-            "agent/llm_hcg/text_example_answer.txt"
-        ).read()
+        self.text_example_answer = open("agent/llm_hcg/text_example_answer.txt").read()
         self.text_example_pc = open("agent/llm_hcg/initial_PCs/move_forward.py").read()
         self.text_example_sc1 = (
             open("agent/llm_hcg/initial_SCs/go_forward.py")
@@ -179,7 +179,7 @@ class HCG_2(BaseAgent2):
             Else, the feedback is given to the agent and it can retry the refactoring
         This process continues on and on.
         """
-        
+
         # Get the current tasks and eventually update the mapping with it
         list_tasks = self.env.get_current_tasks()
         for task in list_tasks:
@@ -190,8 +190,7 @@ class HCG_2(BaseAgent2):
                     code="Empty (no code yet)",
                     feedback="None (no feedback yet)",
                 )
-        
-        
+
         # Define the representation of the task set
         list_task_set_repr = []
         for idx, (task_name, task_info) in enumerate(self.mapping_task.items()):
@@ -211,8 +210,7 @@ class HCG_2(BaseAgent2):
             )
             list_task_set_repr.append(task_info_repr)
         task_set_repr = "\n\n".join(list_task_set_repr)
-        
-            
+
         # Generate the prompt
         prompt_system = (
             "You are an AI agent that is used in order to solve a task-based environment. "
@@ -227,13 +225,11 @@ class HCG_2(BaseAgent2):
             "These 'task-solving codes' will be both a measure of your performance and "
             "a way to test the refactorings you will do. "
             "\n\n"
-            
             "Every step, you will have access to the library L, and to {(task, code, feedback)} the current set "
             "of tasks accompanied by the current code used to solve them and the performance of this code on the task. "
             "The library is a succession of controller class/function. "
             "The task-solving codes are python codes that are using objects from the library. "
             "\n\n"
-            
             "At each step, you will be asked to 1) refactor the library and 2) update (or initialize) the task-solving codes. "
             "For this, you will interact through the use of textual commands in the form of an operation name followed by the code "
             "between python tags. "
@@ -243,56 +239,48 @@ class HCG_2(BaseAgent2):
             "<your code here>\n"
             "```\n"
             "The operation you can do and their corresponding name are the following:\n"
-            "   - [add code] : this adds new code to the library (function(s) or controller(s)). \n" 
+            "   - [add code] : this adds new code to the library (function(s) or controller(s)). \n"
             "   - [delete <name>] : this will delete the objects named <name> from the library. In this case you won't add any python code of course. \n"
             "   - [change <name>] : this will change the code of the object named <name> in the library. \n"
             "   - [solve task <task_idx> with code] : this will use and test the specified code on the task <task_idx>. \n"
             "       You will do that by defining the controller used and then using the 'perform_test(controller : Controller) function. \n"
             "   - [terminate] : this will terminate the process and move to the test step. \n"
             "\n\n"
-            
             "Once you finished the refactoring operation, we will run your code on the tasks. "
             "If the performance of the code on the task is better than before, we will keep the refactoring. "
             "Else, we will revert the refactoring and ask you to retry the refactoring operation. "
             "In this case you will have to re-write the whole refactoring operation because nothing was applied. "
             "We will also provide you the feedback of the code on the tasks. "
             "\n\n"
-            
             "Advice 1: go step by step. "
             "This is an iterative process so you are encouraged to process step by step. "
             "However, we do not force you to perform only one minimal change at a time, because some refactoring "
             "operations may require to change a large part of the library to be meaningful. "
             "However, you should try to go one step at a time and not try to solve 2 problems during the same operation. "
             "\n\n"
-            
             "Advice 2: reduce your refactoring if it fails. "
             "If you are not sure about the refactoring you are doing, or if it failed (i.e. the performance of the code on the tasks decreased), "
             "you can try to reduce the refactoring you are doing. The smaller your refactoring is, the easier it will be to identify the problem. "
             "\n\n"
-            
             # Environment prompt
             "=== General description of the environment ===\n"
             f"{self.description_env}"
             "\n\n"
-            
             # Controller structure prompt
             "=== Controller interface ===\n"
             "A controller obeys the following interface:\n"
             f"{self.code_tag(self.text_base_controller)}"
             "\n\n"
-            
             # Library
             "=== Library ===\n"
             "This is the current state of the code of the library:\n\n"
             f"{str(self.library_controller)}"
             "\n\n"
-            
             # Task set
             "=== Set of (task, code, feedback) ===\n"
             "This is the current set of tasks and their associated code and feedback:\n\n"
             f"{task_set_repr}"
             "\n\n"
-            
             # Example of answer
             "=== Example of answer ===\n"
             "Here is an example of acceptable answer:\n"
@@ -300,34 +288,34 @@ class HCG_2(BaseAgent2):
             "==========================="
             "\n\n"
         )
-        
-        self.log_texts(
+
+        self.log_as_texts(
             {
                 "prompt_system.txt": prompt_system,
                 "task_set_repr.txt": task_set_repr,
                 "library_controller.py": str(self.library_controller),
             },
         )
-        
+
         # LLM inference
         self.llm.reset()
         self.llm.add_prompt(prompt_system)
         answer = self.llm.generate()
         self.llm.add_answer(answer)
-        self.log_texts(
+        self.log_as_texts(
             {
                 "answer.txt": answer,
             }
         )
-        
+
         # Extract the code blocks from the answer
         commands_to_code = self.extract_commands_and_code(answer)
-        self.log_texts(
+        self.log_as_texts(
             {
                 "commands_to_code.txt": str(commands_to_code),
             }
         )
-        
+
         # Execute the commands
         for command, code in commands_to_code.items():
             if (kwargs := TextualCommand.ADD.extract_kwargs(command)) is not None:
@@ -338,26 +326,26 @@ class HCG_2(BaseAgent2):
                 print(f"Command: {command}. Kwargs: {kwargs}")
             elif (kwargs := TextualCommand.TEST.extract_kwargs(command)) is not None:
                 print(f"Command: {command}. Kwargs: {kwargs}")
-            elif (kwargs := TextualCommand.TERMINATE.extract_kwargs(command)) is not None:
+            elif (
+                kwargs := TextualCommand.TERMINATE.extract_kwargs(command)
+            ) is not None:
                 print(f"Command: {command}. Kwargs: {kwargs}")
             else:
                 raise ValueError(
                     f"Unknown command: {command}. Please check the command and try again."
                 )
-        
+
         # Increment the time step
         self.t += 1
         raise
-        
-    
+
     def code_tag(self, code: str) -> str:
         """Add the code tag to the code."""
         return f"```python\n{code}\n```"
-    
+
     def extract_commands_and_code(self, text: str) -> Dict[str, Optional[str]]:
         pattern = re.compile(
-            r'\[(?P<command>[^\]]+)\]\s*(?P<code>```python\n.*?\n```)?',
-            re.DOTALL
+            r"\[(?P<command>[^\]]+)\]\s*(?P<code>```python\n.*?\n```)?", re.DOTALL
         )
         result = {}
         for match in pattern.finditer(text):
@@ -365,7 +353,7 @@ class HCG_2(BaseAgent2):
             code_block = match.group("code")
             if code_block:
                 # Strip ```python and ```
-                code = re.sub(r'^```python\n|\n```$', '', code_block.strip())
+                code = re.sub(r"^```python\n|\n```$", "", code_block.strip())
             else:
                 code = None
             result[command] = code
@@ -478,7 +466,7 @@ class HCG_2(BaseAgent2):
         )
 
         # Log the prompt and the task description
-        self.log_texts(
+        self.log_as_texts(
             {
                 "prompt_inference.txt": prompt_inference,
                 "demo_bank_examples.txt": examples_demobank,
@@ -510,7 +498,7 @@ class HCG_2(BaseAgent2):
                 self.llm.add_prompt(
                     "I'm sorry, extracting the code from your answer failed. Please try again and make sure the code obeys the following format:\n```python\n<your code here>\n```"
                 )
-                self.log_texts(
+                self.log_as_texts(
                     {f"failure_sc_code_extraction_{no_attempt}_answer.txt": answer}
                 )
                 self.metrics_memory_aware["n_failure_sc_code_extraction"] += 1
@@ -531,7 +519,7 @@ class HCG_2(BaseAgent2):
                 self.llm.add_prompt(
                     f"I'm sorry, an error occured while executing your code. Please try again and make sure the code is correct. Full error info : {full_error_info}"
                 )
-                self.log_texts(
+                self.log_as_texts(
                     {
                         f"failure_sc_code_execution_{no_attempt}_answer.txt": answer,
                         f"failure_sc_code_execution_{no_attempt}_error.txt": full_error_info,
@@ -551,7 +539,7 @@ class HCG_2(BaseAgent2):
         self.logger.log_scalars(metrics=self.metrics_memory_aware, step=self.t)
 
         if is_controller_instance_generated:
-            self.log_texts(
+            self.log_as_texts(
                 {
                     "answer.txt": answer,
                     "specialized_controller.py": code,
@@ -577,7 +565,7 @@ class HCG_2(BaseAgent2):
         for key in self.metrics_memory_aware.keys():
             self.metrics_memory_aware[key] = 0
         self.metrics_memory_aware["timestamp"] = self.t
-        
+
         # Add the transition to the demo bank
         self.demo_bank.add_transition(
             transition=TransitionData(
@@ -588,7 +576,7 @@ class HCG_2(BaseAgent2):
             )
         )
         # Log the feedback and the task description
-        self.log_texts(
+        self.log_as_texts(
             {
                 "feedback.txt": feedback.get_repr(),
             }
@@ -697,7 +685,7 @@ class HCG_2(BaseAgent2):
             f"{self.text_example_answer}\n"
             "===========================\n\n"
         )
-        self.log_texts(
+        self.log_as_texts(
             {
                 "prompt_update.txt": prompt_update,
                 "controller_library.py": str(self.library_controller),
@@ -755,16 +743,14 @@ class HCG_2(BaseAgent2):
                 print(
                     f"[WARNING] : Could not extract the code from the answer. Asking the assistant to try again. Full error info : {full_error_info}"
                 )
-                self.log_texts(
+                self.log_as_texts(
                     {
                         f"failure_code_extraction_attempt_{no_attempt}_answer.txt": answer,
                         f"failure_code_extraction_attempt_{no_attempt}_error.txt": full_error_info,
                     },
                     is_update_step=True,
                 )
-                self.metrics_memory_aware[
-                    "n_failure_update_code_extraction"
-                ] += 1
+                self.metrics_memory_aware["n_failure_update_code_extraction"] += 1
                 if self.config["config_debug"][
                     "breakpoint_update_on_failure_code_extraction"
                 ]:
@@ -783,7 +769,7 @@ class HCG_2(BaseAgent2):
 
         # Save and log the accepted answer
         answer_accepted = answer
-        self.log_texts(
+        self.log_as_texts(
             {
                 "assistant_answer_accepted.txt": answer_accepted,
             },
@@ -816,16 +802,14 @@ class HCG_2(BaseAgent2):
                     print(
                         f"[WARNING] : Could not save the code for a new primitive controller. Full error info : {full_error_info}"
                     )
-                    self.log_texts(
+                    self.log_as_texts(
                         {
                             f"failure_pc_code_saving_{i}_attempt_{no_attempt}_controller.py": code_pc,
                             f"failure_pc_code_saving_{i}_attempt_{no_attempt}_error.txt": full_error_info,
                         },
                         is_update_step=True,
                     )
-                    self.metrics_memory_aware[
-                        "n_failure_pc_code_saving"
-                    ] += 1
+                    self.metrics_memory_aware["n_failure_pc_code_saving"] += 1
                     if self.config["config_debug"][
                         "breakpoint_update_on_failure_pc_code_saving"
                     ]:
@@ -845,7 +829,7 @@ class HCG_2(BaseAgent2):
                         "IMPORTANT : Note that your answer should now be composed of CODE ONLY (not in python balises) and follow the format of the example below:\n"
                         f"{self.text_example_pc}"
                     )
-                    self.log_texts(
+                    self.log_as_texts(
                         {
                             f"failure_pc_code_saving_{i}_attempt_{no_attempt}_retry_prompt.txt": prompt_retry_on_failure_pc_code_saving,
                         },
@@ -856,7 +840,7 @@ class HCG_2(BaseAgent2):
                     self.llm.add_answer(
                         code_pc
                     )  # Add the new code to the LLM state in case of a new error
-                    self.log_texts(
+                    self.log_as_texts(
                         {
                             f"failure_pc_code_saving_{i}_attempt_{no_attempt}_retry_answer.txt": code_pc,
                         },
@@ -889,16 +873,14 @@ class HCG_2(BaseAgent2):
                     print(
                         f"[WARNING] : Could not execute the code for a refactored controller. Full error info : {full_error_info}"
                     )
-                    self.log_texts(
+                    self.log_as_texts(
                         {
                             f"failure_update_sc_code_execution_{idx_task}_attempt_{no_attempt}_controller.py": code_sc,
                             f"failure_update_sc_code_execution_{idx_task}_attempt_{no_attempt}_error.txt": full_error_info,
                         },
                         is_update_step=True,
                     )
-                    self.metrics_memory_aware[
-                        "n_failure_update_sc_code_execution"
-                    ] += 1
+                    self.metrics_memory_aware["n_failure_update_sc_code_execution"] += 1
                     if self.config["config_debug"][
                         "breakpoint_update_on_failure_sc_code_execution"
                     ]:
@@ -919,7 +901,7 @@ class HCG_2(BaseAgent2):
                         f"IMPORTANT : Note that your answer should now be composed of CODE ONLY (not in python balises) and follow the format of the example below:\n"
                         f"{self.text_example_sc2}"
                     )
-                    self.log_texts(
+                    self.log_as_texts(
                         {
                             f"failure_sc_code_execution_{idx_task}_attempt_{no_attempt}_retry_prompt.txt": prompt_retry_on_failure_sc_code_execution,
                         },
@@ -930,7 +912,7 @@ class HCG_2(BaseAgent2):
                     self.llm.add_answer(
                         code_sc
                     )  # Add the new code to the LLM state in case of a new error
-                    self.log_texts(
+                    self.log_as_texts(
                         {
                             f"failure_sc_code_execution_{idx_task}_attempt_{no_attempt}_retry_answer.txt": code_sc,
                         },
@@ -939,7 +921,7 @@ class HCG_2(BaseAgent2):
 
         # Log the metrics
         self.logger.log_scalars(metrics=self.metrics_memory_aware, step=self.t)
-        
+
         # Update the visualizer
         self.visualizer.update_vis()
 
@@ -1163,7 +1145,7 @@ class HCG_2(BaseAgent2):
             raise ValueError(
                 f"An error occured while extracting the code from the answer. Full error info : {get_error_info(e)}"
             )
-            
+
         # Validate extraction
         extracted_snippet_count = len(code_primitives) + len(dict_code_refactorings)
         if extracted_snippet_count != len(all_python_snippets):
@@ -1182,7 +1164,7 @@ class HCG_2(BaseAgent2):
 
         return code_primitives, dict_code_refactorings
 
-    def log_texts(
+    def log_as_texts(
         self,
         dict_name_to_text: Dict[str, str],
         in_task_folder: bool = True,

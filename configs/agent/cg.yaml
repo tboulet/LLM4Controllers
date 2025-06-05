@@ -15,7 +15,7 @@ config:
     - instructions
 
   # The number of tasks to do. If none, will do all tasks.
-  n_tasks_to_do: 10
+  n_tasks_to_do: 5
 
   # The number of completions to make per inference on a task
   n_completions: 1

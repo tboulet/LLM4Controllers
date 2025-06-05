@@ -39,10 +39,7 @@ class SpecializedController(Controller):
             # Here we calculate the position based on the direction
             direction = observation["direction"]
             self.position = (self.position[0], self.position[1])  # The position doesn't change in this task
-            
-            # Print or log the position (in real scenarios, you'd want to return it somehow)
-            print(f"Agent position: {self.position}")  # For demonstration, we're printing the position
-            
+                        
             # Mark that we've given the position
             self.has_given_position = True
             

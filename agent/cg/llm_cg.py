@@ -47,7 +47,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
 
     def __init__(self, config, logger: BaseLogger, env: BaseMetaEnv):
         super().__init__(config, logger, env)
-        self.log_texts(
+        self.log_as_texts(
             {
                 "config.yaml": OmegaConf.to_yaml(config),
             },
@@ -59,7 +59,6 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         self.n_episodes_eval: int = config["n_episodes_eval"]
         self.k_pass: int = config["k_pass"]
         # Initialize variables
-        self.t: int = 0
         self.iter: int = 0
         self.list_prompt_keys: List[str] = config["list_prompt_keys"]
         self.base_scope = {}
@@ -209,19 +208,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
             )
 
         # Log runtime metrics
-        metrics_runtime = get_runtime_metrics()
-
-        def sanitize_runtime_key(key: str) -> str:
-            if key.endswith("_last"):
-                return f"runtime_last/{key[8:]}"
-            elif key.endswith("_avg"):
-                return f"runtime_avg/{key[8:]}"
-            else:
-                return key
-
-        metrics_runtime = {
-            sanitize_runtime_key(key): value for key, value in metrics_runtime.items()
-        }
+        metrics_runtime = self.get_runtime_metrics()
         self.logger.log_scalars(metrics_runtime, step=0)
 
         # Move forward the iter counter
@@ -247,7 +234,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         """
         # Generate n_completions answers for the task
         prompt_task = self.build_task_prompt(task)
-        self.log_texts(
+        self.log_as_texts(
             {
                 "prompt.txt": prompt_task,
             },
@@ -262,7 +249,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         for idx_controller, answer in enumerate(answers):
             try:
                 feedback_over_eps = FeedbackAggregated()
-                self.log_texts(
+                self.log_as_texts(
                     {
                         "answer.txt": answer,
                     },
@@ -271,7 +258,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
 
                 # Extract the code block from the answer
                 code = self.extract_controller_code(answer)
-                self.log_texts(
+                self.log_as_texts(
                     {
                         "code.py": code,
                     },
@@ -311,20 +298,22 @@ class LLM_BasedControllerGenerator(BaseAgent2):
                 )
 
             feedback_over_eps.aggregate()
-            self.log_texts(
+            metrics_over_eps = feedback_over_eps.get_metrics()
+            feedback_over_ctrl.add_feedback(metrics_over_eps)
+            self.log_as_texts(
                 {
                     f"feedback_over_eps.txt": feedback_over_eps.get_repr(),
+                    f"feedback_over_eps_metrics.txt": metrics_over_eps,
                 },
                 log_subdir=f"{log_subdir}/completion_{idx_controller}",
             )
-            metrics_over_eps = feedback_over_eps.get_metrics()
-            feedback_over_ctrl.add_feedback(metrics_over_eps)
 
         feedback_over_ctrl.aggregate()
         # Log the metrics
-        self.log_texts(
+        self.log_as_texts(
             {
                 f"feedback_over_ctrl.txt": feedback_over_ctrl.get_repr(),
+                f"feedback_over_ctrl_metrics.txt": feedback_over_ctrl.get_metrics(),
             },
             log_subdir=log_subdir,
         )

@@ -422,15 +422,15 @@ class TaskMinigrid(Task):
         if "duration" in self.meta_env.list_feedback_keys:
             feedback_metrics["episode_duration"] = self.meta_env.timestep
             if hasattr(self.env_mg.unwrapped, "max_steps"):
-                feedback_metrics["episode_duration_noramalized_by_max_duration"] = (
+                feedback_metrics["episode_duration_normalized_by_max_duration"] = (
                     self.meta_env.timestep / self.env_mg.unwrapped.max_steps
                 )
-        if "distance_begin_to_end" in self.meta_env.list_feedback_keys:
-            feedback_metrics["distance_begin_to_end"] = np.linalg.norm(
+        if "distance_start_to_end" in self.meta_env.list_feedback_keys:
+            feedback_metrics["distance_start_to_end"] = np.linalg.norm(
                 np.array(self.env_mg.unwrapped.agent_pos) - self.first_agent_pos
             )
         if "map" in self.meta_env.list_feedback_keys:
-            feedback_metrics["map_repr"] = TextualInformation(text=self.get_map_repr())
+            feedback_metrics["map_representation"] = TextualInformation(text=self.get_map_repr())
 
         return feedback_metrics
 

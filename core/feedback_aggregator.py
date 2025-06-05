@@ -380,8 +380,9 @@ class FeedbackAggregated:
                 list_repr.append(repr_error)
             # Textual : list of texts
             elif metric.type_value == FeedbackType.TEXTUAL:
-                texts : List[str] = self.dict_aggregated_feedback[key]
-                list_repr.append(f"{key} : {join_texts_under_limit(texts, self.n_text_chars_max)}")
+                list_text_infos : List[TextualInformation] = self.dict_aggregated_feedback[key]
+                list_texts = [text_info.text for text_info in list_text_infos]
+                list_repr.append(f"{key} : \n{join_texts_under_limit(list_texts, self.n_text_chars_max)}")
             else:
                 raise ValueError(f"Unsupported feedback type: {metric.type_value}")
         return "\n".join(list_repr)
@@ -433,7 +434,7 @@ class FeedbackAggregated:
             elif metric.type_value == FeedbackType.TEXTUAL:
                 texts: List[TextualInformation] = self.dict_aggregated_feedback[key]
                 metrics[f"{key}/len_text_average"] = np.mean(
-                    [len(text.text) for text in texts]
+                    [len(textual_info.text) for textual_info in texts]
                 ) if texts else 0
             else:
                 raise ValueError(f"Unsupported feedback type: {metric.type_value}")

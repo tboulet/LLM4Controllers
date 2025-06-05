@@ -188,7 +188,8 @@ class LLM_from_VLLM(LanguageModel):
                 if response.status_code == 200:
                     print("Server is ready.")
                     return True
-            except requests.exceptions.RequestException:
+            except requests.exceptions.RequestException as e:
+                print(f"Exception occurred: {e}. Retrying in {delay} seconds...")
                 pass
             time.sleep(delay)
         print("Server failed to start in time.")

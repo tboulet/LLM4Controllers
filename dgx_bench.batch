@@ -1,0 +1,98 @@
+#!/bin/bash
+#
+
+#SBATCH --job-name=job
+#SBATCH --output=out.out
+#SBATCH --error=out.err
+
+## For partition: either prod10, prod 20, prod 40 or prod80
+## For gres: either 1g.10gb:[1:10] for prod10, 2g.20gb:[1:4] for prod20, 3g.40gb:1 for prod40 or A100.80gb for prod80.
+
+#SBATCH --partition=prod10
+#SBATCH --gres=gpu:1g.10gb:1
+#SBATCH --cpus-per-task=4
+
+##SBATCH --partition=prod20
+##SBATCH --gres=gpu:2g.20gb:1
+##SBATCH --cpus-per-task=4
+
+##SBATCH --partition=prod40
+##SBATCH --gres=gpu:3g.40gb:1
+##SBATCH --cpus-per-task=4
+
+##SBATCH --partition=prod80
+##SBATCH --gres=gpu:A100.80gb:1
+##SBATCH --ntasks-per-node=1
+##SBATCH --cpus-per-task=8
+##SBATCH --mem-per-cpu=10G
+##SBATCH --nodes=1
+
+## For ntasks and cpus: total requested cpus (ntasks * cpus-per-task) must be in [1: 4 * nMIG] with nMIG = nb_1g.10gb | 2 * nb_2g.20gb | 4 * nb_3g.40gb | 8 * nb_A100.80gb
+
+
+## N tasks
+#SBATCH --ntasks=1
+
+## Walltime limit
+#SBATCH --time=24:00:00
+
+## Setup
+source ~/projects/venv/bin/activate
+cd ~/projects/LLM4Controllers
+
+
+
+
+
+#!/bin/bash
+
+# Get current timestamp
+initial_date=$(date +"%Y%m%d_%H%M%S")
+
+# All prompt fields
+FIELDS=("system" "env" "code_env" "code_task" "controller_structure" "example_answer" "task" "task_description" "task_map" "instructions")
+
+# Base command
+BASE_CMD="python run2.py agent=cg llm=azure config_logs.do_log_on_last=False"
+
+# Create logs directory if it doesn't exist
+mkdir -p logs
+
+# 1. Full config
+BASE_NAME="full_config"
+NAME="${BASE_NAME}_${initial_date}"
+echo "Running: $NAME"
+mkdir -p logs/$NAME
+$BASE_CMD +run_name=$NAME agent.config.list_prompt_keys="[$(IFS=,; echo "${FIELDS[*]}")]" > logs/$NAME/log.txt 2>&1
+
+# 2. Leave-one-out configs
+for i in "${!FIELDS[@]}"; do
+    OMIT="${FIELDS[$i]}"
+    NEW_FIELDS=("${FIELDS[@]:0:$i}" "${FIELDS[@]:$((i + 1))}")
+    BASE_NAME="leave_out_${OMIT}"
+    NAME="${BASE_NAME}_${initial_date}"
+    echo "Running: $NAME"
+    mkdir -p logs/$NAME
+    $BASE_CMD +run_name=$NAME agent.config.list_prompt_keys="[$(IFS=,; echo "${NEW_FIELDS[*]}")]" > logs/$NAME/log.txt 2>&1
+done
+
+# 3. Minimal config
+MINIMAL=("system" "task")
+BASE_NAME="minimal_config"
+NAME="${BASE_NAME}_${initial_date}"
+echo "Running: $NAME"
+mkdir -p logs/$NAME
+$BASE_CMD +run_name=$NAME agent.config.list_prompt_keys="[$(IFS=,; echo "${MINIMAL[*]}")]" > logs/$NAME/log.txt 2>&1
+
+# 4. Pairwise important configs
+PAIRS=( "code_task,task_description" "code_env,env" "example_answer,instructions" )
+for PAIR in "${PAIRS[@]}"; do
+    BASE_NAME="pair_${PAIR//,/__}"
+    NAME="${BASE_NAME}_${initial_date}"
+    IFS=',' read -r -a PAIR_FIELDS <<< "$PAIR"
+    echo "Running: $NAME"
+    mkdir -p logs/$NAME
+    $BASE_CMD +run_name=$NAME agent.config.list_prompt_keys="[$(IFS=,; echo "${PAIR_FIELDS[*]}")]" > logs/$NAME/log.txt 2>&1
+done
+
+echo "Benchmarking complete. Logs are in ./logs"

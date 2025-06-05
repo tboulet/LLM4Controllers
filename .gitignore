@@ -8,9 +8,8 @@ data/
 logs/
 wandb/
 tensorboard/
-out.txt
-error.txt
-out/
+out.out
+out.err
 
 # Hydra config files
 .hydra/

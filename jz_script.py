@@ -18,8 +18,8 @@ parser.add_argument("--hour",  type=int, default=20)
 args = parser.parse_args()
 
 
-date = datetime.datetime.now().strftime("%Y-%m-%d")
-job_name = f"tboulet_{date}"
+current_datetime = datetime.datetime.now().strftime("%Y-%m-%d")
+job_name = f"tboulet_{current_datetime}"
 def generate_slurm_script(args,job_name):
 
     list_lines_script = []
@@ -96,8 +96,13 @@ export CORE_PATTERN=/dev/null
 
 source $SCRATCH/venv/bin/activate
 cd $WORK/LLM4Controllers
-python run2.py agent=cg llm=vllm
+
+python run2.py \
+  agent=cg \
+  llm=vllm \
+  > logs/{job_name}.log 2>&1
 """
+
     return script    
 
 

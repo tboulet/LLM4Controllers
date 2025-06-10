@@ -100,7 +100,7 @@ cd $WORK/LLM4Controllers
 python run2.py \
   agent=cg \
   llm=vllm \
-  > logs/{job_name}.log 2>&1
+  > logs/{job_name}-%A.log 2>&1
 """
 
     return script    

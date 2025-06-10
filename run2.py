@@ -77,6 +77,9 @@ def main(config: DictConfig):
     # Set the run name
     date = datetime.datetime.now().strftime("%mmo%dth_%Hh%Mmin%Ss")
     run_name = "_".join([date, agent_name, model_name, env_name, f"seed{seed}"])
+    run_name = config.get(
+        "run_name", run_name
+    )  # do "python run.py [your args] +run_name=<your_run_name>" to change the run name
     config["agent"]["config"]["run_name"] = run_name
     config["env"]["config"]["run_name"] = run_name
     config["llm"]["run_name"] = run_name
@@ -87,9 +90,6 @@ def main(config: DictConfig):
     shutil.rmtree(
         f"{log_dir}/last/", ignore_errors=True
     )  # Remove log_dir/last/ to clean the logs
-    run_name = config.get(
-        "run_name", run_name
-    )  # do "python run.py +run_name=<your_run_name>" to change the run name
     print(f"\nStarting run {run_name} ...")
     loggers = []
     if do_cli:

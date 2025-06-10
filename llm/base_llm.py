@@ -43,6 +43,20 @@ class LanguageModel(ABC):
 
     # ==== Helper methods ====
 
+    def get_messages(
+        self,
+        prompt: Optional[str] = None,
+        messages: Optional[List[Dict[str, str]]] = None,
+    ) -> List[Dict[str, str]]:
+        # Build the messages, assert prompt xor messages is provided
+        assert (prompt is not None) ^ (
+            messages is not None
+        ), "Either 'prompt' or 'messages' must be provided (but not both)."
+        if messages is None:
+            messages = [{"role": "user", "content": prompt}]
+        assert len(messages) > 0, "The 'messages' list must not be empty."
+        return messages
+            
     def get_gpu_usage_info(
         self,
         model_hf: PreTrainedModel = None,

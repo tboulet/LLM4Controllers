@@ -16,7 +16,7 @@ messages = [
 
 llm = LLM_from_HuggingFace(
     config={
-        "model": "Qwen/Qwen3-0.6B",
+        "model": "distilgpt2",
         "device": "cuda",
         "method_truncation": "last",
         "kwargs": {

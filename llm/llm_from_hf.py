@@ -8,6 +8,7 @@ from .base_llm import LanguageModel
 from transformers import AutoTokenizer, AutoModelForCausalLM, PreTrainedModel
 import torch
 from llm.utils import get_model_memory_from_model_name, get_memory_allocated, get_memory_reserved, get_GPUtil_metrics, get_model_memory_from_params
+from tbutils.exec_max_n import print_once
 
 class LLM_from_HuggingFace(LanguageModel):
     """A language model that load locally a HF model."""
@@ -22,6 +23,8 @@ class LLM_from_HuggingFace(LanguageModel):
             ), "CUDA is not available. Run on CPU or fix the issue."
         self.model_name: str = config["model"]
         self.hf_token = os.getenv("HF_TOKEN")
+        self.config_inference: Dict[str, Any] = config.get("config_inference", {})
+        self.no_grad: bool = config.get("no_grad", True)
         print(f"[INFO] Using Hugging Face model: {self.model_name} on device: {self.device}. Model memory: {get_model_memory_from_model_name(self.model_name)} GB.")
         # Model and tokenizer
         assert (
@@ -34,8 +37,6 @@ class LLM_from_HuggingFace(LanguageModel):
             self.model_name, device_map=self.device, token=self.hf_token
         )
         self.model.resize_token_embeddings(len(self.tokenizer))
-        # config_inference
-        self.config_inference: Dict[str, Any] = config.get("config_inference", {})
         # Logging
         print(f"[INFO] Loaded model {self.model_name}.")
         print(
@@ -62,8 +63,11 @@ class LLM_from_HuggingFace(LanguageModel):
             print(f"[INFO] Using chat template for model {self.model_name}.")
             prompt = self.tokenizer.apply_chat_template(messages, tokenize=False)
         else:
-            raise ValueError(
+            print_once(
                 f"Model {self.model_name} does not support chat template. Please use a model with a chat template."
+            )
+            prompt = "\n".join(
+                [f"{msg['role']}: {msg['content']}" for msg in messages]
             )
             
         # Tokenize and unsure it does not exceed the max length
@@ -75,7 +79,11 @@ class LLM_from_HuggingFace(LanguageModel):
         # Transfer to the device
         tokens = tokens.to(self.model.device)
         # Generate the completion
-        outputs = self.model.generate(**tokens, **self.config_inference)
+        if self.no_grad:
+            with torch.no_grad():
+                outputs = self.model.generate(**tokens, **self.config_inference)
+        else:
+            outputs = self.model.generate(**tokens, **self.config_inference)
         # Decode the completion : from tensor(?) to string
         message_completed = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
         # Extract the completion

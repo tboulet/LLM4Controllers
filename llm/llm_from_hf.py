@@ -7,10 +7,6 @@ from core.loggers.none_logger import NoneLogger
 from .base_llm import LanguageModel
 from transformers import AutoTokenizer, AutoModelForCausalLM, PreTrainedModel
 import torch
-<<<<<<< HEAD
-from llm.utils import get_model_memory_from_model_name, get_memory_allocated, get_memory_reserved, get_GPUtil_metrics, get_model_memory_from_params
-from tbutils.exec_max_n import print_once
-=======
 from llm.utils import (
     get_model_memory_from_model_name,
     get_memory_allocated,
@@ -18,8 +14,8 @@ from llm.utils import (
     get_GPUtil_metrics,
     get_model_memory_from_params,
 )
+from tbutils.exec_max_n import print_once
 
->>>>>>> 17900183e8e2aff46680f172bf75d5937200313a
 
 class LLM_from_HuggingFace(LanguageModel):
     """A language model that load locally a HF model."""
@@ -34,15 +30,11 @@ class LLM_from_HuggingFace(LanguageModel):
             ), "CUDA is not available. Run on CPU or fix the issue."
         self.model_name: str = config["model"]
         self.hf_token = os.getenv("HF_TOKEN")
-<<<<<<< HEAD
         self.config_inference: Dict[str, Any] = config.get("config_inference", {})
         self.no_grad: bool = config.get("no_grad", True)
-        print(f"[INFO] Using Hugging Face model: {self.model_name} on device: {self.device}. Model memory: {get_model_memory_from_model_name(self.model_name)} GB.")
-=======
         print(
             f"[INFO] Using Hugging Face model: {self.model_name} on device: {self.device}. Model memory: {get_model_memory_from_model_name(self.model_name)} GB."
         )
->>>>>>> 17900183e8e2aff46680f172bf75d5937200313a
         # Model and tokenizer
         assert (
             self.hf_token is not None
@@ -78,10 +70,8 @@ class LLM_from_HuggingFace(LanguageModel):
             print_once(
                 f"Model {self.model_name} does not support chat template. Please use a model with a chat template."
             )
-            prompt = "\n".join(
-                [f"{msg['role']}: {msg['content']}" for msg in messages]
-            )
-            
+            prompt = "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages])
+
         # Tokenize and unsure it does not exceed the max length
         tokens = self.tokenizer(prompt, return_tensors="pt")
         if tokens["input_ids"].shape[1] > self.model.config.max_position_embeddings:

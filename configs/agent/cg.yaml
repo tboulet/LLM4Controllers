@@ -21,7 +21,7 @@ config:
   n_completions: 15
 
   # The number of episodes on which a controller will be evaluated on a task
-  n_episodes_eval: 1
+  n_episodes_eval: 10
 
   # The parameter for the pass@k metric
   k_pass: ${eval:'min(${agent.config.n_completions}, 10)'}

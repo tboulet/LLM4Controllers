@@ -22,12 +22,8 @@ class LLM_Dummy(LanguageModel):
         messages: Optional[List[Dict[str, str]]] = None,
         n: int = 1,
     ) -> List[str]:
-        # Build the messages, assert prompt xor messages is provided
-        assert (prompt is not None) ^ (
-            messages is not None
-        ), "Either 'prompt' or 'messages' must be provided, but not both."
-        if messages is None:
-            messages = [{"role": "user", "content": prompt}]
+
+        messages = self.get_messages(prompt=prompt, messages=messages)
         # Load the answer from the input file
         if self.path_answer is None:
             file_name_input = input(f"Write answer file : inputs/")

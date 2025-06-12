@@ -43,7 +43,6 @@ class LLM_from_API(LanguageModel):
         self.price_per_1M_token_input, self.price_per_1M_token_output = (
             get_model_pricing(self.model)
         )
-        # Log TODO : get the model memory from the model name
 
     def generate(
         self,
@@ -51,13 +50,9 @@ class LLM_from_API(LanguageModel):
         messages: Optional[List[Dict[str, str]]] = None,
         n: int = 1,
     ) -> List[str]:
-        # Build the messages, assert prompt xor messages is provided
-        assert (prompt is not None) ^ (
-            messages is not None
-        ), "Either 'prompt' or 'messages' must be provided, but not both."
-        if messages is None:
-            messages = [{"role": "user", "content": prompt}]
-        
+
+        messages = self.get_messages(prompt=prompt, messages=messages)
+
         # Run the inference with retries
         retries = 0
         while retries < self.max_retries:
@@ -82,14 +77,15 @@ class LLM_from_API(LanguageModel):
             except LengthFinishReasonError as e:
                 # Crash if the answer is too long
                 raise ValueError(f"Length finish reason error: {e}")
-
+        choices = response.choices
+        
         # Calculate inference metrics
         list_n_tokens_output = [
             len(self.language_encoding.encode(choice.message.content))
-            for choice in response.choices
+            for choice in choices
         ]
         list_n_chars_output = [
-            len(choice.message.content) for choice in response.choices
+            len(choice.message.content) for choice in choices
         ]
         metrics_inference = {
             "llm_inference/runtime_inference": RuntimeMeter.get_last_stage_runtime(
@@ -101,6 +97,7 @@ class LLM_from_API(LanguageModel):
             "llm_inference/n_tokens_output_mean": average(list_n_tokens_output),
             "llm_inference/n_tokens_output_max": max(list_n_tokens_output),
             "llm_inference/n_tokens_output_min": min(list_n_tokens_output),
+            "llm_inference/n_tokens_total": response.usage.total_tokens,
             "llm_inference/n_chars_output_sum": sum(list_n_chars_output),
             "llm_inference/n_chars_output_mean": average(list_n_chars_output),
             "llm_inference/n_chars_output_max": max(list_n_chars_output),
@@ -130,8 +127,8 @@ class LLM_from_API(LanguageModel):
                     + sum(list_price_tokens_output),
                 }
             )
-        self.logger.log_scalars(metrics_inference)
+        self.logger.log_scalars(metrics_inference, step=None)
 
         # Return the answers
-        answers = [choice.message.content for choice in response.choices]
+        answers = [choice.message.content for choice in choices]
         return answers

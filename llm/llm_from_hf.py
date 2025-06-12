@@ -61,10 +61,8 @@ class LLM_from_HuggingFace(LanguageModel):
             print_once(
                 f"Model {self.model_name} does not support chat template. Please use a model with a chat template."
             )
-            prompt = "\n".join(
-                [f"{msg['role']}: {msg['content']}" for msg in messages]
-            )
-            
+            prompt = "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages])
+
         # Tokenize and unsure it does not exceed the max length
         tokens = self.tokenizer(prompt, return_tensors="pt")
         if tokens["input_ids"].shape[1] > self.model.config.max_position_embeddings:

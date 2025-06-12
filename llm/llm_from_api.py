@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+from datetime import date
+import datetime
 import time
 from typing import Any, Dict, List, Optional, Union
 
@@ -68,11 +70,13 @@ class LLM_from_API(LanguageModel):
                 break  # Exit the loop if the request was successful
             except RateLimitError as e:
                 # Handle rate limit error
-                print(f"Rate limit error: {e}. Retrying...")
-                retries += 1
+                time_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                
                 if retries >= self.max_retries:
                     raise ValueError(f"Max retries reached: {e}")
-                time_wait = np.clip(2**retries + np.random.uniform(0, 1), 10, 600)
+                time_wait = np.clip(60 * 2**retries + 10 * np.random.uniform(0, 1), 10, 600)
+                retries += 1
+                print(f"[WARNING] Rate limit error happened at {time_date} : {e}. Retrying in {time_wait} seconds (retry {retries}/{self.max_retries})")
                 time.sleep(time_wait)  # Exponential backoff
             except LengthFinishReasonError as e:
                 # Crash if the answer is too long

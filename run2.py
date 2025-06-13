@@ -32,6 +32,7 @@ from core.loggers.csv import LoggerCSV
 from core.loggers.multi_logger import MultiLogger
 from core.loggers.tensorboard import LoggerTensorboard
 from core.loggers.tqdm_logger import LoggerTQDM
+from core.loggers.profiler import LoggerProfiler
 from core.task import Task
 from core.utils import get_error_info, sanitize_name
 from core.register_hydra import register_hydra_resolvers
@@ -65,6 +66,7 @@ def main(config: DictConfig):
     do_tb: bool = config["do_tb"]
     do_csv: bool = config["do_csv"]
     do_tqdm: bool = config["do_tqdm"]
+    do_profiling: bool = config["do_profiling"]
 
     # Set the seeds
     seed = try_get_seed(config)
@@ -105,6 +107,8 @@ def main(config: DictConfig):
         )
     if do_tqdm and n_steps_max != np.inf:
         loggers.append(LoggerTQDM(n_total=n_steps_max))
+    if do_profiling:
+        loggers.append(LoggerProfiler(log_dirs = [f"{log_dir}/{run_name}", log_dir]))
     logger = MultiLogger(*loggers)
 
     # Create the env

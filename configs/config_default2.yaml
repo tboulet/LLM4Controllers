@@ -14,6 +14,7 @@ do_cli : True
 do_tb : True
 do_csv: True
 do_tqdm : True
+do_profiling: True
 config_logs:
     # The directory to save logs to.
     log_dir: ${log_dir}

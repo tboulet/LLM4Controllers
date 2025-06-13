@@ -28,6 +28,7 @@ hf_xet
 numpy
 transformers
 openai
+anthropic
 huggingface-hub
 gymnasium
 pygame

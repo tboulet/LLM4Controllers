@@ -18,7 +18,7 @@ parser.add_argument("--hour",  type=int, default=20)
 args = parser.parse_args()
 
 
-current_datetime = datetime.datetime.now().strftime("%Y-%m-%d")
+current_datetime = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 job_name = f"tboulet_{current_datetime}"
 def generate_slurm_script(args,job_name):
 
@@ -97,10 +97,20 @@ export CORE_PATTERN=/dev/null
 source $SCRATCH/venv/bin/activate
 cd $WORK/LLM4Controllers
 
-python run2.py \
-  agent=cg \
-  llm=vllm \
-  > logs/{job_name}-%A.log 2>&1
+# python run2.py \
+#   agent=cg \
+#   llm=vllm \
+#   > logs/{job_name}.log 2>&1
+
+vllm serve \
+    /lustre/fsn1/projects/rech/imi/upb99ot/hf/Qwen3-0.6B \
+    --tensor-parallel-size {args.n_gpu} \
+    --max-model-len 32000 \
+    --host 0.0.0.0 \
+    --port 8000 \
+    --gpu-memory-utilization 0.89 \
+    --dtype half \
+    > logs/{job_name}.log 2>&1
 """
 
     return script    

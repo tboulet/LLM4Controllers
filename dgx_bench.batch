@@ -51,6 +51,7 @@ initial_date=$(date +"%Y%m%d_%H%M%S")
 
 # All prompt fields
 FIELDS=("system" "env" "code_env" "code_task" "controller_structure" "example_answer" "task" "task_description" "task_map" "instructions")
+# FIELDS=("system" "env" "controller_structure" "example_answer" "task" "task_description" "task_map" "instructions")
 
 # Base command
 BASE_CMD="python run2.py agent=cg llm=azure config_logs.do_log_on_last=False"
@@ -59,11 +60,12 @@ BASE_CMD="python run2.py agent=cg llm=azure config_logs.do_log_on_last=False"
 mkdir -p logs
 
 # 1. Full config
-BASE_NAME="full_config"
+BASE_NAME="gpt4.1"
 NAME="${BASE_NAME}_${initial_date}"
 echo "Running: $NAME"
 mkdir -p logs/$NAME
-$BASE_CMD +run_name=$NAME agent.config.list_prompt_keys="[$(IFS=,; echo "${FIELDS[*]}")]" > logs/$NAME/log.txt 2>&1
+$BASE_CMD agent.config.list_prompt_keys="[$(IFS=,; echo "${FIELDS[*]}")]" > logs/$NAME/log.txt 2>&1
+exit
 
 # 2. Leave-one-out configs
 for i in "${!FIELDS[@]}"; do

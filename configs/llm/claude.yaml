@@ -1,14 +1,12 @@
-# WARNING : Claude is not compatible with the FromAPI class right now, API call is client.messages.create and there is no seed
-name: FromAPI
-api_key_name: ANTHROPIC_API_KEY
-model: claude-3-sonnet
+name: FromAnthropic
+model: claude-opus-4-20250514
 config:
-  client:
-    _target_: anthropic.Anthropic
-    api_key: ${env_variable:'${llm.api_key_name}'}
   model: ${llm.model}
-  kwargs:
+  config_inference:
+    max_tokens: 4096
+    temperature: 0.5
     top_p: 0.9
+  max_retries: 20
 
 
 

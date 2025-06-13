@@ -6,8 +6,11 @@ config:
     _target_: openai.OpenAI
     api_key: ${env_variable:'${llm.api_key_name}'}
   model: ${llm.model}
-  kwargs:
+  config_inference:
+    max_tokens: 4096
+    temperature: 0.5
     top_p: 0.9
+  max_retries: 20
 
 
 

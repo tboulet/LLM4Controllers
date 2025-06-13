@@ -6,14 +6,13 @@ from tbutils.exec_max_n import print_once
 class BaseLogger(ABC):
     """Base class for all loggers"""
 
-    @abstractmethod
     def log_scalars(
         self,
         metrics: Dict[str, Union[float, int]],
         step: int,
     ):
         """Log dictionary of scalars"""
-        raise NotImplementedError
+        pass
 
     def log_histograms(
         self,

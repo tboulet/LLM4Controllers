@@ -56,7 +56,8 @@ def main(config: DictConfig):
     agent_name: str = config["agent"]["name"]
     env_name: str = config["env"]["name"]
     model_name: str = try_get(config["agent"], "config.llm.model", default="")
-    model_name = sanitize_name(model_name.replace("/", "_"))
+    model_name = model_name.split("/")[-1]  # Get the last part of the model name (e.g., "gpt-3.5-turbo")
+    model_name = sanitize_name(model_name)
 
     n_steps_max: int = config.get("n_steps_max", np.inf)
     n_steps_max = to_maybe_inf(n_steps_max)
@@ -132,10 +133,4 @@ def main(config: DictConfig):
 
 
 if __name__ == "__main__":
-    with cProfile.Profile() as pr:
-        main()
-    pr.dump_stats("logs/profile_stats.prof")
-    print("\nProfile stats dumped to profile_stats.prof")
-    print(
-        "You can visualize the profile stats using snakeviz by running 'snakeviz logs/profile_stats.prof'"
-    )
+    main()

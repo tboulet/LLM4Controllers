@@ -64,7 +64,7 @@ BASE_NAME="gpt4.1"
 NAME="${BASE_NAME}_${initial_date}"
 echo "Running: $NAME"
 mkdir -p logs/$NAME
-$BASE_CMD +run_name=$NAME agent.config.list_prompt_keys="[$(IFS=,; echo "${FIELDS[*]}")]" > logs/$NAME/log.txt 2>&1
+$BASE_CMD agent.config.list_prompt_keys="[$(IFS=,; echo "${FIELDS[*]}")]" > logs/$NAME/log.txt 2>&1
 exit
 
 # 2. Leave-one-out configs

@@ -1,6 +1,6 @@
 name: FromAPI
 api_key_name: AZURE_API_KEY2
-model: gpt-4.1
+model: gpt-4.1-mini
 config:
   client:
     _target_: openai.AzureOpenAI

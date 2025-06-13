@@ -10,7 +10,7 @@ class LoggerProfiler(BaseLogger):
         self.profiler = cProfile.Profile()
         self.profiler.enable()
         self.log_dirs = log_dirs
-        print("[PROFILING] Profiler started.")
+        print("[Profiling] Profiler started.")
 
     def close(self):
         self.profiler.disable()
@@ -18,7 +18,7 @@ class LoggerProfiler(BaseLogger):
             self.profiler.dump_stats(f"{log_dir}/profile_stats.prof")
             print(
                 (
-                    f"[PROFILING] Profile stats dumped to {log_dir}. You can visualize the profile stats using snakeviz by running "
+                    f"[Profiling] Profile stats dumped to {log_dir}. You can visualize the profile stats using snakeviz by running "
                     f"'snakeviz {log_dir}/profile_stats.prof'"
                 )
             )

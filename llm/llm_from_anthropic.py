@@ -141,5 +141,4 @@ class LLM_from_Anthropic(LanguageModel):
             )
 
         self.logger.log_scalars(metrics_inference, step=None)
-        breakpoint()
         return texts

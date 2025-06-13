@@ -6,7 +6,7 @@ import signal
 from contextlib import contextmanager
 
 
-def get_error_info(e : Union[Exception, Type[Exception]], string_mode: bool = True) -> Union[str, Tuple[str, str]]:
+def get_error_info(e : Union[Exception, Type[Exception]], string_mode: bool = False) -> Union[str, Tuple[str, str]]:
     """Get the error information from an exception, including the stack trace.
     
     Args:

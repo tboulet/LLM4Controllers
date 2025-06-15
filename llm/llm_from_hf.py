@@ -7,8 +7,15 @@ from core.loggers.none_logger import NoneLogger
 from .base_llm import LanguageModel
 from transformers import AutoTokenizer, AutoModelForCausalLM, PreTrainedModel
 import torch
-from llm.utils import get_model_memory_from_model_name, get_memory_allocated, get_memory_reserved, get_GPUtil_metrics, get_model_memory_from_params
+from llm.utils import (
+    get_model_memory_from_model_name,
+    get_memory_allocated,
+    get_memory_reserved,
+    get_GPUtil_metrics,
+    get_model_memory_from_params,
+)
 from tbutils.exec_max_n import print_once
+
 
 class LLM_from_HuggingFace(LanguageModel):
     """A language model that load locally a HF model."""
@@ -25,16 +32,24 @@ class LLM_from_HuggingFace(LanguageModel):
         self.hf_token = os.getenv("HF_TOKEN")
         self.config_inference: Dict[str, Any] = config.get("config_inference", {})
         self.no_grad: bool = config.get("no_grad", True)
-        print(f"[INFO] Using Hugging Face model: {self.model_name} on device: {self.device}. Model memory: {get_model_memory_from_model_name(self.model_name)} GB.")
+        print(
+            f"[INFO] Using Hugging Face model: {self.model_name} on device: {self.device}. Model memory: {get_model_memory_from_model_name(self.model_name)} GB."
+        )
         # Model and tokenizer
         assert (
             self.hf_token is not None
         ), "You need to set the HF_TOKEN environment variable as your Hugging Face token."
         self.tokenizer = AutoTokenizer.from_pretrained(
-            self.model_name, token=self.hf_token
+            self.model_name,
+            token=self.hf_token,
+            trust_remote_code=True,
         )
         self.model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
-            self.model_name, device_map=self.device, token=self.hf_token
+            self.model_name,
+            token=self.hf_token,
+            device_map=self.device,
+            trust_remote_code=True,
+            torch_dtype="auto",
         )
         self.model.resize_token_embeddings(len(self.tokenizer))
         # Logging
@@ -62,7 +77,8 @@ class LLM_from_HuggingFace(LanguageModel):
                 f"Model {self.model_name} does not support chat template. Please use a model with a chat template."
             )
             prompt = "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages])
-
+            # TODO : add 'Assistant:' maybe
+            
         # Tokenize and unsure it does not exceed the max length
         tokens = self.tokenizer(prompt, return_tensors="pt")
         if tokens["input_ids"].shape[1] > self.model.config.max_position_embeddings:

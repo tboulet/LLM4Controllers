@@ -10,13 +10,12 @@ from transformers import PreTrainedModel
 class LanguageModel(ABC):
     """This abstract class define the interface for a language model."""
 
-    def __init__(self, config: Dict[str, Any], logger: BaseLogger = NoneLogger()):
+    def __init__(self, logger: BaseLogger = NoneLogger()):
         """Initialize the language model.
 
         Args:
-            config (Dict[str, Any]): the configuration of the language model.
+            logger (BaseLogger, optional): the logger to use. Defaults to NoneLogger().
         """
-        self.config = config
         self.logger = logger
 
     @abstractmethod

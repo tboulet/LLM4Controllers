@@ -42,11 +42,17 @@ class LLM_from_HuggingFace(LanguageModel):
         assert (
             self.hf_token is not None
         ), "You need to set the HF_TOKEN environment variable as your Hugging Face token."
-        self.tokenizer : AutoTokenizer = AutoTokenizer.from_pretrained(
-            self.model_name, token=self.hf_token
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.model_name,
+            token=self.hf_token,
+            trust_remote_code=True,
         )
         self.model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
-            self.model_name, device_map=self.device, token=self.hf_token
+            self.model_name,
+            token=self.hf_token,
+            device_map=self.device,
+            trust_remote_code=True,
+            torch_dtype="auto",
         )
         self.model.resize_token_embeddings(len(self.tokenizer))
         # Logging
@@ -77,7 +83,8 @@ class LLM_from_HuggingFace(LanguageModel):
                 f"[WARNING] Model {self.model_name} does not support chat template. Using a basic concatenation."
             )
             prompt = "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages])
-
+            # TODO : add 'Assistant:' maybe
+            
         # Tokenize and unsure it does not exceed the max length
         tokens = self.tokenizer(prompt, return_tensors="pt")
         if tokens["input_ids"].shape[1] > self.model.config.max_position_embeddings:

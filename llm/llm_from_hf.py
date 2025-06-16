@@ -166,7 +166,7 @@ class LLM_from_HuggingFace(LanguageModel):
             tokens = tokens.to(self.model.device)
 
         # Generate the completion
-        with RuntimeMeter("inference"):
+        with RuntimeMeter("generate"):
             if no_grad:
                 with torch.no_grad():
                     outputs = self.model.generate(**tokens, **kwargs)
@@ -195,13 +195,13 @@ class LLM_from_HuggingFace(LanguageModel):
             "completion_tokens": n_completion_tokens,
             "total_tokens": n_total_tokens,
             "completion_tokens_per_choice": list_n_completion_tokens_per_choice,  # custom extra field inside usage
-            "runtime_inference": RuntimeMeter.get_last_stage_runtime("inference"),
+            "runtime_inference": RuntimeMeter.get_last_stage_runtime("generate"),
             "runtime_tokenization": RuntimeMeter.get_last_stage_runtime("tokenization"),
             "runtime_decoding": RuntimeMeter.get_last_stage_runtime("decoding"),
         }
 
         metrics_inference = {
-            "runtime_inference": RuntimeMeter.get_last_stage_runtime("inference"),
+            "runtime_inference": RuntimeMeter.get_last_stage_runtime("generate"),
             "runtime_tokenization": RuntimeMeter.get_last_stage_runtime("tokenization"),
             "runtime_decoding": RuntimeMeter.get_last_stage_runtime("decoding"),
             "n_tokens_input": n_prompt_tokens,

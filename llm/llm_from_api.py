@@ -25,6 +25,7 @@ from llm.utils import (
 from llm.model_pricing import get_model_pricing
 from openai import RateLimitError, LengthFinishReasonError
 from openai.types.chat import ChatCompletion
+from tbutils.exec_max_n import print_once
 
 
 class LLM_from_API(LanguageModel):
@@ -91,7 +92,9 @@ class LLM_from_API(LanguageModel):
 
         choices = response.choices
 
-        # Calculate inference metrics
+        # Calculate metrics
+        
+        # 1) Memory usage
         if hasattr(response.usage, "completion_tokens_per_choice"):
             list_n_tokens_output = response.usage.completion_tokens_per_choice
         else:
@@ -117,6 +120,14 @@ class LLM_from_API(LanguageModel):
             "inference_metrics/n_chars_output_max": max(list_n_tokens_output),
             "inference_metrics/n_chars_output_min": min(list_n_tokens_output),
         }
+        # 2) Fields from 'usage'
+        for k, v in response.usage.to_dict().items():
+            key = f"inference_metrics/{k}"
+            if key in metrics_inference:
+                print_once(f"[WARNING] Key {key} found in usage but already exists in metrics_inference. Skipping it.")
+            elif np.isscalar(v):
+                metrics_inference[key] = v
+        # 3) Pricing
         if (
             self.price_per_1M_token_input is not None
             and self.price_per_1M_token_output is not None

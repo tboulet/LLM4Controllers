@@ -48,27 +48,36 @@ async def chat_completions(request: Request, _: None = Depends(verify_api_key)):
         )
 
     # Call the Hugging Face model
-    kwargs_inference = {k: v for k, v in data.items() if k not in ["model", "messages"]}
-    completions, usage = llm.generate(
-        messages=messages, return_usage=True, **kwargs_inference
-    )
-
-    # Build choices list with all completions
-    choices = []
-    for i, completion in enumerate(completions):
-        choices.append(
-            {
-                "index": i,
-                "message": {"role": "assistant", "content": completion.strip()},
-                "finish_reason": "stop",
-            }
+    
+    try:
+        kwargs_inference = {k: v for k, v in data.items() if k not in ["model", "messages"]}
+        completions, usage = llm.generate(
+            messages=messages, return_usage=True, **kwargs_inference
         )
 
-    return {
-        "id": f"chatcmpl-{uuid.uuid4().hex[:12]}",
-        "object": "chat.completion",
-        "created": int(datetime.now(timezone.utc).timestamp()),
-        "model": model_name,
-        "choices": choices,
-        "usage": usage,
-    }
+        # Build choices list with all completions
+        choices = []
+        for i, completion in enumerate(completions):
+            choices.append(
+                {
+                    "index": i,
+                    "message": {"role": "assistant", "content": completion.strip()},
+                    "finish_reason": "stop",
+                }
+            )
+
+        return {
+            "id": f"chatcmpl-{uuid.uuid4().hex[:12]}",
+            "object": "chat.completion",
+            "created": int(datetime.now(timezone.utc).timestamp()),
+            "model": model_name,
+            "choices": choices,
+            "usage": usage,
+        }
+        
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error during inference: {str(e)}",
+        )

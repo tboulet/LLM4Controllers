@@ -117,16 +117,19 @@ class LLM_from_HuggingFace(LanguageModel):
         """
 
         with RuntimeMeter("tokenization"):
+            # Convert prompt/messages into messages and check errors
             messages = self.get_messages(prompt=prompt, messages=messages)
             assert len(messages) > 0, "No prompt to generate completion."
 
+            # Replace "n" with "num_return_sequences" in kwargs
             kwargs["num_return_sequences"] = kwargs.get("n", 1)
             if "n" in kwargs:
                 del kwargs["n"]
 
-            kwargs["do_sample"] = do_sample
-            if kwargs["num_return_sequences"] > 1:
-                kwargs["do_sample"] = True
+            # Set do_sample=True if certain sampling parameters are active
+            kwargs["do_sample"] = self._check_and_set_do_sample(
+                do_sample=do_sample, kwargs=kwargs
+            )
 
             # Apply chat template for instruct models
             if self.do_has_chat_template:
@@ -143,7 +146,7 @@ class LLM_from_HuggingFace(LanguageModel):
                     prompt_templated_list.append("Assistant:")
                 prompt_templated = "\n".join(prompt_templated_list)
 
-            # Tokenize and unsure it does not exceed the max length
+            # Unsure it does not exceed the max length
             if max_length is not None:
                 if max_length > self.context_window:
                     print_once(
@@ -151,6 +154,7 @@ class LLM_from_HuggingFace(LanguageModel):
                     )
                     max_length = self.context_window
 
+            # Tokenize the prompt
             tokens = self.tokenizer(
                 prompt_templated,
                 return_tensors="pt",
@@ -175,14 +179,14 @@ class LLM_from_HuggingFace(LanguageModel):
 
         # Decode the tokens. Outputs shape: (n, sequence_length)
         with RuntimeMeter("decoding"):
-            completions = []
+            completions : List[str] = []
             for out in outputs:
                 completion = self.tokenizer.decode(
                     out, skip_special_tokens=skip_special_tokens
                 )
                 # Remove prompt prefix
-                answer = completion[len(prompt_templated) :].lstrip("\n\t ")
-                completions.append(answer)
+                completion = completion[len(prompt_templated) :].lstrip("\n\t ")
+                completions.append(completion)
 
         # Compute usage and log metrics
         list_n_completion_tokens_per_choice = [
@@ -221,7 +225,37 @@ class LLM_from_HuggingFace(LanguageModel):
             f"inference_metrics/{k}": v for k, v in metrics_inference.items()
         }
         self.logger.log_scalars(metrics_inference, step=None)
+        
+        # Return results
         if return_usage:
             return completions, usage
         else:
             return completions
+
+    def _check_and_set_do_sample(self, do_sample: bool, kwargs: dict) -> bool:
+        """
+        Checks if sampling-related arguments are active and require do_sample=True.
+        If so, returns True and prints a warning if do_sample was False.
+        """
+        temperature = kwargs.get("temperature", 1.0)
+        top_k = kwargs.get("top_k", 0)
+        top_p = kwargs.get("top_p", 1.0)
+        typical_p = kwargs.get("typical_p", 1.0)
+        num_return_sequences = kwargs.get("num_return_sequences", 1)
+
+        requires_sampling = (
+            (temperature != 1.0)
+            or (top_k > 0)
+            or (top_p < 1.0)
+            or (typical_p < 1.0)
+            or (num_return_sequences > 1)
+        )
+
+        if requires_sampling and not do_sample:
+            print(
+                "Warning: Sampling parameters detected with active values "
+                "(temperature != 1.0, top_k > 0, top_p < 1.0, typical_p < 1.0, or n > 1) "
+                "but do_sample=False. Setting do_sample=True automatically."
+            )
+            return True
+        return do_sample

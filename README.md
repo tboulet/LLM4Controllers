@@ -16,7 +16,9 @@ source venv/bin/activate   # on Windows, use `venv\Scripts\activate.bat`
 
 ### Install the requirements
 
+Install torch (command may vary depending on your system and CUDA version), and then install the requirements from the `requirements.txt` file.
 ```bash
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
 pip install -r requirements.txt
 ```
 
@@ -49,3 +51,35 @@ python run.py agent=hcg env=minigrid llm=vllm llm.model=Qwen/Qwen2.5-1.5B-Instru
 # Logging
 
 The results of the experiments are stored in the ``logs`` folder. Each run is stored in a separate folder with the name of the configuration used, and is also stored in ``logs/_last``. Each log folder contains ``task_x`` folders, where ``x`` is the task number. This folder contains the received prompt, agent answer, controller generated, error traces, and videos of the episode.
+
+# Hosting LLMs with TBLLM
+
+TBLLM is a functionnal but non-optimized equivalent of VLLM. You can host LLMs on any machine connected to internet, and then you can call them using the OpenAI API.
+
+To host an LLM (currently only microsoft/phi-2 will be used), run the following command:
+
+```bash
+uvicorn tbllm.run:app --host 0.0.0.0 --port 8000
+```
+
+Then, you can use the LLM using the OpenAI API
+
+```python
+from openai import OpenAI
+
+host_name = "localhost"  # or the IP address of the machine hosting the LLM
+client = OpenAI(
+    api_key="1234",
+    base_url = f"http://{host_name}:8000/v1",
+)
+
+response = client.chat.completions.create(
+    model="microsoft/phi-2",
+    messages=[{"role": "user", "content": "What is the capital of France?"}],
+    temperature=0.3,
+    n=2,
+)
+
+print(response)
+```
+

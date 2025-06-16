@@ -5,98 +5,70 @@ from transformers import pipeline
 from llm.llm_from_hf import LLM_from_HuggingFace
 from datetime import datetime, timezone
 import uuid
+from fastapi import Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-# llm = LLM_from_HuggingFace(
-#     config={
-#         "model": "microsoft/phi-2",
-#         "device": "cuda",
-#         "method_truncation": "last",
-#         "kwargs": {
-#             "temperature": 0.7,
-#             "top_p": 0.95,
-#             "max_new_tokens": 4096,
-#             "do_sample": True,
-#         },
-#     }
-# )
 
+model_name = "microsoft/phi-2"
+kwargs_model = {}
+llm = LLM_from_HuggingFace(
+    model=model_name,
+    device="cuda",
+    **kwargs_model,
+)
 app = FastAPI()
-models : Dict[str, LLM_from_HuggingFace] = {}
+auth_scheme = HTTPBearer()
 
-API_KEY = os.getenv("TBLLM_API_KEY")  # Replace with your secret key or set it in environment variables
-API_KEY = "1234"
+API_KEY = os.getenv("TBLLM_API_KEY")
+API_KEY = "1234" # temporary hardcoded key for testing
 
-def verify_api_key(x_api_key: str):
-    if x_api_key != API_KEY:
+
+def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(auth_scheme)):
+    if credentials.scheme.lower() != "bearer" or credentials.credentials != API_KEY:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
-
 @app.post("/v1/chat/completions")
-async def chat_completions(request: Request, x_api_key: str = Header(...)):
-    verify_api_key(x_api_key)
+async def chat_completions(request: Request, _: None = Depends(verify_api_key)):
     data = await request.json()
 
-    # Identify the model to use
-    if not "model" in data:
-        raise HTTPException(status_code=400, detail="Missing 'model' field")
-    model_name = data["model"]
-    # Check if the model is already loaded
-    if model_name not in models:
-        # Load the model
-        print(f"[INFO] Loading model {model_name}...")
-        models[model_name] = LLM_from_HuggingFace(
-            config={
-                "model": model_name,
-                "device": "cuda",
-                "method_truncation": "last",
-                "kwargs": {
-                    "temperature": 0.7,
-                    "top_p": 0.95,
-                    "max_new_tokens": 4096,
-                    "do_sample": True,
-                },
-            }
+    # Parse the model to use (for now, we only support one model)
+    if "model" in data and data["model"] != model_name:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Model {data['model']} is not supported. The model deployed right now is {model_name}.",
         )
-    
-    
-    # Parse OpenAI-style inputs
+
+    # Parse the messages
     messages = data.get("messages", [])
     if not messages or not isinstance(messages, list):
-        raise HTTPException(status_code=400, detail="Invalid or missing 'messages'")
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or missing 'messages' field. Must be a [{{'role' : ..., 'content' : ...}}] list.",
+        )
 
-    # Construct prompt from messages (basic concatenation)
-    prompt = ""
-    for message in messages:
-        role = message.get("role")
-        content = message.get("content")
-        if role and content:
-            prompt += f"{role}: {content}\n"
-    prompt += "assistant:"
+    # Call the Hugging Face model
+    kwargs_inference = {k: v for k, v in data.items() if k not in ["model", "messages"]}
+    completions, usage = llm.generate(
+        messages=messages, return_usage=True, **kwargs_inference
+    )
 
-    # Call your Hugging Face model
-    response_text = llm.generate(prompt=prompt, n=1)[0]
+    # Build choices list with all completions
+    choices = []
+    for i, completion in enumerate(completions):
+        choices.append(
+            {
+                "index": i,
+                "message": {"role": "assistant", "content": completion.strip()},
+                "finish_reason": "stop",
+            }
+        )
 
-    # Construct OpenAI-style response
     return {
         "id": f"chatcmpl-{uuid.uuid4().hex[:12]}",
         "object": "chat.completion",
-        # .now(datetime.timezone.utc
         "created": int(datetime.now(timezone.utc).timestamp()),
-        "model": "microsoft/phi-2",
-        "choices": [
-            {
-                "index": 0,
-                "message": {
-                    "role": "assistant",
-                    "content": response_text.strip()
-                },
-                "finish_reason": "stop"
-            }
-        ],
-        "usage": {
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "total_tokens": 0
-        }
+        "model": model_name,
+        "choices": choices,
+        "usage": usage,
     }

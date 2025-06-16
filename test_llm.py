@@ -1,10 +1,6 @@
 from transformers import AutoTokenizer
 
 from llm.llm_from_hf import LLM_from_HuggingFace
-messages = [
-    {"role": "system", "content": "You are a helpful assistant."},
-    {"role": "user", "content": "What is the capital of France?"},
-]
 
 # tokenizer = AutoTokenizer.from_pretrained("HuggingFaceH4/zephyr-7b-beta")
 # assert tokenizer.chat_template is not None
@@ -13,19 +9,12 @@ messages = [
 # prompt = tokenizer.apply_chat_template(messages, tokenize=False)
 # print(prompt)
 
-
+model_name = "microsoft/phi-2"
+kwargs_model = {}
 llm = LLM_from_HuggingFace(
-    config={
-        "model": "microsoft/phi-2",
-        "device": "cuda",
-        "method_truncation": "last",
-        "kwargs": {
-            "temperature": 0.7,
-            "top_p": 0.95,
-            "max_new_tokens": 1000,
-            "do_sample": True,
-        },
-    }
+    model=model_name,
+    device="cuda",
+    **kwargs_model,
 )
 
 # response = llm.generate(messages=messages, n=1)

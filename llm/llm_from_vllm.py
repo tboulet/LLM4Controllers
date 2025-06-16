@@ -100,7 +100,7 @@ class LLM_from_VLLM(LanguageModel):
         list_n_chars_output = [len(choice.message.content) for choice in choices]
         metrics_inference = {
             "inference_metrics/runtime_inference": RuntimeMeter.get_last_stage_runtime(
-                "inference_metrics"
+                "llm_inference"
             ),
             "inference_metrics/n_chars_input": sum(len(msg["content"]) for msg in messages),
             "inference_metrics/n_tokens_input": response.usage.prompt_tokens,

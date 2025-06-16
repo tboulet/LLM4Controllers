@@ -99,22 +99,22 @@ class LLM_from_Anthropic(LanguageModel):
 
         # Metrics
         metrics_inference = {
-            "llm_inference/runtime_inference": RuntimeMeter.get_last_stage_runtime(
+            "inference_metrics/runtime_inference": RuntimeMeter.get_last_stage_runtime(
                 "llm_inference"
             ),
-            "llm_inference/n_chars_input": sum(
+            "inference_metrics/n_chars_input": sum(
                 len(msg["content"]) for msg in messages
             ),
-            "llm_inference/n_tokens_input": usage.input_tokens,
-            "llm_inference/n_tokens_output_sum": sum(list_n_tokens_output),
-            "llm_inference/n_tokens_output_mean": average(list_n_tokens_output),
-            "llm_inference/n_tokens_output_max": max(list_n_tokens_output),
-            "llm_inference/n_tokens_output_min": min(list_n_tokens_output),
-            "llm_inference/n_tokens_total": usage.input_tokens + total_output_tokens,
-            "llm_inference/n_chars_output_sum": sum(list_n_chars_output),
-            "llm_inference/n_chars_output_mean": average(list_n_chars_output),
-            "llm_inference/n_chars_output_max": max(list_n_chars_output),
-            "llm_inference/n_chars_output_min": min(list_n_chars_output),
+            "inference_metrics/n_tokens_input": usage.input_tokens,
+            "inference_metrics/n_tokens_output_sum": sum(list_n_tokens_output),
+            "inference_metrics/n_tokens_output_mean": average(list_n_tokens_output),
+            "inference_metrics/n_tokens_output_max": max(list_n_tokens_output),
+            "inference_metrics/n_tokens_output_min": min(list_n_tokens_output),
+            "inference_metrics/n_tokens_total": usage.input_tokens + total_output_tokens,
+            "inference_metrics/n_chars_output_sum": sum(list_n_chars_output),
+            "inference_metrics/n_chars_output_mean": average(list_n_chars_output),
+            "inference_metrics/n_chars_output_max": max(list_n_chars_output),
+            "inference_metrics/n_chars_output_min": min(list_n_chars_output),
         }
 
         if (
@@ -128,14 +128,14 @@ class LLM_from_Anthropic(LanguageModel):
             ]
             metrics_inference.update(
                 {
-                    "llm_inference/price_input": price_input,
-                    "llm_inference/price_output_sum": sum(list_price_tokens_output),
-                    "llm_inference/price_output_mean": average(
+                    "inference_metrics/price_input": price_input,
+                    "inference_metrics/price_output_sum": sum(list_price_tokens_output),
+                    "inference_metrics/price_output_mean": average(
                         list_price_tokens_output
                     ),
-                    "llm_inference/price_output_max": max(list_price_tokens_output),
-                    "llm_inference/price_output_min": min(list_price_tokens_output),
-                    "llm_inference/price_inference": price_input
+                    "inference_metrics/price_output_max": max(list_price_tokens_output),
+                    "inference_metrics/price_output_min": min(list_price_tokens_output),
+                    "inference_metrics/price_inference": price_input
                     + sum(list_price_tokens_output),
                 }
             )

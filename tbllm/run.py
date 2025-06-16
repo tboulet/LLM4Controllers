@@ -54,8 +54,10 @@ async def chat_completions(request: Request, _: None = Depends(verify_api_key)):
 
     # Call the Hugging Face model
     kwargs_inference = {k: v for k, v in data.items() if k not in ["model", "messages"]}
-    completions, metrics_llm = llm.generate(messages=messages, return_metrics=True, **kwargs_inference)
-    
+    completions, usage = llm.generate(
+        messages=messages, return_usage=True, **kwargs_inference
+    )
+
     # Build choices list with all completions
     choices = []
     for i, completion in enumerate(completions):
@@ -73,5 +75,5 @@ async def chat_completions(request: Request, _: None = Depends(verify_api_key)):
         "created": int(datetime.now(timezone.utc).timestamp()),
         "model": model_name,
         "choices": choices,
-        "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "completion_tokens_per_choice": [33,88]},
+        "usage": usage,
     }

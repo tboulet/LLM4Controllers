@@ -71,12 +71,16 @@ class LLM_from_API(LanguageModel):
             except RateLimitError as e:
                 # Handle rate limit error
                 time_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                
+
                 if retries >= self.max_retries:
                     raise ValueError(f"Max retries reached: {e}")
-                time_wait = np.clip(60 * 2**retries + 10 * np.random.uniform(0, 1), 10, 600)
+                time_wait = np.clip(
+                    60 * 2**retries + 10 * np.random.uniform(0, 1), 10, 600
+                )
                 retries += 1
-                print(f"[WARNING] Rate limit error happened at {time_date} : {e}. Retrying in {time_wait} seconds (retry {retries}/{self.max_retries})")
+                print(
+                    f"[WARNING] Rate limit error happened at {time_date} : {e}. Retrying in {time_wait} seconds (retry {retries}/{self.max_retries})"
+                )
                 time.sleep(time_wait)  # Exponential backoff
             except LengthFinishReasonError as e:
                 # Crash if the answer is too long
@@ -84,32 +88,34 @@ class LLM_from_API(LanguageModel):
             except Exception as e:
                 # Handle other exceptions
                 raise ValueError(f"Unexpected error during LLM inference: {e}")
-            
+
         choices = response.choices
-        
+
         # Calculate inference metrics
-        list_n_tokens_output = [
-            len(self.language_encoding.encode(choice.message.content))
-            for choice in choices
-        ]
-        list_n_chars_output = [
-            len(choice.message.content) for choice in choices
-        ]
+        if hasattr(response.usage, "completion_tokens_per_choice"):
+            list_n_tokens_output = response.usage.completion_tokens_per_choice
+        else:
+            list_n_tokens_output = (
+                [  # If the API does not provide per-choice tokens, we calculate them
+                    len(self.language_encoding.encode(choice.message.content))
+                    for choice in choices
+                ]
+            )
         metrics_inference = {
-            "llm_inference/runtime_inference": RuntimeMeter.get_last_stage_runtime(
+            "inference_metrics/runtime_inference": RuntimeMeter.get_last_stage_runtime(
                 "llm_inference"
             ),
-            "llm_inference/n_chars_input": sum(len(msg["content"]) for msg in messages),
-            "llm_inference/n_tokens_input": response.usage.prompt_tokens,
-            "llm_inference/n_tokens_output_sum": sum(list_n_tokens_output),
-            "llm_inference/n_tokens_output_mean": average(list_n_tokens_output),
-            "llm_inference/n_tokens_output_max": max(list_n_tokens_output),
-            "llm_inference/n_tokens_output_min": min(list_n_tokens_output),
-            "llm_inference/n_tokens_total": response.usage.total_tokens,
-            "llm_inference/n_chars_output_sum": sum(list_n_chars_output),
-            "llm_inference/n_chars_output_mean": average(list_n_chars_output),
-            "llm_inference/n_chars_output_max": max(list_n_chars_output),
-            "llm_inference/n_chars_output_min": min(list_n_chars_output),
+            "inference_metrics/n_chars_input": sum(len(msg["content"]) for msg in messages),
+            "inference_metrics/n_tokens_input": response.usage.prompt_tokens,
+            "inference_metrics/n_tokens_output_sum": sum(list_n_tokens_output),
+            "inference_metrics/n_tokens_output_mean": average(list_n_tokens_output),
+            "inference_metrics/n_tokens_output_max": max(list_n_tokens_output),
+            "inference_metrics/n_tokens_output_min": min(list_n_tokens_output),
+            "inference_metrics/n_tokens_total": response.usage.total_tokens,
+            "inference_metrics/n_chars_output_sum": sum(list_n_tokens_output),
+            "inference_metrics/n_chars_output_mean": average(list_n_tokens_output),
+            "inference_metrics/n_chars_output_max": max(list_n_tokens_output),
+            "inference_metrics/n_chars_output_min": min(list_n_tokens_output),
         }
         if (
             self.price_per_1M_token_input is not None
@@ -124,14 +130,14 @@ class LLM_from_API(LanguageModel):
             ]
             metrics_inference.update(
                 {
-                    "llm_inference/price_input": price_tokens_input,
-                    "llm_inference/price_output_sum": sum(list_price_tokens_output),
-                    "llm_inference/price_output_mean": average(
+                    "inference_metrics/price_input": price_tokens_input,
+                    "inference_metrics/price_output_sum": sum(list_price_tokens_output),
+                    "inference_metrics/price_output_mean": average(
                         list_price_tokens_output
                     ),
-                    "llm_inference/price_output_max": max(list_price_tokens_output),
-                    "llm_inference/price_output_min": min(list_price_tokens_output),
-                    "llm_inference/price_inference": price_tokens_input
+                    "inference_metrics/price_output_max": max(list_price_tokens_output),
+                    "inference_metrics/price_output_min": min(list_price_tokens_output),
+                    "inference_metrics/price_inference": price_tokens_input
                     + sum(list_price_tokens_output),
                 }
             )

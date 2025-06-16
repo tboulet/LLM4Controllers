@@ -99,17 +99,17 @@ class LLM_from_VLLM(LanguageModel):
         # Calculate inference metrics
         list_n_chars_output = [len(choice.message.content) for choice in choices]
         metrics_inference = {
-            "llm_inference/runtime_inference": RuntimeMeter.get_last_stage_runtime(
+            "inference_metrics/runtime_inference": RuntimeMeter.get_last_stage_runtime(
                 "llm_inference"
             ),
-            "llm_inference/n_chars_input": sum(len(msg["content"]) for msg in messages),
-            "llm_inference/n_tokens_input": response.usage.prompt_tokens,
-            "llm_inference/n_tokens_output_sum": response.usage.completion_tokens,
-            "llm_inference/n_tokens_total": response.usage.total_tokens,
-            "llm_inference/n_chars_output_sum": sum(list_n_chars_output),
-            "llm_inference/n_chars_output_mean": average(list_n_chars_output),
-            "llm_inference/n_chars_output_max": max(list_n_chars_output),
-            "llm_inference/n_chars_output_min": min(list_n_chars_output),
+            "inference_metrics/n_chars_input": sum(len(msg["content"]) for msg in messages),
+            "inference_metrics/n_tokens_input": response.usage.prompt_tokens,
+            "inference_metrics/n_tokens_output_sum": response.usage.completion_tokens,
+            "inference_metrics/n_tokens_total": response.usage.total_tokens,
+            "inference_metrics/n_chars_output_sum": sum(list_n_chars_output),
+            "inference_metrics/n_chars_output_mean": average(list_n_chars_output),
+            "inference_metrics/n_chars_output_max": max(list_n_chars_output),
+            "inference_metrics/n_chars_output_min": min(list_n_chars_output),
             "inference_metrics/memory_model_torch_allocated": get_memory_allocated(),
             "inference_metrics/memory_model_torch_reserved": get_memory_reserved(),
             **get_GPUtil_metrics("inference_metrics/gputil/"),

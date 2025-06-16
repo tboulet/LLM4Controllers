@@ -20,12 +20,7 @@ app = FastAPI()
 auth_scheme = HTTPBearer()
 
 API_KEY = os.getenv("TBLLM_API_KEY")
-API_KEY = "1234"
-
-
-# def verify_api_key(x_api_key: str):
-#     if x_api_key != API_KEY:
-#         raise HTTPException(status_code=401, detail="Unauthorized")
+API_KEY = "1234" # temporary hardcoded key for testing
 
 
 def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(auth_scheme)):

@@ -190,31 +190,37 @@ class LLM_from_HuggingFace(LanguageModel):
         ]
         n_completion_tokens = sum(list_n_completion_tokens_per_choice)
         n_total_tokens = n_prompt_tokens + n_completion_tokens
+        runtime_generate = RuntimeMeter.get_last_stage_runtime("generate")
+        runtime_tokenization = RuntimeMeter.get_last_stage_runtime("tokenization")
+        runtime_decoding = RuntimeMeter.get_last_stage_runtime("decoding")
+        runtime_inference = runtime_generate + runtime_tokenization + runtime_decoding
         usage = {
             "prompt_tokens": n_prompt_tokens,
             "completion_tokens": n_completion_tokens,
             "total_tokens": n_total_tokens,
             "completion_tokens_per_choice": list_n_completion_tokens_per_choice,  # custom extra field inside usage
-            "runtime_inference": RuntimeMeter.get_last_stage_runtime("generate"),
-            "runtime_tokenization": RuntimeMeter.get_last_stage_runtime("tokenization"),
-            "runtime_decoding": RuntimeMeter.get_last_stage_runtime("decoding"),
+            "runtime_generate": runtime_generate,
+            "runtime_tokenization": runtime_tokenization,
+            "runtime_decoding": runtime_decoding,
+            "runtime_inference": runtime_inference,
         }
 
         metrics_inference = {
-            "runtime_inference": RuntimeMeter.get_last_stage_runtime("generate"),
-            "runtime_tokenization": RuntimeMeter.get_last_stage_runtime("tokenization"),
-            "runtime_decoding": RuntimeMeter.get_last_stage_runtime("decoding"),
+            "runtime_generate": runtime_generate,
+            "runtime_tokenization": runtime_tokenization,
+            "runtime_decoding": runtime_decoding,
+            "runtime_inference": runtime_inference,
             "n_tokens_input": n_prompt_tokens,
             "n_tokens_output_sum": n_completion_tokens,
-            "n_tokens_output_mean": average(
-                list_n_completion_tokens_per_choice
-            ),
+            "n_tokens_output_mean": average(list_n_completion_tokens_per_choice),
             "n_tokens_output_max": max(list_n_completion_tokens_per_choice),
             "n_tokens_output_min": min(list_n_completion_tokens_per_choice),
             "n_tokens_total": n_total_tokens,
         }
+        metrics_inference = {
+            f"inference_metrics/{k}": v for k, v in metrics_inference.items()
+        }
         self.logger.log_scalars(metrics_inference, step=None)
-
         if return_usage:
             return completions, usage
         else:

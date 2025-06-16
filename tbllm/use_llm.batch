@@ -1,24 +1,24 @@
 #!/bin/bash
 #
 
-#SBATCH --job-name=tbllm
-#SBATCH --output=out.out
-#SBATCH --error=out.err
+#SBATCH --job-name=job
+#SBATCH --output=use_llm.out
+#SBATCH --error=use_llm.err
 
 ## For partition: either prod10, prod 20, prod 40 or prod80
 ## For gres: either 1g.10gb:[1:10] for prod10, 2g.20gb:[1:4] for prod20, 3g.40gb:1 for prod40 or A100.80gb for prod80.
 
-##SBATCH --partition=prod10
-##SBATCH --gres=gpu:1g.10gb:1
-##SBATCH --cpus-per-task=4
+#SBATCH --partition=prod10
+#SBATCH --gres=gpu:1g.10gb:1
+#SBATCH --cpus-per-task=4
 
 ##SBATCH --partition=prod20
 ##SBATCH --gres=gpu:2g.20gb:1
 ##SBATCH --cpus-per-task=4
 
-#SBATCH --partition=prod40
-#SBATCH --gres=gpu:3g.40gb:1
-#SBATCH --cpus-per-task=4
+##SBATCH --partition=prod40
+##SBATCH --gres=gpu:3g.40gb:1
+##SBATCH --cpus-per-task=4
 
 ##SBATCH --partition=prod80
 ##SBATCH --gres=gpu:A100.80gb:1
@@ -40,4 +40,4 @@
 source ~/projects/venv/bin/activate
 cd ~/projects/LLM4Controllers
 
-uvicorn tbllm.run:app --host 0.0.0.0 --port 8000
+python personal_test.py

@@ -122,7 +122,7 @@ class LLM_from_API(LanguageModel):
         }
         # 2) Fields from 'usage'
         for k, v in response.usage.to_dict().items():
-            key = f"inference_metrics/{k}"
+            key = f"inference_metrics/usage/{k}"
             if key in metrics_inference:
                 print_once(f"[WARNING] Key {key} found in usage but already exists in metrics_inference. Skipping it.")
             elif np.isscalar(v):

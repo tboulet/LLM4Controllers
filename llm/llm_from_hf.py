@@ -44,6 +44,10 @@ class LLM_from_HuggingFace(LanguageModel):
         super().__init__(logger)
         # Parameters
         self.model_name: str = model
+        if os.getenv("HF_HOME") is None:
+            self.model_path = self.model_name
+        else:
+            self.model_path = f"{os.getenv('HF_HOME')}/{self.model_name}"
         self.device = device
         if self.device == "cuda":
             assert (
@@ -55,12 +59,12 @@ class LLM_from_HuggingFace(LanguageModel):
         )
         # Model and tokenizer
         self.tokenizer: AutoTokenizer = AutoTokenizer.from_pretrained(
-            self.model_name,
+            self.model_path,
             token=hf_token,
             trust_remote_code=True,
         )
         self.model: GenerationMixin = AutoModelForCausalLM.from_pretrained(
-            self.model_name,
+            self.model_path,
             token=hf_token,
             device_map=self.device,
             trust_remote_code=True,

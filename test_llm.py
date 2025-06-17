@@ -9,7 +9,9 @@ from llm.llm_from_hf import LLM_from_HuggingFace
 # prompt = tokenizer.apply_chat_template(messages, tokenize=False)
 # print(prompt)
 
+# model_name = "/lustre/fsn1/projects/rech/imi/upb99ot/hf/microsoft/phi-2"
 model_name = "microsoft/phi-2"
+# model_name = "gpt2"
 kwargs_model = {}
 llm = LLM_from_HuggingFace(
     model=model_name,

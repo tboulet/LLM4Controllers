@@ -102,15 +102,7 @@ cd $WORK/LLM4Controllers
 #   llm=vllm \
 #   > logs/{job_name}.log 2>&1
 
-vllm serve \
-    /lustre/fsn1/projects/rech/imi/upb99ot/hf/Qwen3-0.6B \
-    --tensor-parallel-size {args.n_gpu} \
-    --max-model-len 32000 \
-    --host 0.0.0.0 \
-    --port 8000 \
-    --gpu-memory-utilization 0.89 \
-    --dtype half \
-    > logs/{job_name}.log 2>&1
+python test_llm.py > logs/{job_name}.log 2>&1
 """
 
     return script    

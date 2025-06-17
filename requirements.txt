@@ -24,7 +24,7 @@ tiktoken
 uvicorn
 fastapi
 
-# Project libraries
+# Project libraries 
 accelerate
 hf_xet
 numpy

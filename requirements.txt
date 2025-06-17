@@ -21,6 +21,8 @@ pyvis
 pynvml
 tbutils
 tiktoken
+uvicorn
+fastapi
 
 # Project libraries
 accelerate

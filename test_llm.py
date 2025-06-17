@@ -9,10 +9,6 @@ from llm.llm_from_hf import LLM_from_HuggingFace
 # # OK to use
 # prompt = tokenizer.apply_chat_template(messages, tokenize=False)
 # print(prompt)
-os.environ["HF_HOME"] = "C:\\Users\\timot\\projects\\LLM4Controllers\\huggingface"
-os.environ["TRANSFORMERS_CACHE"] = "C:\\Users\\timot\\projects\\LLM4Controllers\\huggingface\\hub"
-os.environ["HF_HUB_CACHE"] = "C:\\Users\\timot\\projects\\LLM4Controllers\\huggingface\\hub"
-os.environ["HF_HUB_DISABLE_XET"] = "1"
 
 # model_name = "/lustre/fsn1/projects/rech/imi/upb99ot/hf/microsoft/phi-2"
 model_name = "microsoft/phi-2"

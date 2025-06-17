@@ -31,7 +31,7 @@ def generate_slurm_script(args,job_name):
         hour = args.hour
     
     # For each partition, specify account and constrains (if any), qos, and number of CPUs (if applicable)   
-    list_lines_modules = []
+    module_load = ""
     if args.cpu:
         list_lines_script.append("#SBATCH --account=imi@cpu")
         if args.dev:
@@ -53,7 +53,7 @@ def generate_slurm_script(args,job_name):
         list_lines_script.append("#SBATCH --account=imi@h100")
         list_lines_script.append("#SBATCH -C h100")
         n_cpu = min(int(args.n_gpu * 24),96)
-        list_lines_modules.append("module load arch/h100")
+        module_load = "module load arch/h100"
         if args.dev:
             list_lines_script.append("#SBATCH --qos=qos_gpu_h100-dev")
         elif hour <= 20 :
@@ -65,23 +65,14 @@ def generate_slurm_script(args,job_name):
     #     account = "imi@a100"
     #     c="a100"
     #     n_cpu = min(int(args.n_gpu * 8),64)
-    #     list_lines_modules.append("module load arch/a100")
+    #     module_load = "module load arch/a100"
     else:
         raise ValueError("Please specify a GPU type: --cpu, --v100, --h100, or --a100")
     
-    if args.conda:
-        list_lines_modules.append("module load python/3.11.5")
-        list_script_env = ["conda deactivate", "conda activate vllm"]
-    else:
-        list_script_env = ["source $SCRATCH/venv/bin/activate"]
     if args.cpus_per_task:
         n_cpu = args.cpus_per_task
     list_lines_script.append(f"#SBATCH --cpus-per-task={n_cpu}")
-    
     script_begin = "\n".join(list_lines_script)
-    script_module = "\n".join(list_lines_modules)
-    script_env = "\n".join(list_script_env)
-    
     script = f"""#!/bin/bash
 {script_begin}
 #SBATCH --job-name={job_name}
@@ -95,14 +86,16 @@ def generate_slurm_script(args,job_name):
 #SBATCH --error=./out/{job_name}-%A/.err
 # set -x
 
+hostname
 export TMPDIR=$JOBSCRATCH
 module purge
-{script_module}
+{module_load}
 ulimit -c 0
 export CORE_PATTERN=/dev/null
 
-{script_env}
 
+
+source $SCRATCH/venv/bin/activate
 cd $WORK/LLM4Controllers
 
 # python run2.py \
@@ -110,15 +103,8 @@ cd $WORK/LLM4Controllers
 #   llm=vllm \
 #   > logs/{job_name}.log 2>&1
 
-vllm serve \
-    /lustre/fsn1/projects/rech/imi/upb99ot/hf/Qwen3-0.6B \
-    --tensor-parallel-size {args.n_gpu} \
-    --max-model-len 32000 \
-    --host 0.0.0.0 \
-    --port 8000 \
-    --gpu-memory-utilization 0.89 \
-    --dtype half \
-    > logs/{job_name}.log 2>&1
+uvicorn tbllm.run:app --host 0.0.0.0 --port 8000
+
 """
 
     return script    

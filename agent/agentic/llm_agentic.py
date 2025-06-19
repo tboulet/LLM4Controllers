@@ -46,13 +46,15 @@ class AgenticLLM(BaseAgent2):
             log_subdir="",
         )
         # Get hyperparameters
+        self.max_iterations: int = config["max_iterations"]
+        self.list_prompt_keys: List[str] = config["list_prompt_keys"]
         self.n_tasks_to_do: Optional[int] = config["n_tasks_to_do"]
         self.n_completions: int = config["n_completions"]
         self.n_episodes_eval: int = config["n_episodes_eval"]
         self.k_pass: int = config["k_pass"]
+
         # Initialize variables
         self.timestep: int = 0
-        self.list_prompt_keys: List[str] = config["list_prompt_keys"]
         self.base_scope = {}
         exec(open("agent/llm_hcg/base_scope.py").read(), self.base_scope)
 
@@ -75,18 +77,20 @@ class AgenticLLM(BaseAgent2):
         #     "agent/agentic/item_memory_snapshot.py"
         # ).read()
         # self.code_item_test = open("agent/agentic/item_test.py").read()
+        self.text_example_answer = open("agent/agentic/text_example_answer.txt").read()
         
         # === Generate the different parts of the prompt ===
-        self.dict_prompts: Dict[str, str] = {}
+        self.dict_system_prompts: Dict[str, str] = {}
 
-        # Prompt system
+        # Prompt instructions
         prompt_regarding_imports = """
 Regarding imports/dependencies of items, you don't need to manually import any item in the code of an other item, they will be automatically imported.
 If the import triggers a circular dependency, the code will not be executed, and you will be notified of the error.
 However in case of any basic python import (e.g. `import numpy as np`) that is not already imported in the code base, you need to add it when creating a controller.
         """
-        if "system" in self.list_prompt_keys:
-            prompt_system = f"""You are an AI agent that must solve an unknown coding environment.
+
+        if "instructions" in self.list_prompt_keys:
+            prompt_instructions = f"""You are an AI agent that must solve an unknown coding environment.
 For this, you have access and you maintain a code base/knowledge base over your agentic development.
 
 This code base takes the form of one python file where objects we will call 'items' (functions, classes, custom types, ...) are enumerated in \
@@ -120,123 +124,45 @@ After each answer that you consider important, you should store or update the no
 
 {prompt_regarding_imports}
                 """
-            self.dict_prompts["system"] = prompt_system
+            self.dict_system_prompts["instructions"] = prompt_instructions
 
         # Env prompt
         if "env" in self.list_prompt_keys:
             description_env = env.get_textual_description()
             prompt_env = (
-                "=== General description of the environment ===\n" f"{description_env}"
+                "## General description of the environment \n" f"{description_env}"
             )
-            self.dict_prompts["env"] = prompt_env
-
-        # Controller structure prompt
-        if "controller_structure" in self.list_prompt_keys:
-            text_base_controller = open("agent/llm_hcg/text_base_controller.txt").read()
-            prompt_controller_structure = (
-                "=== Controller interface ===\n"
-                "A controller obeys the following interface:\n"
-                f"{self.code_tag(text_base_controller)}"
-            )
-            self.dict_prompts["controller_structure"] = prompt_controller_structure
+            self.dict_system_prompts["env"] = prompt_env
 
         # Example of answer
         if "example_answer" in self.list_prompt_keys:
-            text_example_answer = open("agent/cg/text_example_answer.txt").read()
+            text_example_answer = open("agent/agentic/text_example_answer.txt").read()
             prompt_example_answer = (
-                "=== Example of answer ===\n"
+                "## Example of answer ===\n"
                 "Here is an example of acceptable answer:\n"
-                f"{text_example_answer}\n"
-                "==========================="
+                f"{text_example_answer}"
             )
-            self.dict_prompts["example_answer"] = prompt_example_answer
+            self.dict_system_prompts["example_answer"] = prompt_example_answer
 
         # Code prompt
         if "code_env" in self.list_prompt_keys:
             prompt_code_env = (
-                "=== Code of the environment ===\n"
+                "## Code of the environment \n"
                 "Here is the code of the environment. You can use it to help understand the environment :\n"
                 f"{env.get_code_repr()}"
             )
-            self.dict_prompts["code_env"] = prompt_code_env
+            self.dict_system_prompts["code_env"] = prompt_code_env
 
         # TODO : add doc prompt
-
-        # Add the instructions prompt
-        if "instructions" in self.list_prompt_keys:
-            prompt_instructions = (
-                "=== Instructions ===\n"
-                "Your answer should include a python code (inside a code block) that implements a class "
-                "inheriting from 'Controller' and instantiate it under a variable named 'controller'. "
-            )
-            self.dict_prompts["instructions"] = prompt_instructions
-
-    def build_task_prompt(self, task: Task) -> str:
-        """Build the prompt for the given task."""
-        # Initialize the mapping prompt key -> prompt
-        dict_prompts = self.dict_prompts.copy()
-
-        # Add the task prompt
-        if "task" in self.list_prompt_keys:
-            prompt_task = f"=== Task ===\n{task}"
-            dict_prompts["task"] = prompt_task
-        # Add the task description prompt
-        if "task_description" in self.list_prompt_keys:
-            prompt_task_description = (
-                f"=== Task description ===\n{task.get_description()}"
-            )
-            dict_prompts["task_description"] = prompt_task_description
-        # Add the task code prompt
-        if "code_task" in self.list_prompt_keys:
-            prompt_code_task = (
-                "=== Code of the task ===\n"
-                "Here is the code used to create the task, as well as the code of the particular task. \n"
-                f"{task.get_code_repr()}\n"
-            )
-            dict_prompts["code_task"] = prompt_code_task
-        # Add the task map prompt
-        if "task_map" in self.list_prompt_keys:
-            prompt_task_map = (
-                "=== Task map ===\n"
-                "Here is the representation of the map in one of the episodes of the task. "
-                "Please note that some elements may vary between two episodes, for example, if the mission is something like 'go to the {color} goal', "
-                "the color of the goal may vary between two episodes. "
-                "Or if the episodic creation involves some random elements, the map may vary. "
-                "\n"
-                f"{task.get_map_repr()}"
-            )
-            dict_prompts["task_map"] = prompt_task_map
-
-        # Assemble the prompt
-        list_prompt = []
-        for prompt_key in self.list_prompt_keys:
-            assert (
-                prompt_key in dict_prompts
-            ), f"Prompt key {prompt_key} not found in prompts."
-            list_prompt.append(dict_prompts[prompt_key])
-        task_prompt = "\n\n".join(list_prompt)
-        return task_prompt
+        
+        # Initialize the prompt
 
     def step(self):
         with RuntimeMeter("step"):
 
-            # Run the task solving process in parallel
-            batch_configs_tasks: List[Dict[str, Any]] = []
-            for idx_task in range(len(self.tasks)):
-                task = self.tasks[idx_task]
-                batch_configs_tasks.append(
-                    {
-                        "task": task,
-                        "n_completions": self.n_completions,
-                        "n_episodes_eval": self.n_episodes_eval,
-                        "log_subdir": f"task_{sanitize_name(str(task))}",
-                    }
-                )
-            list_feedback_over_ctrl: List[FeedbackAggregated] = run_parallel(
-                func=self.solve_task,
-                batch_configs=batch_configs_tasks,
-                config_parallel=self.config["config_parallel"],
-                return_value_on_exception=None,
+            prompt = self.build_prompt(
+                dict_system_prompts=self.dict_system_prompts,
+                
             )
 
         # Log runtime metrics

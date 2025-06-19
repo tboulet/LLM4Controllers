@@ -57,7 +57,7 @@ class LLM_from_HuggingFace(LanguageModel):
         print(
             f"[INFO] Using Hugging Face model: {self.model_name} on device: {self.device}. Model memory: {get_model_memory_from_model_name(self.model_name)} GB."
         )
-        # Model and tokenizer
+        # Tokenizer
         self.tokenizer: AutoTokenizer = AutoTokenizer.from_pretrained(
             self.model_path,
             token=hf_token,
@@ -70,6 +70,10 @@ class LLM_from_HuggingFace(LanguageModel):
             trust_remote_code=True,
             torch_dtype="auto",
         )
+        # Set pad_token to eos_token if not already defined
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+            self.model.config.pad_token_id = self.tokenizer.eos_token_id
         self.context_window: int = self.model.config.max_position_embeddings
         # Resizing of token embeddings
         if do_resize_token_embeddings:
@@ -134,6 +138,10 @@ class LLM_from_HuggingFace(LanguageModel):
             kwargs["do_sample"] = self._check_and_set_do_sample(
                 do_sample=do_sample, kwargs=kwargs
             )
+            
+            # Add pad_token_id in kwargs if not already set
+            if "pad_token_id" not in kwargs:
+                kwargs["pad_token_id"] = self.tokenizer.pad_token_id
 
             # Apply chat template for instruct models
             if self.do_has_chat_template:

@@ -42,3 +42,11 @@ class TextualInformation:
     
     def __repr__(self):
         return self.text
+    
+    
+class CodeExtractionError(Exception):
+    pass
+
+
+class ControllerExecutionError(Exception):
+    pass

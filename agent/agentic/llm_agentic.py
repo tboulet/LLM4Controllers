@@ -35,10 +35,7 @@ from typing import Any, Dict, Tuple, Union
 from llm import llm_name_to_LLMClass
 
 
-
-
-
-class LLM_BasedControllerGenerator(BaseAgent2):
+class AgenticLLM(BaseAgent2):
 
     def __init__(self, config, logger: BaseLogger, env: BaseMetaEnv):
         super().__init__(config, logger, env)
@@ -54,13 +51,10 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         self.n_episodes_eval: int = config["n_episodes_eval"]
         self.k_pass: int = config["k_pass"]
         # Initialize variables
-        self.iter: int = 0
+        self.timestep: int = 0
         self.list_prompt_keys: List[str] = config["list_prompt_keys"]
         self.base_scope = {}
         exec(open("agent/llm_hcg/base_scope.py").read(), self.base_scope)
-
-        # Initialize logging
-        self.metrics_storer = defaultdict(int)
 
         # Initialize LLM
         print("Initializing LLM...")
@@ -73,16 +67,59 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         self.tasks = self.env.get_current_tasks()[: self.n_tasks_to_do]
         self.tasks = sorted(self.tasks, key=lambda task: str(task))
 
+        # Getting example answer / templates
+        self.code_item_controller = open("agent/agentic/item_controller.py").read()
+        # self.code_item_information = open("agent/agentic/item_information.py").read()
+        # self.code_item_hypothesis = open("agent/agentic/item_hypothesis.py").read()
+        # self.code_item_memory_snapshot = open(
+        #     "agent/agentic/item_memory_snapshot.py"
+        # ).read()
+        # self.code_item_test = open("agent/agentic/item_test.py").read()
+        
         # === Generate the different parts of the prompt ===
         self.dict_prompts: Dict[str, str] = {}
 
         # Prompt system
+        prompt_regarding_imports = """
+Regarding imports/dependencies of items, you don't need to manually import any item in the code of an other item, they will be automatically imported.
+If the import triggers a circular dependency, the code will not be executed, and you will be notified of the error.
+However in case of any basic python import (e.g. `import numpy as np`) that is not already imported in the code base, you need to add it when creating a controller.
+        """
         if "system" in self.list_prompt_keys:
-            prompt_system = (
-                "You are an AI agent that is used in order to solve a task-based environment through the generation of controller objects. "
-                "A controller is a class that implements the method 'act(observation: Observation) -> ActionType' "
-                "and that inherits from the class Controller. You will be provided with several informations in order to help you. "
-            )
+            prompt_system = f"""You are an AI agent that must solve an unknown coding environment.
+For this, you have access and you maintain a code base/knowledge base over your agentic development.
+
+This code base takes the form of one python file where objects we will call 'items' (functions, classes, custom types, ...) are enumerated in \
+an order that respect their dependencies. Each item can call other items (that are defined before it in the file), \
+and can be called by other items.
+
+These items are not all fully represented, indeed, because you are a Language Model whose context window is limited and inference time \
+is costly, we save tokens by only showing the signature and the docstring of the items, and not their full implementation.
+You can however visualize them fully or toggle permanently their visibility if you feel its necessary (see later : actions)
+
+# Items :
+They are different types of items that you can create by implementing corresponding interfaces:
+- **Standard item**: the basic python function/class that does not implement any specific interface.
+- **Controller**: a class that implements the interface of a controller, which is used to interact with the environment. It should implement the `Controller` interface.
+{self.code_tag(self.code_item_controller)}
+
+## Step-by-step process :
+At each call, we ask you to answer first by eventually reason about what you should do, and then submit one or several actions (action are described later).
+When you submit an action, it's result will be instantly available to you (e.g. success of a coding action, or the result of a test/information retrieval action).
+Then you can submit a new action.
+
+## Conversation refreshing mechanism :
+This conversation (system prompt and succession of actions/answers) is limited by the context window of the LLM and slow inference time with increasing length.
+For this reason, you will have to periodically refresh the conversation by using the `refresh` action.
+This will reset the conversation by removing any traces of actions/answers, leaving only the system prompt and the code base.
+Consequently, it is VERY IMPORTANT to take notes of any relevant information you obtained during the conversation, in the notes section of items.
+After each answer that you consider important, you should store or update the notes of the involved items, otherwise this information will be lost for future inferences.
+
+
+
+
+{prompt_regarding_imports}
+                """
             self.dict_prompts["system"] = prompt_system
 
         # Env prompt
@@ -207,7 +244,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         self.logger.log_scalars(metrics_runtime, step=0)
 
         # Move forward the iter counter
-        self.iter += 1
+        self.timestep += 1
 
     def solve_task(
         self,
@@ -317,7 +354,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
         return feedback_over_ctrl
 
     def is_done(self):
-        return self.iter >= 1
+        return self.timestep >= 1
 
     def extract_controller_code(self, answer: str) -> str:
         """Extract a python code block from the answer.

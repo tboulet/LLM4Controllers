@@ -71,7 +71,7 @@ class AgenticLLM(BaseAgent2):
 
         # Getting example answer / templates
         self.code_item_controller = open("agent/agentic/item_controller.py").read()
-        # self.code_item_information = open("agent/agentic/item_information.py").read()
+        self.code_item_knowledge = open("agent/agentic/item_knowledge.py").read()
         # self.code_item_hypothesis = open("agent/agentic/item_hypothesis.py").read()
         # self.code_item_memory_snapshot = open(
         #     "agent/agentic/item_memory_snapshot.py"
@@ -102,10 +102,23 @@ is costly, we save tokens by only showing the signature and the docstring of the
 You can however visualize them fully or toggle permanently their visibility if you feel its necessary (see later : actions)
 
 # Items :
-They are different types of items that you can create by implementing corresponding interfaces:
+They are different types of items that you can create (by implementing corresponding interfaces) or use (by code execution)::
 - **Standard item**: the basic python function/class that does not implement any specific interface.
+To create/modify a standard item, simply write a code that define the function or the class in your code-action.
+To delete a standard item, write ```del item_name``` in your code-action.
+To use a standard item, simply call it in your code-action.
 - **Controller**: a class that implements the interface of a controller, which is used to interact with the environment. It should implement the `Controller` interface.
 {self.code_tag(self.code_item_controller)}
+To create/modify a controller, simply write a code that defines the class in your code-action.
+To delete a controller, write ```del item_name``` in your code-action.
+To use a controller, simply instantiate it in your code-action and use it as you wish.
+In particular, you can use the predefined function `play_controller_in_task(controller : Controller, task_id : str, n_episodes : int = 1) -> Feedback` to play the controller in the task.
+It is possible to use the controller in your code without using this function for debugging or anything you found useful to do, but it is not recommended as we don't see the interest of it.
+- **Knowledge**: a class that contains information about the environment, the tasks, or the agentic framework itself.
+{self.code_tag(self.code_item_knowledge)}
+To create/modify a knowledge, instanciate a well-named instance of the class `Knowledge` in your code-action. E.g. `knowledge_observation_shape = Knowledge(content="The shape of the observation is (64, 64, 3).")`
+To delete a knowledge, write ```del item_name``` in your code-action.
+
 
 ## Step-by-step process :
 At each call, we ask you to answer first by eventually reason about what you should do, and then submit one or several actions (action are described later).
@@ -119,7 +132,11 @@ This will reset the conversation by removing any traces of actions/answers, leav
 Consequently, it is VERY IMPORTANT to take notes of any relevant information you obtained during the conversation, in the notes section of items.
 After each answer that you consider important, you should store or update the notes of the involved items, otherwise this information will be lost for future inferences.
 
-
+## Actions :
+You can perform actions through code blocks between <code> and </code> tags. Actions are divided in two categories:
+- **Editing actions**: these actions allow you to edit the code base by creating or modifying items. \
+They will happen if you define a new function or class. To modify an object, con
+To
 
 
 {prompt_regarding_imports}
@@ -130,7 +147,8 @@ After each answer that you consider important, you should store or update the no
         if "env" in self.list_prompt_keys:
             description_env = env.get_textual_description()
             prompt_env = (
-                "## General description of the environment \n" f"{description_env}"
+                "## General description of the environment\n" 
+                f"{description_env}"
             )
             self.dict_system_prompts["env"] = prompt_env
 
@@ -138,7 +156,7 @@ After each answer that you consider important, you should store or update the no
         if "example_answer" in self.list_prompt_keys:
             text_example_answer = open("agent/agentic/text_example_answer.txt").read()
             prompt_example_answer = (
-                "## Example of answer ===\n"
+                "## Example of answer\n"
                 "Here is an example of acceptable answer:\n"
                 f"{text_example_answer}"
             )
@@ -147,7 +165,7 @@ After each answer that you consider important, you should store or update the no
         # Code prompt
         if "code_env" in self.list_prompt_keys:
             prompt_code_env = (
-                "## Code of the environment \n"
+                "## Code of the environment\n"
                 "Here is the code of the environment. You can use it to help understand the environment :\n"
                 f"{env.get_code_repr()}"
             )

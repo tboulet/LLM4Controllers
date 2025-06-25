@@ -1,7 +1,4 @@
-
-
 from abc import ABC, abstractmethod
-
 from core.types import Observation, ActionType
 
 

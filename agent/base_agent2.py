@@ -63,7 +63,7 @@ class BaseAgent2(ABC):
 
         Args:
             dict_name_to_text (Dict[str, str]): a mapping from the name of the file to create to the text to write in it.
-            log_subdir (str): the subdirectory in which to create the files. If None, it will be created in the root directory of the run.
+            log_subdir (str): the subdirectory in which to create the files. If None, it will be created in the root log directory of the run.
         """
         if log_subdir is None:
             log_subdir = ""

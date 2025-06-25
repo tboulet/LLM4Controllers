@@ -30,11 +30,18 @@ from llm.utils import (
 class LLM_from_VLLM(LanguageModel):
     """A language model that starts a VLLM model on a server and generates completions."""
 
-    def __init__(self, config: Dict[str, Any], logger: BaseLogger = NoneLogger()):
-        self.model: str = config["model"]
-        self.dtype_half: bool = config["dtype_half"]
+    def __init__(
+        self,
+        model: str,
+        config_server: Dict[str, Any],
+        config_inference: Dict[str, Any] = {},
+        dtype_half: bool = False,
+        logger: BaseLogger = NoneLogger(),
+    ):
+        self.model: str = model
+        self.dtype_half: bool = dtype_half
         self.logger = logger
-        self.config_server: Dict[str, Any] = config["config_server"]
+        self.config_server: Dict[str, Any] = config_server
         self.logger.log_scalars(
             {
                 "inference_metrics/memory_model_from_name": get_model_memory_from_model_name(
@@ -67,7 +74,7 @@ class LLM_from_VLLM(LanguageModel):
             api_key="EMPTY",
             base_url="http://localhost:8000/v1",
         )
-        self.kwargs: Dict[str, Any] = config.get("kwargs", {})
+        self.config_inference: Dict[str, Any] = config_inference
         self.logger.log_scalars(
             {
                 "inference_metrics/memory_model_torch_allocated": get_memory_allocated(),
@@ -91,7 +98,7 @@ class LLM_from_VLLM(LanguageModel):
             response: ChatCompletion = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                **self.kwargs,
+                **self.config_inference,
                 seed=np.random.randint(0, 10000),
             )
         choices = response.choices
@@ -102,7 +109,9 @@ class LLM_from_VLLM(LanguageModel):
             "inference_metrics/runtime_inference": RuntimeMeter.get_last_stage_runtime(
                 "llm_inference"
             ),
-            "inference_metrics/n_chars_input": sum(len(msg["content"]) for msg in messages),
+            "inference_metrics/n_chars_input": sum(
+                len(msg["content"]) for msg in messages
+            ),
             "inference_metrics/n_tokens_input": response.usage.prompt_tokens,
             "inference_metrics/n_tokens_output_sum": response.usage.completion_tokens,
             "inference_metrics/n_tokens_total": response.usage.total_tokens,
@@ -126,7 +135,6 @@ class LLM_from_VLLM(LanguageModel):
         # Return the answers
         answers = [choice.message.content for choice in choices]
         return answers
-    
 
     # ============= Helper methods =================
 

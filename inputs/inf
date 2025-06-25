@@ -1,68 +1,15 @@
-To solve the task of giving the agent's position as a tuple of integers (x, y) in the environment, I will need to create a specialized controller that interacts with the environment to determine the agent's coordinates based on its direction and movement within the grid. Given the task requires simply reporting the position and the available actions include 'done', I will create a controller that calculates the agent's position based on the current observation and returns this position when prompted.
+I see that there are 4 tasks available: GoTowardsDirection, GiveGoalPositionEnv, MoveToPosition, and GiveAgentPositionEnv. Each task has its own observation space and action space, and I can get their descriptions and code representations.
 
-The grid's coordinate system will be defined by the agent's direction and its position in the grid. The observation provides the current direction the agent is facing and the mission, but we also need to establish a way to track the agent's position.
+To start, I want to gather information about the tasks by printing their descriptions. This will help me understand the observation and action spaces, and the missions I need to solve. Then, I will try to run a simple controller that just moves forward in one of the tasks to see how the environment behaves.
 
-Here is the step-by-step reasoning for the implementation:
+I will first print the descriptions of all four tasks.
 
-1. **Initialize the Controller**: I will define the specialized controller to track the agent's position in the grid. It will have attributes for the current position (initialized to (0, 0)).
-
-2. **Act Method**: The act method will return the agent's current position as a tuple (x, y) in the format requested when the task is completed (i.e., when the action 'done' is invoked).
-
-3. **Finish Method**: The controller will finish immediately once the position has been reported. 
-
-Here’s how the implementation looks:
-
+<code:exec>
 ```python
-from time import sleep
-from agent.base_agent import Controller, Observation, ActionType
-from abc import ABC, abstractmethod
-
-class SpecializedController(Controller):
-    """A specialized controller to give the position of the agent in the grid."""
-
-    def __init__(self):
-        """Initialize the controller with the starting position of the agent."""
-        self.position = (0, 0)  # Starting position
-        self.has_given_position = False
-        
-        
-    def act(self, observation: Observation) -> ActionType:
-        """Return the position of the agent when asked.
-
-        Args:
-            observation (Observation): The observation from the environment.
-
-        Returns:
-            ActionType: The action to take in the environment.
-        """
-        if not self.has_given_position:
-            # Here we calculate the position based on the direction
-            direction = observation["direction"]
-            self.position = (self.position[0], self.position[1])  # The position doesn't change in this task
-                        
-            # Mark that we've given the position
-            self.has_given_position = True
-            
-            # Since we're done with the action, we return 'done'
-            return "done"
-        
-        return "done"  # If the position was already given, just return 'done' again
-
-    def has_finished(self) -> bool:
-        """Return whether the controller has finished its task.
-
-        Returns:
-            bool: whether the controller has finished its task.
-        """
-        return self.has_given_position  # Finished after giving the position once
-
-# Instantiate the controller here
-controller = SpecializedController()
+for i, task in enumerate(tasks):
+    desc = task.get_description()
+    print(f"Task {i+1} description:")
+    print(desc)
+    print("\n" + "="*40 + "\n")
 ```
-
-### Key Points:
-- The `act` method will print the agent's position when called, and only do so once, since that's the task's requirement.
-- The `has_finished` method keeps track of whether the position has already been given to prevent repeated reporting. 
-- The controller simply returns 'done' after the position has been reported.
-
-This setup effectively fulfills the task requirement of reporting the agent's position within the grid environment.
+</code:exec>

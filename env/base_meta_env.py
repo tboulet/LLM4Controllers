@@ -58,6 +58,17 @@ class BaseMetaEnv(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def get_env_usage_explanation_and_variables(self) -> Tuple[str, Dict[str, Any]]:
+        """Get an explanation of how to instantiate task objects in the environment and
+        the variables that should be defined to instantiate tasks in the environment.
+
+        Returns:
+            str : an explanation of how to instantiate task objects in the environment
+            Dict[str, Any]]: a dictionary containing the variables that should be defined to instantiate tasks in the environment.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     def get_code_repr(self) -> str:
         """Return a code representation of the environment, this will be given to the agent at the beginning of the training
         to help it getting a general idea of the environment and the tasks it will be facing.

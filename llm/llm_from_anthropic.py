@@ -22,17 +22,24 @@ import numpy as np
 import tiktoken
 from anthropic.types import Message, Usage
 
+
 class LLM_from_Anthropic(LanguageModel):
     """A language model that uses Anthropic Claude via the API."""
 
-    def __init__(self, config: Dict[str, Any], logger: BaseLogger = NoneLogger()):
-        super().__init__(config, logger)
+    def __init__(
+        self,
+        model: str,
+        config_inference: Dict[str, Any] = {},
+        max_retries: int = 5,
+        logger: BaseLogger = NoneLogger(),
+    ):
+        super().__init__(logger)
         # Initialize client
         self.client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
         # Config params
-        self.model: str = config["model"]
-        self.config_inference: Dict[str, Any] = config.get("config_inference", {})
-        self.max_retries: int = config["max_retries"]
+        self.model: str = model
+        self.config_inference: Dict[str, Any] = config_inference
+        self.max_retries: int = max_retries
         # Token encoding & pricing
         self.language_encoding = tiktoken.encoding_for_model("gpt-4")  # approximation
         self.price_per_1M_token_input, self.price_per_1M_token_output = (
@@ -53,13 +60,13 @@ class LLM_from_Anthropic(LanguageModel):
             )
 
         retries = 0
-        outputs : List[Message] = []
-        usages : List[Usage] = []
+        outputs: List[Message] = []
+        usages: List[Usage] = []
 
         while len(outputs) < n and retries < self.max_retries:
             try:
                 with RuntimeMeter("llm_inference"):
-                    response : Message = self.client.messages.create(
+                    response: Message = self.client.messages.create(
                         model=self.model,
                         messages=messages,
                         **self.config_inference,
@@ -110,7 +117,8 @@ class LLM_from_Anthropic(LanguageModel):
             "inference_metrics/n_tokens_output_mean": average(list_n_tokens_output),
             "inference_metrics/n_tokens_output_max": max(list_n_tokens_output),
             "inference_metrics/n_tokens_output_min": min(list_n_tokens_output),
-            "inference_metrics/n_tokens_total": usage.input_tokens + total_output_tokens,
+            "inference_metrics/n_tokens_total": usage.input_tokens
+            + total_output_tokens,
             "inference_metrics/n_chars_output_sum": sum(list_n_chars_output),
             "inference_metrics/n_chars_output_mean": average(list_n_chars_output),
             "inference_metrics/n_chars_output_max": max(list_n_chars_output),

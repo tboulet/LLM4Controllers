@@ -12,10 +12,14 @@ from openai import OpenAI
 class LLM_Dummy(LanguageModel):
     """A dummy LLM for testing purposes."""
 
-    def __init__(self, config: Dict[str, Any], logger: BaseLogger = NoneLogger()):
-        self.config = config
-        self.path_answer = config["path_answer"]
-
+    def __init__(
+        self,
+        path_answer: Optional[str] = None,
+        logger: BaseLogger = NoneLogger(),
+    ):
+        super().__init__(logger)
+        self.path_answer = path_answer
+        
     def generate(
         self,
         prompt: Optional[str] = None,

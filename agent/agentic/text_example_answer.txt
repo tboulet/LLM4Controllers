@@ -1,5 +1,6 @@
 I think I should do ... (reasoning)
 
+<code:edit>
 ```python
 from agent.base_controller import Controller
 from env.base_meta_env import Observation, ActionType
@@ -9,6 +10,5 @@ class MyController(Controller):
         pass
     def act(observation: Observation) -> ActionType:
         return "forward"
-
-controller = MyController()
 ```
+</code:edit>

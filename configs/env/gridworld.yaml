@@ -1,9 +1,0 @@
-name: Gridworld
-config:
-  dimensions: [9, 9]
-  max_steps: 30
-  tasks:
-    - go_to_center
-    # - cycling
-    # - round_trip
-  obstacles: false

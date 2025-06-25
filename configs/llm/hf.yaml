@@ -4,6 +4,7 @@ config:
   model: ${llm.model}
   device: cpu # cpu or cuda or auto
   method_truncation: last # first, window or last
+  do_resize_token_embeddings: True # whether to resize the token embeddings to match the model size
   config_inference:
     top_p: 0.9
     top_k: 50

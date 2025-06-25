@@ -430,7 +430,9 @@ class TaskMinigrid(Task):
                 np.array(self.env_mg.unwrapped.agent_pos) - self.first_agent_pos
             )
         if "map" in self.meta_env.list_feedback_keys:
-            feedback_metrics["map_representation"] = TextualInformation(text=self.get_map_repr())
+            feedback_metrics["map_representation"] = TextualInformation(
+                text=self.get_map_repr()
+            )
 
         return feedback_metrics
 
@@ -581,6 +583,26 @@ The mapping from color integer to color string is as follows: {IDX_TO_COLOR}.
 The mapping from state integer to state string is as follows: {IDX_TO_STATE}. Only doors have a non-zero state.
 For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,j) is a key (object type 5) of color blue (color 2) in the open state (state 0).
 """
+
+    def get_env_usage_explanation_and_variables(self) -> Tuple[str, Dict[str, Any]]:
+        tasks = self.get_current_tasks()
+        tasks_repr = []
+        for idx, task in enumerate(tasks):
+            tasks_repr.append(f"- Task no {idx + 1} : {task}")
+        tasks_repr = "\n".join(tasks_repr)
+        explanation = f"""In this environment, you have access to several tasks to solve.
+        The tasks are the following :
+        {tasks_repr}
+        
+        The tasks are accessible through the variable `tasks`, which is a list of `TaskMinigrid` objects.
+        To obtain task of index 3 for example, you can use ```task = tasks[3]```.
+        
+        There is certain methods usable to get details about the tasks:
+        - `task.get_description()` : returns a `TaskDescription` object with the task description, observation space and action space that can be printed.
+        - `task.get_code_repr()` : returns a string representation of the code of the task, including the environment class and the action space.
+        - `task.get_map_repr()` : returns a string representation of the map of the environment, with the objects and their states.
+        """
+        return explanation, {"tasks" : tasks}
 
     def get_task(
         self,

@@ -2,7 +2,7 @@
 n_steps_max : 100
 
 # Secondary settings
-do_curriculum: False
+do_curriculum: True
 
 # Logging
 log_dir : logs

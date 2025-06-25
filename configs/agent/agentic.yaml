@@ -1,27 +1,19 @@
-name: CG
+name: Agentic
 config:
 
   # Maximal number of iterations
-  max_iterations: 100
+  n_steps_max: 100
   
   # Which prompt to use
   list_prompt_keys:
-    - system
+    - instructions
     - env
-    - code_env
+    - env_usage
     - example_answer
+    # - code_env
 
   # The number of tasks to do. If none, will do all tasks.
   n_tasks_to_do: null
-
-  # The number of completions to make per inference on a task
-  n_completions: 15
-
-  # The number of episodes on which a controller will be evaluated on a task
-  n_episodes_eval: 10
-
-  # The parameter for the pass@k metric
-  k_pass: ${eval:'min(${agent.config.n_completions}, 10)'}
 
   # The LLM config to use
   llm: ${llm}

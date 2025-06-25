@@ -30,7 +30,9 @@ class LLM_from_HuggingFace(LanguageModel):
         self,
         model: str,
         device: str,
+        method_truncation: str = "last",
         do_resize_token_embeddings: bool = True,
+        config_inference: Dict[str, Any] = {},
         logger: BaseLogger = NoneLogger(),
     ):
         """A Hugging Face language model that loads a model from the Hugging Face Hub.
@@ -57,6 +59,7 @@ class LLM_from_HuggingFace(LanguageModel):
         print(
             f"[INFO] Using Hugging Face model: {self.model_name} on device: {self.device}. Model memory: {get_model_memory_from_model_name(self.model_name)} GB."
         )
+        self.config_inference: Dict[str, Any] = config_inference
         # Tokenizer
         self.tokenizer: AutoTokenizer = AutoTokenizer.from_pretrained(
             self.model_path,
@@ -129,19 +132,23 @@ class LLM_from_HuggingFace(LanguageModel):
             messages = self.get_messages(prompt=prompt, messages=messages)
             assert len(messages) > 0, "No prompt to generate completion."
 
+            # Update config_inference with kwargs
+            kwargs_inference = self.config_inference.copy()
+            kwargs_inference.update(kwargs)
+             
             # Replace "n" with "num_return_sequences" in kwargs
-            kwargs["num_return_sequences"] = kwargs.get("n", 1)
-            if "n" in kwargs:
-                del kwargs["n"]
+            kwargs_inference["num_return_sequences"] = kwargs_inference.get("n", 1)
+            if "n" in kwargs_inference:
+                del kwargs_inference["n"]
 
             # Set do_sample=True if certain sampling parameters are active
-            kwargs["do_sample"] = self._check_and_set_do_sample(
-                do_sample=do_sample, kwargs=kwargs
+            kwargs_inference["do_sample"] = self._check_and_set_do_sample(
+                do_sample=do_sample, kwargs=kwargs_inference
             )
             
             # Add pad_token_id in kwargs if not already set
-            if "pad_token_id" not in kwargs:
-                kwargs["pad_token_id"] = self.tokenizer.pad_token_id
+            if "pad_token_id" not in kwargs_inference:
+                kwargs_inference["pad_token_id"] = self.tokenizer.pad_token_id
 
             # Apply chat template for instruct models
             if self.do_has_chat_template:
@@ -185,9 +192,9 @@ class LLM_from_HuggingFace(LanguageModel):
         with RuntimeMeter("generate"):
             if no_grad:
                 with torch.no_grad():
-                    outputs = self.model.generate(**tokens, **kwargs)
+                    outputs = self.model.generate(**tokens, **kwargs_inference)
             else:
-                outputs = self.model.generate(**tokens, **kwargs)
+                outputs = self.model.generate(**tokens, **kwargs_inference)
 
         # Decode the tokens. Outputs shape: (n, sequence_length)
         with RuntimeMeter("decoding"):

@@ -31,14 +31,21 @@ from tbutils.exec_max_n import print_once
 class LLM_from_API(LanguageModel):
     """A language model that uses an API to generate completions."""
 
-    def __init__(self, config: Dict[str, Any], logger: BaseLogger = NoneLogger()):
-        super().__init__(config, logger)
+    def __init__(
+        self,
+        client: Dict[str, Any],
+        model: str,
+        config_inference: Dict[str, Any] = {},
+        max_retries: int = 5,
+        logger: BaseLogger = NoneLogger(),
+    ):
+        super().__init__(logger)
         # Initialize client
-        self.client: OpenAI = instantiate(config["client"])
+        self.client: OpenAI = instantiate(client)
         # Initialize config parameters
-        self.model: str = config["model"]
-        self.config_inference: Dict[str, Any] = config.get("config_inference", {})
-        self.max_retries: int = config["max_retries"]
+        self.model: str = model
+        self.config_inference: Dict[str, Any] = config_inference
+        self.max_retries: int = max_retries
         # Initialize other objects
         self.language_encoding = tiktoken.encoding_for_model(
             "gpt-4"
@@ -93,7 +100,7 @@ class LLM_from_API(LanguageModel):
         choices = response.choices
 
         # Calculate metrics
-        
+
         # 1) Memory usage
         if hasattr(response.usage, "completion_tokens_per_choice"):
             list_n_tokens_output = response.usage.completion_tokens_per_choice
@@ -108,7 +115,9 @@ class LLM_from_API(LanguageModel):
             "inference_metrics/runtime_inference": RuntimeMeter.get_last_stage_runtime(
                 "llm_inference"
             ),
-            "inference_metrics/n_chars_input": sum(len(msg["content"]) for msg in messages),
+            "inference_metrics/n_chars_input": sum(
+                len(msg["content"]) for msg in messages
+            ),
             "inference_metrics/n_tokens_input": response.usage.prompt_tokens,
             "inference_metrics/n_tokens_output_sum": sum(list_n_tokens_output),
             "inference_metrics/n_tokens_output_mean": average(list_n_tokens_output),
@@ -124,7 +133,9 @@ class LLM_from_API(LanguageModel):
         for k, v in response.usage.to_dict().items():
             key = f"inference_metrics/usage/{k}"
             if key in metrics_inference:
-                print_once(f"[WARNING] Key {key} found in usage but already exists in metrics_inference. Skipping it.")
+                print_once(
+                    f"[WARNING] Key {key} found in usage but already exists in metrics_inference. Skipping it."
+                )
             elif np.isscalar(v):
                 metrics_inference[key] = v
         # 3) Pricing

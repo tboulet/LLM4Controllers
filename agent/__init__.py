@@ -1,5 +1,6 @@
 from typing import Dict, Type
 
+from agent.agentic.llm_agentic import Agentic
 from agent.cg.llm_cg import LLM_BasedControllerGenerator
 
 
@@ -21,4 +22,5 @@ agent2_name_to_AgentClass: Dict[str, Type[BaseAgent2]] = {
     "HCG_2": HCG_2,
     "CG": LLM_BasedControllerGenerator,
     "Random": RandomAgent2,
+    "Agentic": Agentic,
 }

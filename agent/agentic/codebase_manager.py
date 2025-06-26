@@ -48,12 +48,32 @@ class CodebaseManager:
         except SyntaxError as e:
             raise ValueError(f"Invalid Python code: {e}")
 
-        top_defs = [
-            node for node in tree.body
-            if isinstance(node, (ast.FunctionDef, ast.ClassDef, ast.Assign))
-        ]
+        # Step 2: Detect top-level definitions and deletions
+        top_defs = []
+        deletions = []
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.ClassDef, ast.Assign)):
+                top_defs.append(node)
+            elif isinstance(node, ast.Delete):
+                deletions.append(node)
 
-        if len(top_defs) != 1:
+        # Step 3: Delete items if any deletions are present
+        if deletions and top_defs:
+            raise ValueError("Cannot mix deletions with definitions in a single edit.")
+
+        if deletions:
+            for del_node in deletions:
+                for target in del_node.targets:
+                    if not isinstance(target, ast.Name):
+                        raise ValueError("Only simple variable names can be deleted.")
+                    self._delete_item(target.id)
+            return  # Done
+
+        if len(top_defs) == 0:
+            raise ValueError("Code must contain at least one top-level definition, found none.")
+        
+        # Pre-step before step 4: if there are several top-level definitions, deal with them one by one
+        if len(top_defs) > 1:
             if allow_several_top_defs:
                 import_lines = [line for line in code.splitlines() if re.match(r"^\s*(import|from)\s", line)]
                 for node in top_defs:
@@ -66,7 +86,7 @@ class CodebaseManager:
             else:
                 raise ValueError(f"Code must contain exactly one top-level definition, but found {len(top_defs)}.")
 
-        # Step 2: Extract name
+        # Step 4: Extract name, imports, docstring, and pure code
         top_def = top_defs[0]
         if isinstance(top_def, ast.FunctionDef):
             name = top_def.name
@@ -77,7 +97,6 @@ class CodebaseManager:
                 raise ValueError("Assignment must be to a single variable name.")
             name = top_def.targets[0].id
 
-        # Step 3: Extract imports, docstring, and pure code
         import_lines = []
         definition_lines = []
         docstring = ""
@@ -98,7 +117,7 @@ class CodebaseManager:
 
         pure_code = code_wo_docstring.strip()
 
-        # Step 4: Infer dependencies from AST
+        # Step 5: Infer dependencies from AST
         used_names = set()
         try:
             node = ast.parse(pure_code)
@@ -106,11 +125,12 @@ class CodebaseManager:
                 if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load):
                     used_names.add(n.id)
         except Exception:
-            pass  # ignore, fallback to no dependencies
+            # ignore, fallback to no dependencies
+            print(f"Warning: Could not parse code for dependencies: {pure_code}. Still proceeding without dependencies.")
 
         dependencies = [dep for dep in used_names if dep in self.items and dep != name]
 
-        # Step 5: Create Item (temporary or final)
+        # Step 6: Create Item (temporary or final)
         new_item = Item(
             name=name,
             pure_code=pure_code,
@@ -123,13 +143,13 @@ class CodebaseManager:
         is_new = name not in self.items
         old_item = self.items.get(name)
 
-        # Step 6: Temporarily insert item, check circular deps
+        # Step 7: Temporarily insert item, check circular deps
         self.items[name] = new_item
         try:
             if self._has_circular_dependency():
                 raise ValueError(f"Circular dependency detected when adding item '{name}'.")
 
-            # Step 7: Get topologically sorted dependencies
+            # Step 8: Get topologically sorted dependencies
             sorted_deps = self._collect_dependencies_topo_sorted(name)
             all_imports = set()
             code_blocks = []
@@ -144,7 +164,7 @@ class CodebaseManager:
 
             code_to_exec = "\n".join(sorted(all_imports)) + "\n\n" + "\n\n".join(code_blocks)
 
-            # Step 8: Execute code
+            # Step 9: Execute code
             temp_namespace = self.namespace.copy()
             exec(code_to_exec, temp_namespace)
 
@@ -158,7 +178,7 @@ class CodebaseManager:
 
             new_item.item_type = item_type
 
-            # Step 9: Save to namespace and finalize
+            # Step 10: Save to namespace and finalize
             self.namespace.update(temp_namespace)
             self.items[name] = new_item
 

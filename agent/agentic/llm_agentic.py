@@ -342,7 +342,9 @@ Playing a controller in a task will serve two purposes : 1) it is an attempt to 
 
                 # Edit mode
                 if mode == "EDIT":
-                    self.codebase_manager.edit_code(code)
+                    with StdCapture() as captured:
+                        self.codebase_manager.edit_code(code)
+                    output = captured.get_output()
 
                 # Exec mode
                 elif mode == "EXEC":

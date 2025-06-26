@@ -75,7 +75,7 @@ def play_controller_in_task(
         n_episodes (int): The number of episodes to play.
         is_eval (bool): Whether to evaluate the controller or not.
         log_dir (str): The subdirectory to log the results in. Results will be logged
-            in each of <log_dir_global>/<log_dir>/<name_file>.txt
+            in each of <log_dir_global>/<log_subdir>/<name_file>.txt
     """
     # Initialize the feedback
     feedback_over_eps = FeedbackAggregated()

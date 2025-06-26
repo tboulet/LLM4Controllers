@@ -21,6 +21,7 @@ from gymnasium import Space
 import numpy as np
 from omegaconf import OmegaConf
 from openai import OpenAI
+from agent.agentic.codebase_manager import CodebaseManager
 from agent.base_agent import BaseAgent, Controller
 from agent.base_agent2 import BaseAgent2
 from core import task
@@ -28,7 +29,6 @@ from core.types import ErrorTrace, CodeExtractionError, ControllerExecutionError
 from core.feedback_aggregator import FeedbackAggregated
 from core.loggers.base_logger import BaseLogger
 from core.parallel import run_parallel
-from core.play import play_controller_in_task
 from core.task import Task, TaskDescription
 from core.utils import get_error_info, sanitize_name
 from env.base_meta_env import BaseMetaEnv, Observation, ActionType, InfoDict
@@ -121,7 +121,7 @@ To use a standard item, simply call it in your code-exec action.
 To create/modify a controller, simply write a code that defines the class in your code-edit action.
 To delete a controller, write ```del item_name``` in your code-edit action.
 To use a controller, simply instantiate it in your code-exec action and use it as you wish.
-In particular, you can use the predefined function `play_controller_in_task(controller : Controller, task : Task, n_episodes : int = 1) -> Feedback` to play the controller in the task.
+In particular, you can use the predefined function `run_controller_in_task(controller : Controller, task : Task, n_episodes : int = 1) -> Feedback` to play the controller in the task.
 It is possible to use the controller in your code without using this function for debugging or anything you found useful to do, but it is not recommended as we don't see the interest of it.
 
 - **Knowledge**: a class that contains information about the environment, the tasks, or the agentic framework itself. It is used to maintain any information that you judge relevant and \
@@ -189,7 +189,7 @@ You can use them through the `code:exec` tag, e.g.:
 ```python
 # example : instantiate a controller, run it in a task, and print the feedback back to you
 ctrl = MyController(...)  
-feedback = play_controller_in_task(ctrl, task=task, n_episodes=10) 
+feedback = run_controller_in_task(ctrl, task=task, n_episodes=10) 
 print(feedback)  # to print the feedback of the controller
 
 # example : test that a function is working correctly
@@ -215,7 +215,7 @@ my_item.edit_docstring("This is the new docstring of the item.")
 This is usefull to quickly update any information you want to keep trace of in the item, without modifying its code.
 
 - Environment code : the environment prompt will explain you how to create Task objects. \
-You can then play a controller in a task using the predefined function `play_controller_in_task(controller : Controller, task : Task, n_episodes : int = 1) -> Feedback`. Example:
+You can then play a controller in a task using the predefined function `run_controller_in_task(controller : Controller, task : Task, n_episodes : int = 1) -> Feedback`. Example:
 <code:exec>
 ```python
 task = EnvClassExplainedByEnvPrompt(...)
@@ -251,6 +251,11 @@ Playing a controller in a task will serve two purposes : 1) it is an attempt to 
                 f"{env.get_code_repr()}"
             )
             self.dict_system_prompts["code_env"] = prompt_code_env
+
+        # === Initialize the codebase manager ===
+        self.codebase_manager = CodebaseManager()
+        code_initial_codebase = open("agent/agentic/initial_codebase.py").read()
+        self.codebase_manager.edit_code(code_initial_codebase)
 
     def build_prompt(
         self,
@@ -303,7 +308,6 @@ Playing a controller in a task will serve two purposes : 1) it is an attempt to 
                     "Conversation refreshing mechanism is not implemented yet."
                 )
 
-
             # Turn messages into a readable conversation and log it
             prompt_templated_list = [
                 f"{msg['role']}:\n{msg['content']}" for msg in self.messages
@@ -324,7 +328,7 @@ Playing a controller in a task will serve two purposes : 1) it is an attempt to 
                 },
                 log_subdir=f"conversation_{self.idx_conversation}",
             )
-            
+
             # Apply the answer
             try:
                 # Extract the code snippet from the answer
@@ -335,15 +339,16 @@ Playing a controller in a task will serve two purposes : 1) it is an attempt to 
                     },
                     log_subdir=f"conversation_{self.idx_conversation}",
                 )
-                
+
                 # Edit mode
                 if mode == "EDIT":
-                    raise
-                
+                    self.codebase_manager.edit_code(code)
+
                 # Exec mode
                 elif mode == "EXEC":
                     output = self.execute_exec_code(
-                        code, self.env_variables
+                        code,
+                        self.env_variables,
                     )
                     self.log_as_texts(
                         {
@@ -358,23 +363,21 @@ Playing a controller in a task will serve two purposes : 1) it is an attempt to 
                             "content": feedback_info,
                         }
                     )
-                    
+
                 else:
                     raise
-                    
+
             except CodeExtractionError as e:
                 raise ControllerExecutionError(
                     f"Error while extracting code snippet from answer: {e}"
                 )
-                
-                
+
         # Log runtime metrics
         metrics_runtime = self.get_runtime_metrics()
         self.logger.log_scalars(metrics_runtime, step=self.timestep)
 
         # Move forward the iter counter
         self.timestep += 1
-
 
     def extract_code_snippet(self, text: str):
         """Extracts a single Python code snippet wrapped in <code:exec> or <code:edit> with ```python ... ``` inside.
@@ -399,12 +402,12 @@ Playing a controller in a task will serve two purposes : 1) it is an attempt to 
                 "No valid <code:exec> or <code:edit> block found with ```python."
             )
         elif len(matches) > 1:
-            raise CodeExtractionError("Multiple code blocks found — only one is allowed.")
+            raise CodeExtractionError(
+                "Multiple code blocks found — only one is allowed."
+            )
 
         mode, code = matches[0]
         return code.strip(), mode.upper()
-
-
 
     def execute_exec_code(self, code: str, env_variables: dict) -> str:
         """
@@ -425,8 +428,6 @@ Playing a controller in a task will serve two purposes : 1) it is an attempt to 
 
         sys.stdout, sys.stderr = old_stdout, old_stderr
         return buffer.getvalue()
-
-
 
     def is_done(self):
         return self.timestep >= self.n_steps_max

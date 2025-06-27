@@ -1,6 +1,6 @@
 import ast
 import re
-from typing import Dict, List, Any, Set
+from typing import Dict, List, Any, Set, Tuple
 from agent.agentic.items import Controller, Knowledge
 from enum import Enum
 
@@ -33,15 +33,7 @@ class Item:
         self.view_code = view_code
         
     def __repr__(self):
-        parts = [
-            f"Item(name={self.name!r}, type={self.item_type.value})",
-            f"  Imports     : {self.imports or '[]'}",
-            f"  Dependencies: {self.dependencies or '[]'}",
-            f"  Docstring : {self.docstring!r}" if self.docstring else "",
-            "  Code:\n"
-            + "\n".join(f"    {line}" for line in self.pure_code.splitlines()),
-        ]
-        return "\n".join(part for part in parts if part)
+        return self.pure_code
 
 
 class CodebaseManager:
@@ -65,9 +57,12 @@ class CodebaseManager:
             elif isinstance(node, ast.Delete):
                 deletions.append(node)
 
-        # Step 3: Delete items if any deletions are present
+        # Step 3: Handle deletions
         if deletions and top_defs:
-            raise CodeExtractionError(f"Cannot mix deletions with definitions in a single edit. {len(deletions)} deletions and {len(top_defs)} definitions found.")
+            raise CodeExtractionError(
+                f"Cannot mix deletions with definitions in a single edit. "
+                f"{len(deletions)} deletions and {len(top_defs)} definitions found."
+            )
 
         if deletions:
             for del_node in deletions:
@@ -82,7 +77,7 @@ class CodebaseManager:
                 "Code must contain at least one top-level definition, found none."
             )
 
-        # Pre-step before step 4: if there are several top-level definitions, deal with them one by one
+        # Pre-step for multiple definitions
         if len(top_defs) > 1:
             if allow_several_top_defs:
                 import_lines = [
@@ -105,46 +100,36 @@ class CodebaseManager:
                 )
 
         # Step 4: Extract name, imports, docstring, and pure code
-        top_def = top_defs[0]
-        if isinstance(top_def, ast.FunctionDef):
+        import_lines, code_wo_imports = self.separate_imports_and_code(code)
+
+        # Parse again without the imports to find the single top-level def/assign
+        try:
+            sub_tree = ast.parse(code_wo_imports)
+        except SyntaxError as e:
+            raise CodeExecutionError(f"Invalid code after removing imports: {e}")
+
+        if len(sub_tree.body) != 1:
+            raise CodeExtractionError("Code must contain exactly one top-level definition after removing imports.")
+
+        top_def = sub_tree.body[0]
+
+        # Extract name
+        if isinstance(top_def, (ast.FunctionDef, ast.ClassDef)):
             name = top_def.name
-        elif isinstance(top_def, ast.ClassDef):
-            name = top_def.name
+            docstring = ast.get_docstring(top_def) or ""
+            pure_code = code_wo_imports.strip()
         elif isinstance(top_def, ast.Assign):
-            if len(top_def.targets) != 1 or not isinstance(
-                top_def.targets[0], ast.Name
-            ):
+            if len(top_def.targets) != 1 or not isinstance(top_def.targets[0], ast.Name):
                 raise CodeExtractionError("Assignment must be to a single variable name.")
             name = top_def.targets[0].id
-
-        import_lines = []
-        definition_lines = []
-        docstring = ""
-
-        lines = code.splitlines()
-        for line in lines:
-            if re.match(r"^\s*(import|from)\s", line):
-                import_lines.append(line)
-            else:
-                definition_lines.append(line)
-
-        docstring_match = re.match(
-            r'^\s*[\'"]{3}(.*?)[\'"]{3}', "\n".join(definition_lines), re.DOTALL
-        )
-        if docstring_match:
-            docstring = docstring_match.group(1).strip()
-            code_wo_docstring = re.sub(
-                r'^\s*[\'"]{3}(.*?)[\'"]{3}',
-                "",
-                "\n".join(definition_lines),
-                flags=re.DOTALL,
-            )
+            docstring = ""
+            pure_code = code_wo_imports.strip()
         else:
-            code_wo_docstring = "\n".join(definition_lines)
-
-        pure_code = code_wo_docstring.strip()
-                
-        # Step 5: Infer dependencies from AST
+            raise CodeExtractionError("Unsupported top-level statement type.")
+        
+            
+            
+        # Step 5: Infer dependencies from AST of pure_code
         used_names = set()
         try:
             node = ast.parse(pure_code)
@@ -168,7 +153,7 @@ class CodebaseManager:
             dependencies=dependencies,
             docstring=docstring,
         )
-
+            
         is_new = name not in self.items
         old_item = self.items.get(name)
 
@@ -278,7 +263,28 @@ class CodebaseManager:
             exec(code_to_exec, exec_namespace)
         except Exception as e:
             raise CodeExecutionError(f"Error executing code: {e}")
-        
+    
+    def separate_imports_and_code(self, code: str) -> Tuple[List[str], str]:
+        """
+        Splits a block of Python code into:
+        - A list of import lines (lines starting with 'import' or 'from')
+        - The remaining code (including any docstrings, unchanged)
+        """
+        lines = code.splitlines()
+
+        import_lines = []
+        code_lines = []
+
+        for line in lines:
+            if re.match(r"^\s*(import|from)\s", line):
+                import_lines.append(line)
+            else:
+                code_lines.append(line)
+
+        pure_code = "\n".join(code_lines).strip()
+
+        return import_lines, pure_code
+
     def _has_circular_dependency(self) -> bool:
         visited = set()
         rec_stack = set()
@@ -352,22 +358,6 @@ class CodebaseManager:
             )
 
         del self.items[item_name]
-
-    def __repr__(self):
-        result = []
-        for item_type in ItemType:
-            if item_type != ItemType.KNOWLEDGE:
-                continue  # only print knowledge items for now
-            result.append(f"** {item_type.value.capitalize()}s Items **")
-            items_of_type = [
-                item for item in self.items.values() if item.item_type == item_type
-            ]
-            if len(items_of_type) == 0:
-                result.append("  No items of this type.")
-            else:
-                for item in items_of_type:
-                    result.append(f"{item}")
-        return "\n\n".join(result) if result else "No items in codebase."
     
     def __repr__(self):
         result = []

@@ -534,7 +534,7 @@ This will save it as a solution to the task and provide you a reward based on th
             task,
             n_episodes=n_episodes,
             is_eval=False,
-            log_subdir=f"conversation_{self.idx_conversation}/run_step_{self.timestep_in_conv}_task_{sanitize_name(task.get_name())}",
+            log_subdir=f"conversation_{self.idx_conversation}/run_output/_step_{self.timestep_in_conv}_task_{sanitize_name(task.get_name())}",
         )
         # Log the feedback
         task_name_sanitized = sanitize_name(task.get_name())
@@ -568,7 +568,7 @@ This will save it as a solution to the task and provide you a reward based on th
             task,
             n_episodes=N_EPISODES_SUBMIT_CONTROLLER,
             is_eval=False,
-            log_subdir=f"conversation_{self.idx_conversation}/submission_step_{self.timestep_in_conv}_task_{task_name_sanitized}",
+            log_subdir=f"conversation_{self.idx_conversation}/submission_output/step_{self.timestep_in_conv}_task_{task_name_sanitized}",
         )
         # Compute the performance metric from the feedback
         metrics = feedback_agg_over_episodes.get_metrics(prefix=f"submissions/task_{task_name_sanitized}")  # success/rate, submmission/task_X/success/rate

@@ -6,10 +6,8 @@ I will first print the descriptions of all four tasks.
 
 <code:exec>
 ```python
-for i, task in enumerate(tasks):
-    desc = task.get_description()
-    print(f"Task {i+1} description:")
-    print(desc)
-    print("\n" + "="*40 + "\n")
+task = agentic.get_task("GiveGoalPositionEnv(size=self.size, ),")
+controller = FindFGoalPosition()
+feedback = agentic.submit_controller_to_task(controller, task=task)
 ```
 </code:exec>

@@ -77,6 +77,9 @@ def play_controller_in_task(
         log_dir (str): The subdirectory to log the results in. Results will be logged
             in each of <log_dir_global>/<log_subdir>/<name_file>.txt
     """
+    assert isinstance(
+        controller, Controller
+    ), f"Expected controller to be of type Controller, got {type(controller)}"
     # Initialize the feedback
     feedback_over_eps = FeedbackAggregated()
     for k in range(n_episodes):
@@ -134,4 +137,5 @@ def play_controller_in_task(
         # Add feedback to the feedback aggregator
         feedback_over_eps.add_feedback(feedback)
 
+    feedback_over_eps.aggregate()
     return feedback_over_eps

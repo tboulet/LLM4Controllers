@@ -51,6 +51,27 @@ class TaskDescription:
 class Task(ABC):
     """A task is a specific instance of a problem that the agent must solve."""
 
+    def __eq__(self, other: object) -> bool:
+        """Check if two tasks are equal.
+
+        Args:
+            other (object): the other task to compare with
+
+        Returns:
+            bool: True if the tasks are equal, False otherwise
+        """
+        if not isinstance(other, Task):
+            return False
+        return self.get_name() == other.get_name()
+    
+    def __hash__(self) -> int:
+        """Get the hash of the task.
+
+        Returns:
+            int: the hash of the task
+        """
+        return hash(self.get_name())
+    
     @abstractmethod
     def get_name(self) -> str:
         """Get the name of the task.

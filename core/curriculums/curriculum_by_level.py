@@ -56,7 +56,7 @@ class CurriculumByLevels(BaseCurriculum[Objective]):
         if self.idx_max_level == self.n_levels:
             return  # do not update if all levels have been completed
 
-        if not feedback.dict_aggregated_feedback["success"] > 0.9:
+        if feedback.dict_aggregated_feedback["success"] < 0.9:
             return  # do not update if the objective was not successful
 
         for idx_level, level in enumerate(self.levels):
@@ -64,7 +64,11 @@ class CurriculumByLevels(BaseCurriculum[Objective]):
                 if idx_level != self.idx_max_level:
                     return  # if the objective is in an already solved level, do not update
                 else:
-                    level[objective] = True  # note the objective as completed
+                    if not level[objective]:
+                        level[objective] = True  # note the objective as completed
+                        print(
+                            f"[CURRICULUM] Objective {objective} has been completed with success rate {feedback.dict_aggregated_feedback['success']:.2f} and is now marked as completed."
+                        )
                     if all(level.values()):
                         # If all objectives in the level have been completed, update the max level
                         print(f"[CURRICULUM] Level {idx_level} has been completed.")

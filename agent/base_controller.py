@@ -16,14 +16,13 @@ class Controller(ABC):
     - the internal memory of the controller, to allow for time-dependant actions. Example : for a task consisting of doing a loop around a wall, the controller necessarily needs to remember where he is in the process.
     """
 
-    @abstractmethod
     def __init__(self, **kwargs: Dict[str, Any]):
         """Initialize the controller with 
         
         Args:
             kwargs (Dict[str, Any]): a dictionary of parameters to initialize the controller.
         """
-        raise NotImplementedError
+        pass
 
     @abstractmethod
     def act(self, observation: Observation) -> ActionType:

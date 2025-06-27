@@ -57,6 +57,7 @@ class BaseAgent2(ABC):
         self,
         dict_name_to_objects: Dict[str, str],
         log_subdir: str,
+        verbose: bool = True,
     ):
         """Log objects in a directory as text. For each (key, value) in the directory, the file <log_dir>/<log_subdir>/<key> will be created and the value will be written in it.
         It will do that for all <log_dir> in self.list_run_names.
@@ -64,6 +65,7 @@ class BaseAgent2(ABC):
         Args:
             dict_name_to_text (Dict[str, str]): a mapping from the name of the file to create to the text to write in it.
             log_subdir (str): the subdirectory in which to create the files. If None, it will be created in the root log directory of the run.
+            verbose (bool): whether to print the logs to the console or not. Defaults to True.
         """
         if log_subdir is None:
             log_subdir = ""
@@ -82,4 +84,5 @@ class BaseAgent2(ABC):
                     with open(log_file, "w", encoding="utf-8") as f:
                         f.write(obj)
                     f.close()
-                    print(f"[LOGGING] : Logged {log_file}")
+                    if verbose:
+                        print(f"[LOGGING] : Logged {log_file}")

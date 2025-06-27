@@ -389,14 +389,14 @@ class FeedbackAggregated:
 
     def get_metrics(
         self,
-        prefix: TaskDescription = None,
+        prefix: str = None,
         do_log_no_prefix: bool = True,
     ) -> Dict[str, Any]:
         """
         Get the aggregated feedback as loggable metrics.
 
         Args:
-            prefix (TaskDescription, optional): The task name. Defaults to None. If provided, the metrics will be prefixed with the task name.
+            prefix (str, optional): An additional prefix. Defaults to None. If provided, the metrics will be prefixed with the prefix.
             do_log_no_prefix (bool, optional): If True, the metrics will also be logged without prefix. Defaults to True.
 
         Returns:
@@ -441,7 +441,6 @@ class FeedbackAggregated:
         # Log what is needed
         metrics_res = {}
         if prefix is not None:
-            prefix = sanitize_name(prefix)
             metrics_res.update(
                 {f"{prefix}/{key}": value for key, value in metrics.items()}
             )

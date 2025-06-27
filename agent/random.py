@@ -87,7 +87,7 @@ class RandomAgent2(BaseAgent2):
             feedback_agg_over_controllers.add_feedback(metrics_agg_over_episodes)
             feedback_agg_over_controllers.aggregate()
             self.logger.log_scalars(
-                feedback_agg_over_controllers.get_metrics(prefix=str(task)), step=0
+                feedback_agg_over_controllers.get_metrics(prefix=sanitize_name(str(task))), step=0
             )
 
             # Log runtime metrics

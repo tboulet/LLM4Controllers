@@ -9,7 +9,7 @@ import os
 import re
 import signal
 import time
-from typing import Dict, Iterator, List, Optional
+from typing import Dict, Iterator, List, Optional, Set
 from tbutils.tmeasure import RuntimeMeter, get_runtime_metrics
 import tiktoken
 import io
@@ -25,7 +25,9 @@ from agent.agentic.codebase_manager import CodebaseManager
 from agent.base_agent import BaseAgent, Controller
 from agent.base_agent2 import BaseAgent2
 from core import task
-from core.types import ErrorTrace, CodeExtractionError, ControllerExecutionError
+from core.play import play_controller_in_task
+from core.std_capture import StreamCapture
+from core.types import ErrorTrace, CodeExtractionError, CodeExecutionError
 from core.feedback_aggregator import FeedbackAggregated
 from core.loggers.base_logger import BaseLogger
 from core.parallel import run_parallel
@@ -37,6 +39,56 @@ import enum
 import random
 from typing import Any, Dict, Tuple, Union
 from llm import llm_name_to_LLMClass
+
+
+class TaskStatus:
+    """A class to represent the status of a task in the agentic framework."""
+
+    def __init__(
+        self,
+        name: str,
+        task: Task,
+        # controller_code: str = None,
+        performance_metric: float = None,
+        is_done: bool = False,
+        n_submissions: int = 0,
+    ):
+        """Initialize the TaskStatus object.
+
+        Args:
+            name (str): the name of the task
+            task (Task): the task object associated with this status.
+            controller_code (str, optional): the code of the controller that solves the task. Defaults to None (no submission yet).
+            performance_metric (float, optional): the performance metric of the controller on the task. Defaults to None (no submission yet).
+            is_done (bool, optional): whether the task is done or not. Defaults to False (not done).
+        """
+        self.name: str = name
+        self.task: Task = task
+        # self.controller_code: str = controller_code
+        self.performance_metric: float = performance_metric
+        self.is_done: bool = is_done
+        self.n_submissions: int = n_submissions
+
+    def __repr__(self) -> str:
+        """String representation of the TaskStatus object."""
+        list_result = []
+        list_result.append(f"Task name: '{self.name}'")
+        if self.performance_metric is None:
+            assert (
+                self.is_done is False and self.n_submissions == 0
+            ), "If the performance metric is None, the task should not be done and no controller should have been submitted yet."
+            list_result.append("No controller submitted yet.")
+        else:
+            assert (
+                self.n_submissions > 0
+            ), "If the performance metric is not None, the number of submissions should be greater than 0."
+            list_result.append(
+                # f"Controller code:\n{self.controller_code}\n"
+                f"Performance metric: {self.performance_metric}\n"
+                f"Task done: {self.is_done}\n"
+                f"Number of different controllers submitted since the beginning: {self.n_submissions}\n"
+            )
+        return "\n".join(list_result)
 
 
 class Agentic(BaseAgent2):
@@ -56,22 +108,20 @@ class Agentic(BaseAgent2):
 
         # Initialize variables
         self.timestep: int = 0
-        self.idx_conversation: int = 0
+        self.timestep_in_conv: int = 0
+        self.idx_conversation: int = (
+            -1
+        )  # Start with -1, will be incremented at the first step
         self.is_conversation_fresh: bool = True
         self.env_variables: Dict[str, Any] = {}
-        self.base_scope = {}
-        exec(open("agent/llm_hcg/base_scope.py").read(), self.base_scope)
+        self.time_start: float = time.time()
+        self.tasks_status: Dict[str, TaskStatus] = {}
 
         # Initialize LLM
         print("Initializing LLM...")
         name_llm = config["llm"]["name"]
         config_llm = config["llm"]["config"]
         self.llm = llm_name_to_LLMClass[name_llm](**config_llm, logger=logger)
-
-        # Get tasks here
-        print("Getting tasks...")
-        self.tasks = self.env.get_current_tasks()[: self.n_tasks_to_do]
-        self.tasks = sorted(self.tasks, key=lambda task: str(task))
 
         # Getting example answer / templates
         self.code_item_controller = open("agent/agentic/item_controller.py").read()
@@ -98,7 +148,7 @@ is costly, we save tokens by only showing the signature and the docstring of the
 You can however visualize them fully or toggle permanently their visibility if you feel its necessary (see later : actions)"""
 
         if "instructions" in self.list_prompt_keys:
-            prompt_instructions = f"""You are Agentic, an AI agent that must solve an task-based environment.
+            prompt_instructions = f"""You are Agentic, an AI agent that must solve a task-based environment.
 For this, you have access and you maintain a code base/knowledge base over your agentic development.
 
 This code base takes the form of one python file where objects we will call 'items' (functions, classes, variables, ...) are enumerated in \
@@ -140,7 +190,7 @@ Then you can submit a new action.
 
 ## Conversation refreshing mechanism :
 This conversation (system prompt and succession of actions/answers) is limited by the context window of the LLM and slow inference time with increasing length.
-For this reason, you will have to periodically refresh the conversation by using the `refresh` action.
+For this reason, you will have to periodically refresh the conversation by using the refresh action through the execution of the following code : ```agentic.refresh_conversation()``.
 This will reset the conversation by removing any traces of actions/answers, leaving only the system prompt and the code base.
 Consequently, it is VERY IMPORTANT to take notes of any relevant information you obtained during the conversation, either in the knowledge or in the docstrings of code items, before refreshing the conversation.
 After each answer that you consider important to keep trace of, you should store or update the notes of the involved items, otherwise this information will be lost for future inferences.
@@ -188,8 +238,9 @@ You can use them through the `code:exec` tag, e.g.:
 <code:exec>
 ```python
 # example : instantiate a controller, run it in a task, and print the feedback back to you
-ctrl = MyController(...)  
-feedback = run_controller_in_task(ctrl, task=task, n_episodes=10) 
+controller = MyController(...)
+task = agentic.get_task("task_name")  # get the task from the environment
+feedback = run_controller_in_task(controller, task, n_episodes=10) 
 print(feedback)  # to print the feedback of the controller
 
 # example : test that a function is working correctly
@@ -198,30 +249,38 @@ assert result == expected_result, "The function did not return the expected resu
 ```
 </code:exec>
 
-Feedback : the feedback of the code-exec action will be available in the next answer. It will contain the stdout of the code executed, as well as any error that may have occurred during the execution.
+Output : the stdout/stderr of the code-exec action will be available in the next answer. It will contain the output of the code executed, as well as any error that may have occurred during the execution.
 You can't use any variable defined in the code-exec action in other actions, the variables are not saved anywhere.
 
-Special code-exec features :
+## Special code-exec actions:
+You will have access to some special code-exec actions that you will have to use at some point :
 
-- Refresh conversation : running ```agentic.refresh()``` in a code-exec action will reset the conversation, removing all traces of actions/answers, leaving only the system prompt and the code base. \
+- Refresh conversation : running ```agentic.refresh_conversation()``` in a code-exec action will reset the conversation, removing all traces of actions/answers, leaving only the system prompt and the code base. \
 You must use this action periodically to avoid the context window of the LLM to be full, which would lead to a failure of the inference, but you must be sure all relevant information is stored in the notes of the items before doing so, as it will be lost otherwise.
 
-- Editing docstring only : if you wish to edit the docstring of an item without modifying its code, you can use the .edit_docstring() method of the item, e.g.:
+- Editing docstring only : if you wish to edit the docstring of an item without modifying its code, you can use the .edit_docstring() method, e.g.:
 <code:exec>
 ```python
-my_item.edit_docstring("This is the new docstring of the item.")
+agentic.edit_docstring("item_name", "This is the new docstring of the item.")
 ```
 </code:exec>
 This is usefull to quickly update any information you want to keep trace of in the item, without modifying its code.
 
-- Environment code : the environment prompt will explain you how to create Task objects. \
-You can then play a controller in a task using the predefined function `run_controller_in_task(controller : Controller, task : Task, n_episodes : int = 1) -> Feedback`. Example:
+- Getting a task : you can get a task from the environment by using the predefined function ```agentic.get_task(task_name: str) -> Task```.
+
+- Playing a controller in a task : you can play a controller in a task using the predefined function ```run_controller_in_task(controller : Controller, task : Task, n_episodes : int = 1) -> Feedback```.
 <code:exec>
 ```python
-task = EnvClassExplainedByEnvPrompt(...)
+task = agentic.get_task("task_name")  # get the task from the environment
+controller = MyController(...)
+feedback = agentic.run_controller_in_task(controller, task=task, n_episodes=10)
+print(feedback)
 ```
 </code:exec>
-Playing a controller in a task will serve two purposes : 1) it is an attempt to solve the task, which is your final objective (solving all tasks), and 2) it will give you feedback on the controller and help you design better controllers in the future and accumulate knowledge about the environment and the tasks.
+Playing a controller in a task will give you feedback on the controller and help you design better controllers in the future and accumulate knowledge about the environment and the tasks.
+
+- Submitting a controller to a task : once you have identified a satisfying controller for a task, you can submit it to the task by running ```agentic.submit_controller_to_task(controller, task)```.
+This will save it as a solution to the task and provide you a reward based on the quality of the solution relative to your previous solution.
 """
             self.dict_system_prompts["instructions"] = prompt_instructions
 
@@ -255,9 +314,100 @@ Playing a controller in a task will serve two purposes : 1) it is an attempt to 
         # === Initialize the codebase manager ===
         self.codebase_manager = CodebaseManager()
         code_initial_codebase = open("agent/agentic/initial_codebase.py").read()
-        self.codebase_manager.edit_code(code_initial_codebase)
+        self.codebase_manager.edit_code(
+            code_initial_codebase, allow_several_top_defs=True
+        )
 
-    def build_prompt(
+    # ============ Interface methods =================
+
+    def is_done(self):
+        return self.timestep >= self.n_steps_max
+
+    def step(self):
+        with RuntimeMeter("step"):
+
+            if self.is_conversation_fresh:
+                self.is_conversation_fresh = False
+                self.idx_conversation += 1
+                self.timestep_in_conv = 0
+
+                # Update the tasks completion status
+                tasks_from_env: List[Task] = self.env.get_current_tasks()
+                for task in tasks_from_env:
+                    if task.get_name() not in self.tasks_status:
+                        # Initialize the task status
+                        self.tasks_status[task.get_name()] = TaskStatus(
+                            name=task.get_name(),
+                            task=task,
+                        )
+                # Build the prompt system
+                prompt_system = self.build_system_prompt(
+                    dict_prompts={
+                        **self.dict_system_prompts,
+                        "tasks": self.get_tasks_prompt(),
+                        "status": self.get_status_prompt(),
+                        "codebase": self.get_codebase_prompt(),
+                    }
+                )
+                self.messages = [{"role": "system", "content": prompt_system}]
+                self.log_prompt(prompt_system)
+
+            # Generate the answer from the LLM
+            answer = self.llm.generate(messages=self.messages, n=1)[0]
+            self.messages.append({"role": "assistant", "content": answer})
+            self.log_answer(answer)
+
+            # Apply the answer
+            with StreamCapture("[Output]") as stream_capture:
+                try:
+                    # Extract the code snippet from the answer
+                    code, mode = self.extract_code_snippet(answer)
+                    self.log_code(code)
+
+                    # Edit mode
+                    if mode == "EDIT":
+                        print("Editing codebase/knowledge base...")
+                        self.codebase_manager.edit_code(code)
+
+                    # Exec mode
+                    elif mode == "EXEC":
+                        print("Executing code...")
+                        self.codebase_manager.execute_code(
+                            code,
+                            variables={
+                                "agentic": self,
+                                **self.env_variables,
+                            },
+                        )
+
+                    else:
+                        raise ValueError(
+                            f"Invalid mode '{mode}' extracted from the answer. Expected 'EDIT' or 'EXEC'."
+                        )
+
+                except CodeExtractionError as e:
+                    print(f"Error extracting code snippet: {str(e)}")
+                    
+                except CodeExecutionError as e:
+                    print(f"Error during code editing/executing: {str(e)}")
+                
+            # Add the output to the messages
+            output = f"<output>\n{stream_capture.get_output()}</output>"
+            self.messages.append({"role": "system", "content": output})
+            self.log_output(output, mode=mode)
+
+        # Log runtime metrics
+        metrics_runtime = self.get_runtime_metrics()
+        self.logger.log_scalars(metrics_runtime, step=self.timestep)
+
+        # Move forward the iter counter
+        self.timestep += 1
+        self.timestep_in_conv += 1
+        breakpoint()
+
+    # ============ Helper methods =================
+
+    def build_system_prompt(
         self,
         dict_prompts: Dict[str, str],
     ) -> str:
@@ -280,106 +430,6 @@ Playing a controller in a task will serve two purposes : 1) it is an attempt to 
 
         prompt = "\n\n".join(list_prompt)
         return prompt
-
-    def step(self):
-        with RuntimeMeter("step"):
-
-            if self.is_conversation_fresh:
-                self.is_conversation_fresh = False
-                # Extract the env usage explanation and the env variables to set
-                prompt_env_usage_explanation, self.env_variables = (
-                    self.env.get_env_usage_explanation_and_variables()
-                )
-                prompt_env_usage_explanation = (
-                    "## Environment usage explanation:\n"
-                    f"{prompt_env_usage_explanation}"
-                )
-                # Build the prompt
-                prompt_system = self.build_prompt(
-                    dict_prompts={
-                        **self.dict_system_prompts,
-                        "env_usage": prompt_env_usage_explanation,
-                        # TODO : other prompts related to code base here
-                    }
-                )
-                self.messages = [{"role": "system", "content": prompt_system}]
-            else:
-                raise NotImplementedError(
-                    "Conversation refreshing mechanism is not implemented yet."
-                )
-
-            # Turn messages into a readable conversation and log it
-            prompt_templated_list = [
-                f"{msg['role']}:\n{msg['content']}" for msg in self.messages
-            ]
-            prompt_templated = "\n\n\n".join(prompt_templated_list)
-            self.log_as_texts(
-                {
-                    f"conv.txt": prompt_templated,
-                },
-                log_subdir=f"conversation_{self.idx_conversation}",
-            )
-
-            # Generate the answer from the LLM
-            answer = self.llm.generate(messages=self.messages, n=1)[0]
-            self.log_as_texts(
-                {
-                    f"step_{self.timestep}_answer.txt": answer,
-                },
-                log_subdir=f"conversation_{self.idx_conversation}",
-            )
-
-            # Apply the answer
-            try:
-                # Extract the code snippet from the answer
-                code, mode = self.extract_code_snippet(answer)
-                self.log_as_texts(
-                    {
-                        f"step_{self.timestep}_code.py": code,
-                    },
-                    log_subdir=f"conversation_{self.idx_conversation}",
-                )
-
-                # Edit mode
-                if mode == "EDIT":
-                    with StdCapture() as captured:
-                        self.codebase_manager.edit_code(code)
-                    output = captured.get_output()
-
-                # Exec mode
-                elif mode == "EXEC":
-                    output = self.execute_exec_code(
-                        code,
-                        self.env_variables,
-                    )
-                    self.log_as_texts(
-                        {
-                            f"step_{self.timestep}_output.txt": output,
-                        },
-                        log_subdir=f"conversation_{self.idx_conversation}",
-                    )
-                    feedback_info = f"<feedback>\n{output}\n</feedback>"
-                    self.messages.append(
-                        {
-                            "role": "assistant",
-                            "content": feedback_info,
-                        }
-                    )
-
-                else:
-                    raise
-
-            except CodeExtractionError as e:
-                raise ControllerExecutionError(
-                    f"Error while extracting code snippet from answer: {e}"
-                )
-
-        # Log runtime metrics
-        metrics_runtime = self.get_runtime_metrics()
-        self.logger.log_scalars(metrics_runtime, step=self.timestep)
-
-        # Move forward the iter counter
-        self.timestep += 1
 
     def extract_code_snippet(self, text: str):
         """Extracts a single Python code snippet wrapped in <code:exec> or <code:edit> with ```python ... ``` inside.
@@ -411,29 +461,242 @@ Playing a controller in a task will serve two purposes : 1) it is an attempt to 
         mode, code = matches[0]
         return code.strip(), mode.upper()
 
-    def execute_exec_code(self, code: str, env_variables: dict) -> str:
-        """
-        Executes a code string with access to env_variables.
-        Captures interleaved stdout and stderr output into a single stream.
-
-        Returns:
-            str: Captured combined output (stdout + stderr in order).
-        """
-        buffer = io.StringIO()
-        old_stdout, old_stderr = sys.stdout, sys.stderr
-        sys.stdout = sys.stderr = buffer  # Redirect both to same stream
-
-        try:
-            exec(code, env_variables)
-        except Exception:
-            traceback.print_exc()
-
-        sys.stdout, sys.stderr = old_stdout, old_stderr
-        return buffer.getvalue()
-
-    def is_done(self):
-        return self.timestep >= self.n_steps_max
-
     def code_tag(self, code: str) -> str:
         """Add the python code tag to some code."""
         return f"```python\n{code}\n```"
+
+    def get_tasks_prompt(self) -> str:
+        """Get a summary of the tasks available in the environment."""
+        result = "## Tasks available in the environment:\n\n"
+        if len(self.tasks_status) == 0:
+            raise ValueError(
+                "No tasks available in the environment. Please check the environment configuration."
+            )
+        result += "\n\n".join(
+            [str(task_status) for task_status in self.tasks_status.values()]
+        )
+        return result
+
+    def get_status_prompt(self) -> str:
+        """Get a summary of the current status of the agent."""
+        delta_time = time.time() - self.time_start
+        time_str = time.strftime("%H:%M:%S", time.gmtime(delta_time))
+        if self.idx_conversation >= 1:
+            info_refresh = f"Output : Conversation has been refreshed. This is the first message of the new conversation (#{self.idx_conversation})."
+        else:
+            info_refresh = f"Output : Agentic started."
+        return (
+            "## Current status of the agent:\n"
+            f"Runtime : you are running for {time_str}.\n"
+            f"Conversation index : This is the conversation number {self.idx_conversation}.\n"
+            f"Current timestep : The total number of elementary steps taken since the beginning of the run is {self.timestep}.\n"
+            f"{info_refresh}"
+        )
+
+    def get_codebase_prompt(self) -> str:
+        """Get a summary of the current code base."""
+        return "## Current code base:\n" f"{str(self.codebase_manager)}"
+
+    def get_performance_metric_from_feedback(self, metrics: Dict[str, float]) -> Tuple[float, bool]:
+        THRESHOLD_SUCCESS = 0.9
+        performance_metric = metrics["success/rate"] + metrics["reward/mean"]
+        performance_metric = float(performance_metric) 
+        is_done = (metrics["success/rate"] >= THRESHOLD_SUCCESS)
+        return performance_metric, is_done
+
+    # ============ Action methods =================
+
+    def refresh_conversation(self):
+        """Refresh the conversation by resetting the messages and the conversation index."""
+        self.is_conversation_fresh = True
+        print(
+            f"Refreshing conversation, starting conversation {self.idx_conversation+1} at timestep {self.timestep}."
+        )
+
+    def edit_docstring(self, item_name: str, new_docstring: str):
+        """Edit the docstring of an item in the code base."""
+        pass  # TODO : implement this method to edit the docstring of an item in the code base.
+
+    def get_task(self, task_name: str) -> Task:
+        """Get a task from the environment by its name."""
+        if task_name not in self.tasks_status:
+            raise ValueError(
+                f"Task '{task_name}' not found in the tasks status. Available tasks: {list(self.tasks_status.keys())}"
+            )
+        return self.tasks_status[task_name].task
+
+    def run_controller_in_task(
+        self, controller: Controller, task: Task, n_episodes: int = 1
+    ) -> FeedbackAggregated:
+        """Run a controller in a task for a specified number of episodes."""
+        feedback_agg_over_episodes = play_controller_in_task(
+            controller,
+            task,
+            n_episodes=n_episodes,
+            is_eval=False,
+            log_subdir=f"conversation_{self.idx_conversation}/run_step_{self.timestep_in_conv}_task_{sanitize_name(task.get_name())}",
+        )
+        # Log the feedback
+        task_name_sanitized = sanitize_name(task.get_name())
+        metrics = feedback_agg_over_episodes.get_metrics(prefix=f"run_controller/task_{task_name_sanitized}")  # success/rate, submmission/task_X/success/rate
+        performance_metric, is_done = self.get_performance_metric_from_feedback(
+            metrics
+        )
+        metrics[f"submissions/task_{task_name_sanitized}/performance_metric"] = performance_metric
+        metrics[f"submissions/task_{task_name_sanitized}/is_done"] = is_done
+        with StreamCapture("[Log scalars]", log_to_cli=False) as _:
+            self.logger.log_scalars(
+                metrics, step=self.timestep
+            )
+        self.log_metrics(metrics, mode = "RUN")
+        
+        # Return the aggregated feedback
+        return feedback_agg_over_episodes
+    
+    def submit_controller_to_task(
+        self, controller: Controller, task: Task
+    ) -> FeedbackAggregated:
+        """Submit a controller to a task and get the feedback."""
+        task_name = task.get_name()
+        task_name_sanitized = sanitize_name(task_name)
+        N_EPISODES_SUBMIT_CONTROLLER = 20
+        self.tasks_status[task_name].n_submissions += 1
+        print(f"Controller submitted to task '{task_name}'.")
+        # Play the controller in the task and get the feedback
+        feedback_agg_over_episodes = play_controller_in_task(
+            controller,
+            task,
+            n_episodes=N_EPISODES_SUBMIT_CONTROLLER,
+            is_eval=False,
+            log_subdir=f"conversation_{self.idx_conversation}/submission_step_{self.timestep_in_conv}_task_{task_name_sanitized}",
+        )
+        # Compute the performance metric from the feedback
+        metrics = feedback_agg_over_episodes.get_metrics(prefix=f"submissions/task_{task_name_sanitized}")  # success/rate, submmission/task_X/success/rate
+        performance_metric, is_done = self.get_performance_metric_from_feedback(
+            metrics
+        )
+        print(
+            f"Obtained performance metric: {performance_metric}. Task done: {is_done}."
+        )
+
+        # Check if the performance metric improved
+        previous_performance_metric = self.tasks_status[task_name].performance_metric
+        if previous_performance_metric is None:
+            previous_performance_metric = 0.0
+        previous_is_done = self.tasks_status[task_name].is_done
+
+        if performance_metric > previous_performance_metric:
+            # Update the task status
+            self.tasks_status[task_name].performance_metric = performance_metric
+            # Provide reward if performance metric improved
+            print(
+                f"REWARD OBTAINED: {performance_metric - previous_performance_metric:.2f} (performance metric improvement!)"
+            )
+        elif performance_metric == previous_performance_metric:
+            print(f"No performance metric improvement.")
+        else:
+            # Performance metric decreased, do not update the task status
+            print(
+                f"WARNING: Performance metric decreased from {previous_performance_metric} to {performance_metric}. Task status not updated."
+            )
+
+        # Check if the task is done
+        if is_done and not previous_is_done:
+            print(f"REWARD OBTAINED: 1.0 (task newly completed!)")
+            self.tasks_status[task_name].is_done = True
+        elif is_done and previous_is_done:
+            print(
+                f"Task '{task_name}' is completed, but no reward obtained (already completed in the previous version)."
+            )
+        elif not is_done and previous_is_done:
+            print(
+                f"WARNING: Task '{task_name}' is not completed anymore, but it was in the previous version."
+            )
+        else:
+            print(f"Task '{task_name}' is still not completed yet, no reward obtained.")
+
+        # Also print the feedback
+        print(
+            f"Feedback aggregated over {N_EPISODES_SUBMIT_CONTROLLER} controllers:\n{feedback_agg_over_episodes}"
+        )
+        
+        # Log the metrics
+        metrics[f"submissions/task_{task_name_sanitized}/performance_metric"] = performance_metric
+        metrics[f"submissions/task_{task_name_sanitized}/is_done"] = is_done
+        with StreamCapture("[Log scalars]", log_to_cli=False) as _:
+            self.logger.log_scalars(
+                metrics, step=self.timestep
+            )
+        self.log_metrics(metrics, mode = "SUBMIT")
+        
+    # ============ Log methods =================
+
+    def log_conversation(self):
+        prompt_templated_list = [
+            f"{msg['role']}:\n{msg['content']}" for msg in self.messages
+        ]
+        prompt_templated = "\n\n\n".join(prompt_templated_list)
+        self.log_as_texts(
+            {
+                f"conv.txt": prompt_templated,
+            },
+            log_subdir=f"conversation_{self.idx_conversation}",
+            verbose=False,
+        )
+
+    def log_prompt(self, prompt: str):
+        self.log_as_texts(
+            {
+                f"prompt.txt": prompt,
+            },
+            log_subdir=f"conversation_{self.idx_conversation}",
+        )
+        self.log_conversation()
+
+    def log_answer(self, answer: str):
+        self.log_as_texts(
+            {
+                f"step_{self.timestep_in_conv}_answer.txt": answer,
+            },
+            log_subdir=f"conversation_{self.idx_conversation}",
+            verbose=False,
+        )
+        self.log_conversation()
+
+    def log_code(self, code: str):
+        # dont log conv here, it is already logged in log_answer
+        self.log_as_texts(
+            {
+                f"step_{self.timestep_in_conv}_code.py": code,
+            },
+            log_subdir=f"conversation_{self.idx_conversation}",
+            verbose=False,
+        )
+
+    def log_output(self, feedback_info: str, mode: str = None):
+        if mode is None:
+            name = f"step_{self.timestep_in_conv}_output.txt"
+        else:
+            name = f"step_{self.timestep_in_conv}_output_{mode.lower()}.txt"
+        self.log_as_texts(
+            {
+                name: feedback_info,
+            },
+            log_subdir=f"conversation_{self.idx_conversation}",
+            verbose=False,
+        )
+        self.log_conversation()
+
+    def log_metrics(self, metrics: Dict[str, float], mode : str = None):
+        """Log the metrics in the logger."""
+        if mode is None:
+            name = f"step_{self.timestep_in_conv}_metrics.txt"
+        else:
+            name = f"step_{self.timestep_in_conv}_metrics_{mode.lower()}.txt"
+        self.log_as_texts(
+            {
+                name: metrics,
+            },
+            log_subdir=f"conversation_{self.idx_conversation}",
+            verbose=False,
+        )

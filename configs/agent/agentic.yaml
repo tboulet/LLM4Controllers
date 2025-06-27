@@ -8,9 +8,10 @@ config:
   list_prompt_keys:
     - instructions
     - env
-    - env_usage
+    - tasks
+    - codebase
     - example_answer
-    # - code_env
+    - status
 
   # The number of tasks to do. If none, will do all tasks.
   n_tasks_to_do: null

@@ -20,7 +20,7 @@ from openai import OpenAI
 from agent.base_agent import BaseAgent, Controller
 from agent.base_agent2 import BaseAgent2
 from core import task
-from core.types import ErrorTrace, CodeExtractionError, ControllerExecutionError
+from core.types import ErrorTrace, CodeExtractionError, CodeExecutionError
 from core.feedback_aggregator import FeedbackAggregated
 from core.loggers.base_logger import BaseLogger
 from core.parallel import run_parallel
@@ -33,9 +33,6 @@ import enum
 import random
 from typing import Any, Dict, Tuple, Union
 from llm import llm_name_to_LLMClass
-
-
-
 
 
 class LLM_BasedControllerGenerator(BaseAgent2):
@@ -282,7 +279,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
                     }
                 )
 
-            except ControllerExecutionError as e:
+            except CodeExecutionError as e:
                 print(f"[WARNING] ControllerExecutionError : {e}")
                 feedback_over_eps.add_feedback(
                     {
@@ -312,7 +309,8 @@ class LLM_BasedControllerGenerator(BaseAgent2):
             },
             log_subdir=log_subdir,
         )
-        metrics_final = feedback_over_ctrl.get_metrics(prefix=str(task))
+        task_name_sanitized = sanitize_name(task.get_name())
+        metrics_final = feedback_over_ctrl.get_metrics(prefix=task_name_sanitized)
         self.logger.log_scalars(metrics_final, step=0)
         return feedback_over_ctrl
 
@@ -364,7 +362,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
             exec(code, local_scope)
         except Exception as e:
             self.metrics_storer["n_failure_sc_code_execution_code_execution_error"] += 1
-            raise ControllerExecutionError(
+            raise CodeExecutionError(
                 f"An error occured while executing the code for instanciating a controller. Full error info : {get_error_info(e)}"
             )
 
@@ -377,7 +375,7 @@ class LLM_BasedControllerGenerator(BaseAgent2):
             self.metrics_storer[
                 "n_failure_sc_code_execution_controller_not_created"
             ] += 1
-            raise ControllerExecutionError(
+            raise CodeExecutionError(
                 "No object named 'controller' of the class Controller found in the provided code."
             )
 

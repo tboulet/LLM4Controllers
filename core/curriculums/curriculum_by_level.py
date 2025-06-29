@@ -56,7 +56,7 @@ class CurriculumByLevels(BaseCurriculum[Objective]):
         if self.idx_max_level == self.n_levels:
             return  # do not update if all levels have been completed
 
-        if feedback.dict_aggregated_feedback["success"] < 0.9:
+        if feedback.dict_aggregated_feedback["success/rate"] < 0.9:
             return  # do not update if the objective was not successful
 
         for idx_level, level in enumerate(self.levels):

@@ -1,13 +1,8 @@
-I see that there are 4 tasks available: GoTowardsDirection, GiveGoalPositionEnv, MoveToPosition, and GiveAgentPositionEnv. Each task has its own observation space and action space, and I can get their descriptions and code representations.
-
-To start, I want to gather information about the tasks by printing their descriptions. This will help me understand the observation and action spaces, and the missions I need to solve. Then, I will try to run a simple controller that just moves forward in one of the tasks to see how the environment behaves.
-
-I will first print the descriptions of all four tasks.
-
 <code:exec>
 ```python
-task = agentic.get_task("GiveGoalPositionEnv(size=self.size, ),")
-controller = FindFGoalPosition()
-feedback = agentic.submit_controller_to_task(controller, task=task)
+task = agentic.get_task("MoveToPosition(size=self.size, ),")
+controller = MoveToPositionController()
+feedback = agentic.run_controller_in_task(controller, task, n_episodes=5)
+print(feedback)
 ```
 </code:exec>

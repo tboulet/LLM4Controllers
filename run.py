@@ -45,7 +45,7 @@ register_hydra_resolvers()
 
 
 @hydra.main(
-    config_path="configs", config_name="config_default2.yaml", version_base="1.3.2"
+    config_path="configs", config_name="config_default.yaml", version_base="1.3.2"
 )
 def main(config: DictConfig):
     print("Configuration used :")
@@ -56,7 +56,9 @@ def main(config: DictConfig):
     agent_name: str = config["agent"]["name"]
     env_name: str = config["env"]["name"]
     model_name: str = try_get(config["agent"], "config.llm.model", default="")
-    model_name = model_name.split("/")[-1]  # Get the last part of the model name (e.g., "gpt-3.5-turbo")
+    model_name = model_name.split("/")[
+        -1
+    ]  # Get the last part of the model name (e.g., "gpt-3.5-turbo")
     model_name = sanitize_name(model_name)
 
     n_steps_max: int = config.get("n_steps_max", np.inf)
@@ -102,14 +104,17 @@ def main(config: DictConfig):
     if do_csv:
         loggers.append(
             LoggerCSV(
-                log_dirs=[f"{log_dir}/{run_name}", f"{log_dir}/last/"],
+                log_dirs=[
+                    f"{log_dir}/{run_name}",
+                    f"{log_dir}/last/",
+                ],
                 timestep_key="_step",
             )
         )
     if do_tqdm and n_steps_max != np.inf:
         loggers.append(LoggerTQDM(n_total=n_steps_max))
     if do_profiling:
-        loggers.append(LoggerProfiler(log_dirs = [f"{log_dir}/{run_name}", log_dir]))
+        loggers.append(LoggerProfiler(log_dirs=[f"{log_dir}/{run_name}", log_dir]))
     logger = MultiLogger(*loggers)
 
     # Create the env
@@ -127,12 +132,16 @@ def main(config: DictConfig):
 
     # Training loop
     step = 0
-    while step < n_steps_max and not agent.is_done():
-        agent.step()
-        step += 1
-
+    try:
+        while step < n_steps_max and not agent.is_done():
+            agent.step()
+            step += 1
+    except Exception as e:
+        print(f"An error occurred : {e}")
+        
     # Close loggers
     logger.close()
+
 
 if __name__ == "__main__":
     main()

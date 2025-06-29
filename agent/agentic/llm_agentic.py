@@ -366,12 +366,10 @@ This will save it as a solution to the task and provide you a reward based on th
 
                     # Edit mode
                     if mode == "EDIT":
-                        print("Editing codebase/knowledge base...")
                         self.codebase_manager.edit_code(code)
-
+                        
                     # Exec mode
                     elif mode == "EXEC":
-                        print("Executing code...")
                         self.codebase_manager.execute_code(
                             code,
                             variables={
@@ -386,9 +384,11 @@ This will save it as a solution to the task and provide you a reward based on th
                         )
 
                 except CodeExtractionError as e:
+                    mode = None
                     print(f"Error extracting code snippet: {str(e)}")
                     
                 except CodeExecutionError as e:
+                    mode = None
                     print(f"Error during code editing/executing: {str(e)}")
                 
             # Add the output to the messages
@@ -403,8 +403,9 @@ This will save it as a solution to the task and provide you a reward based on th
         # Move forward the iter counter
         self.timestep += 1
         self.timestep_in_conv += 1
-        breakpoint()
 
+        if self.config["config_debug"]["breakpoint_on_step"]:
+            breakpoint()
     # ============ Helper methods =================
 
     def build_system_prompt(
@@ -534,16 +535,16 @@ This will save it as a solution to the task and provide you a reward based on th
             task,
             n_episodes=n_episodes,
             is_eval=False,
-            log_subdir=f"conversation_{self.idx_conversation}/run_output/_step_{self.timestep_in_conv}_task_{sanitize_name(task.get_name())}",
+            log_subdir=f"conversation_{self.idx_conversation}/run_output/step_{self.timestep_in_conv}_task_{sanitize_name(task.get_name())}",
         )
         # Log the feedback
         task_name_sanitized = sanitize_name(task.get_name())
-        metrics = feedback_agg_over_episodes.get_metrics(prefix=f"run_controller/task_{task_name_sanitized}")  # success/rate, submmission/task_X/success/rate
+        metrics = feedback_agg_over_episodes.get_metrics(prefix=f"run_controller_metrics/task_{task_name_sanitized}")  # success/rate, submmission/task_X/success/rate
         performance_metric, is_done = self.get_performance_metric_from_feedback(
             metrics
         )
-        metrics[f"submissions/task_{task_name_sanitized}/performance_metric"] = performance_metric
-        metrics[f"submissions/task_{task_name_sanitized}/is_done"] = is_done
+        metrics[f"run_controller_metrics/task_{task_name_sanitized}/performance_metric"] = performance_metric
+        metrics[f"run_controller_metrics/task_{task_name_sanitized}/is_done"] = is_done
         with StreamCapture("[Log scalars]", log_to_cli=False) as _:
             self.logger.log_scalars(
                 metrics, step=self.timestep
@@ -571,10 +572,12 @@ This will save it as a solution to the task and provide you a reward based on th
             log_subdir=f"conversation_{self.idx_conversation}/submission_output/step_{self.timestep_in_conv}_task_{task_name_sanitized}",
         )
         # Compute the performance metric from the feedback
-        metrics = feedback_agg_over_episodes.get_metrics(prefix=f"submissions/task_{task_name_sanitized}")  # success/rate, submmission/task_X/success/rate
+        metrics = feedback_agg_over_episodes.get_metrics(prefix=f"submissions_metrics/task_{task_name_sanitized}")  # success/rate, submmission/task_X/success/rate
         performance_metric, is_done = self.get_performance_metric_from_feedback(
             metrics
-        )
+        ) 
+        metrics[f"submissions_metrics/task_{task_name_sanitized}/performance_metric"] = performance_metric
+        metrics[f"submissions_metrics/task_{task_name_sanitized}/is_done"] = is_done
         print(
             f"Obtained performance metric: {performance_metric}. Task done: {is_done}."
         )
@@ -620,15 +623,18 @@ This will save it as a solution to the task and provide you a reward based on th
             f"Feedback aggregated over {N_EPISODES_SUBMIT_CONTROLLER} controllers:\n{feedback_agg_over_episodes}"
         )
         
-        # Log the metrics
-        metrics[f"submissions/task_{task_name_sanitized}/performance_metric"] = performance_metric
-        metrics[f"submissions/task_{task_name_sanitized}/is_done"] = is_done
+        # Log the metrics 1 : log the metrics in the logger for classical logging. We use a StreamCapture with no CLI output because anything printed here will be seen in the answer, and this logging is only meant for metric tracking purposes.
         with StreamCapture("[Log scalars]", log_to_cli=False) as _:
             self.logger.log_scalars(
                 metrics, step=self.timestep
             )
+        # Log the metrics 2 : save as text the metrics in the logs
         self.log_metrics(metrics, mode = "SUBMIT")
-        
+        # Log the metrics 3 : update the environment with the feedback
+        self.env.update(
+            task=task,
+            feedback=feedback_agg_over_episodes,
+        )
     # ============ Log methods =================
 
     def log_conversation(self):
@@ -638,7 +644,7 @@ This will save it as a solution to the task and provide you a reward based on th
         prompt_templated = "\n\n\n".join(prompt_templated_list)
         self.log_as_texts(
             {
-                f"conv.txt": prompt_templated,
+                f"total_conversation.txt": prompt_templated,
             },
             log_subdir=f"conversation_{self.idx_conversation}",
             verbose=False,

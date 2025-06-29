@@ -420,10 +420,10 @@ class TaskMinigrid(Task):
             )
             feedback_metrics["first_agent_position"] = self.first_agent_pos
         if "duration" in self.meta_env.list_feedback_keys:
-            feedback_metrics["episode_duration"] = self.meta_env.timestep
+            feedback_metrics["episode_duration"] = self.env_mg.unwrapped.step_count
             if hasattr(self.env_mg.unwrapped, "max_steps"):
                 feedback_metrics["episode_duration_normalized_by_max_duration"] = (
-                    self.meta_env.timestep / self.env_mg.unwrapped.max_steps
+                    self.env_mg.unwrapped.step_count / self.env_mg.unwrapped.max_steps
                 )
         if "distance_start_to_end" in self.meta_env.list_feedback_keys:
             feedback_metrics["distance_start_to_end"] = np.linalg.norm(
@@ -468,8 +468,6 @@ class MinigridMetaEnv(BaseMetaEnv):
         if config_logs["do_log_on_last"]:
             self.list_log_dirs_global.append(os.path.join(self.log_dir, "last"))
 
-        # Define variables
-        self.timestep = 0
         # Define the curriculum
         levels = [
             # {
@@ -622,7 +620,6 @@ For example, obs["image"][i,j] = [5, 2, 0] means that the object at position (i,
 
     def update(self, task: TaskMinigrid, feedback: FeedbackAggregated) -> None:
         self.curriculum.update(objective=task, feedback=feedback)
-        self.timestep += 1
 
     def get_code_repr(self) -> str:
         return (

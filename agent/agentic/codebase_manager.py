@@ -42,6 +42,7 @@ class CodebaseManager:
         self.namespace = namespace or {}
 
     def edit_code(self, code: str, allow_several_top_defs: bool = False):
+        print("Editing codebase/knowledge base...")
         # Step 1: Parse and validate
         try:
             tree = ast.parse(code)
@@ -212,9 +213,10 @@ class CodebaseManager:
             else:
                 self.items[name] = old_item
             raise e
+        print(f"Item '{name}' of type '{new_item.item_type.value}' added/modified successfully to the codebase.")
 
     def execute_code(self, code: str, variables: Dict[str, Any] = {}):
-
+        print("Executing code...")
         # Step 1: Find all variable names used in code
         try:
             tree = ast.parse(code)
@@ -263,7 +265,8 @@ class CodebaseManager:
             exec(code_to_exec, exec_namespace)
         except Exception as e:
             raise CodeExecutionError(f"Error executing code: {e}")
-    
+        print("Code executed successfully.")
+        
     def separate_imports_and_code(self, code: str) -> Tuple[List[str], str]:
         """
         Splits a block of Python code into:
